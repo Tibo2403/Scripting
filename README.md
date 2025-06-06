@@ -6,5 +6,6 @@ Ce dépôt contient une collection de scripts PowerShell utiles pour l'administr
 
 
 - `scripts/HelloWorld.ps1` : script de demonstration qui affiche un message de bienvenue.
-- `scripts/ManageInactiveADUsers.ps1` : desactive les comptes utilisateurs inactifs depuis plus de 90 jours (modifiable).
+- `scripts/ManageInactiveADUsers.ps1` : desactive les comptes utilisateurs inactifs depuis plus de 90 jours (modifiable). Le script
+  permet d'indiquer une OU cible, de generer un rapport CSV et affiche le nombre de comptes traites.
 
