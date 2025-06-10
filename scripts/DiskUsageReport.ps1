@@ -1,6 +1,12 @@
 <#
 .SYNOPSIS
     Generates a disk usage report for local drives.
+.DESCRIPTION
+    Retrieves the total size, free space and percentage of free space for
+    each fixed disk on the local computer.
+.EXAMPLE
+    PS> .\DiskUsageReport.ps1
+    Generates a summary of disk usage for all local drives.
 #>
 
 Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3" |
