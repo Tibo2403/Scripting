@@ -1,6 +1,19 @@
 <#
 .SYNOPSIS
     Starts, stops, restarts or checks the status of a Windows service.
+.DESCRIPTION
+    Allows simple service management by passing an action and service name.
+    The script wraps standard service cmdlets for quick usage.
+.PARAMETER Action
+    The operation to perform: start, stop, restart or status.
+.PARAMETER ServiceName
+    Name of the service to manage.
+.EXAMPLE
+    PS> .\ManageServices.ps1 -Action status -ServiceName spooler
+    Retrieves the status of the Print Spooler service.
+.EXAMPLE
+    PS> .\ManageServices.ps1 -Action restart -ServiceName wuauserv
+    Restarts the Windows Update service.
 #>
 
 param(
