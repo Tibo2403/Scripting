@@ -9,7 +9,7 @@
     Generates a summary of disk usage for all local drives.
 #>
 
-Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3" |
+Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3" |
     Select-Object DeviceID,
                   @{Name="SizeGB";Expression={[math]::round($_.Size/1GB,2)}},
                   @{Name="FreeGB";Expression={[math]::round($_.FreeSpace/1GB,2)}},
