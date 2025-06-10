@@ -23,5 +23,7 @@ Les scripts peuvent être lancés via PowerShell :
 # Exemple : vérifier l'état d'un service
 .\scripts\ManageServices.ps1 -Action status -ServiceName spooler
 ```
+> **Note :** `ManageServices.ps1` et `UserManagement.ps1` doivent être exécutés dans une session PowerShell élevée.
+> **Exemple :** cherchez "PowerShell" dans le menu Démarrer, faites un clic droit puis sélectionnez "Exécuter en tant qu'administrateur".
 
 Chacun des scripts possède des paramètres décrits en début de fichier.
