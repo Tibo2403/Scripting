@@ -1,0 +1,24 @@
+name: PowerShell Scripts Test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-scripts:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    - name: Run DiskUsageReport
+      shell: pwsh
+      run: ./scripts/DiskUsageReport.ps1
+    - name: Run Get-SystemInfo
+      shell: pwsh
+      run: ./scripts/Get-SystemInfo.ps1
+    - name: Test ManageServices status
+      shell: pwsh
+      run: ./scripts/ManageServices.ps1 -Action status -ServiceName spooler
+    - name: List local users
+      shell: pwsh
+      run: ./scripts/UserManagement.ps1 -Action list
