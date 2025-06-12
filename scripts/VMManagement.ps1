@@ -1,45 +1,109 @@
 <#
 .SYNOPSIS
-    Manages Hyper-V virtual machines or lists them.
+    Manages Hyper-V virtual machines.
 .DESCRIPTION
-    Allows starting, stopping, restarting or listing VMs using Hyper-V cmdlets.
+    Allows creation, starting, stopping, restarting, removing or listing of virtual machines using Hyper-V.
 .PARAMETER Action
-    Operation to perform: start, stop, restart or list. Defaults to list.
+    Action to perform: create, start, stop, restart, remove or list.
 .PARAMETER VMName
-    Name of the VM to manage when using start, stop or restart.
+    Name of the virtual machine.
+.PARAMETER MemoryStartupBytes
+    Startup memory size when creating a VM (e.g. 2GB).
+.PARAMETER VhdPath
+    Path to the virtual hard disk when creating a VM.
+.PARAMETER SwitchName
+    Virtual switch used for network connectivity when creating a VM.
 .EXAMPLE
     PS> .\VMManagement.ps1 -Action list
-    Lists all available virtual machines.
+    Lists all virtual machines.
 .EXAMPLE
     PS> .\VMManagement.ps1 -Action start -VMName "TestVM"
-    Starts the virtual machine named 'TestVM'.
+    Starts the VM named 'TestVM'.
+.EXAMPLE
+    PS> .\VMManagement.ps1 -Action create -VMName Test -MemoryStartupBytes 2GB -VhdPath C:\VMs\Test.vhdx -SwitchName vSwitch
+    Creates a new VM called 'Test' with the specified settings.
 #>
 
+[CmdletBinding()]
 param(
-    [ValidateSet('start','stop','restart','list')]
-    [string]$Action = 'list',
-    [string]$VMName
+    [Parameter(Mandatory=$true)]
+    [ValidateSet('create','start','stop','restart','remove','list')]
+    [string]$Action,
+    [string]$VMName,
+    [string]$MemoryStartupBytes = '1GB',
+    [string]$VhdPath,
+    [string]$SwitchName
 )
 
-if (-not (Get-Command Get-VM -ErrorAction SilentlyContinue)) {
-    Write-Output 'Hyper-V module not available. Skipping.'
+# Vérification de la disponibilité du module Hyper-V
+if (-not (Get-Module -ListAvailable -Name Hyper-V)) {
+    Write-Error 'Hyper-V module is not installed. Please enable the Hyper-V feature.'
     return
 }
+Import-Module Hyper-V
 
 switch ($Action.ToLower()) {
+    'create' {
+        if (-not $VMName -or -not $VhdPath -or -not $SwitchName) {
+            Write-Error 'VMName, VhdPath, and SwitchName are required to create a VM.'
+            break
+        }
+        try {
+            New-VM -Name $VMName -MemoryStartupBytes $MemoryStartupBytes -VHDPath $VhdPath -SwitchName $SwitchName -Generation 2 -ErrorAction Stop
+            Write-Output "VM '$VMName' created."
+        } catch {
+            Write-Error "Failed to create VM '$VMName'. $_"
+        }
+    }
     'start' {
-        if (-not $VMName) { Write-Error 'VMName is required for start.'; break }
-        Start-VM -Name $VMName
+        if (-not $VMName) {
+            Write-Error 'VMName is required to start a VM.'
+            break
+        }
+        try {
+            Start-VM -Name $VMName -ErrorAction Stop
+        } catch {
+            Write-Error "Failed to start VM '$VMName'. $_"
+        }
     }
     'stop' {
-        if (-not $VMName) { Write-Error 'VMName is required for stop.'; break }
-        Stop-VM -Name $VMName -Force
+        if (-not $VMName) {
+            Write-Error 'VMName is required to stop a VM.'
+            break
+        }
+        try {
+            Stop-VM -Name $VMName -Force -ErrorAction Stop
+        } catch {
+            Write-Error "Failed to stop VM '$VMName'. $_"
+        }
     }
     'restart' {
-        if (-not $VMName) { Write-Error 'VMName is required for restart.'; break }
-        Restart-VM -Name $VMName
+        if (-not $VMName) {
+            Write-Error 'VMName is required to restart a VM.'
+            break
+        }
+        try {
+            Restart-VM -Name $VMName -ErrorAction Stop
+        } catch {
+            Write-Error "Failed to restart VM '$VMName'. $_"
+        }
+    }
+    'remove' {
+        if (-not $VMName) {
+            Write-Error 'VMName is required to remove a VM.'
+            break
+        }
+        try {
+            Remove-VM -Name $VMName -Force -ErrorAction Stop
+        } catch {
+            Write-Error "Failed to remove VM '$VMName'. $_"
+        }
     }
     'list' {
-        Get-VM
+        try {
+            Get-VM
+        } catch {
+            Write-Error "Failed to retrieve VMs. $_"
+        }
     }
 }
