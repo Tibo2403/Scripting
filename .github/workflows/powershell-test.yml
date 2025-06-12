@@ -22,3 +22,6 @@ jobs:
     - name: List local users
       shell: pwsh
       run: ./scripts/UserManagement.ps1 -Action list
+    - name: Test VMManagement list
+      shell: pwsh
+      run: ./scripts/VMManagement.ps1 -Action list
