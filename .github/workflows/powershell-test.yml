@@ -22,3 +22,9 @@ jobs:
     - name: List local users
       shell: pwsh
       run: ./scripts/UserManagement.ps1 -Action list
+    - name: List VMs
+      shell: pwsh
+      run: ./scripts/VMManagement.ps1 -Action list
+    - name: Run InventoryReport
+      shell: pwsh
+      run: ./scripts/InventoryReport.ps1
