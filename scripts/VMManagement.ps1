@@ -2,9 +2,9 @@
 .SYNOPSIS
     Manages Hyper-V virtual machines.
 .DESCRIPTION
-    Allows creation, starting, stopping, removing or listing of virtual machines using Hyper-V.
+    Allows creation, starting, stopping, restarting, removing or listing of virtual machines using Hyper-V.
 .PARAMETER Action
-    Action to perform: create, start, stop, remove or list.
+    Action to perform: create, start, stop, restart, remove or list.
 .PARAMETER VMName
     Name of the virtual machine.
 .PARAMETER MemoryStartupBytes
@@ -17,8 +17,8 @@
     PS> .\VMManagement.ps1 -Action list
     Lists all virtual machines.
 .EXAMPLE
-    PS> .\VMManagement.ps1 -Action start -VMName Win10
-    Starts the VM named 'Win10'.
+    PS> .\VMManagement.ps1 -Action start -VMName "TestVM"
+    Starts the VM named 'TestVM'.
 .EXAMPLE
     PS> .\VMManagement.ps1 -Action create -VMName Test -MemoryStartupBytes 2GB -VhdPath C:\VMs\Test.vhdx -SwitchName vSwitch
     Creates a new VM called 'Test' with the specified settings.
@@ -27,7 +27,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$true)]
-    [ValidateSet('create','start','stop','remove','list')]
+    [ValidateSet('create','start','stop','restart','remove','list')]
     [string]$Action,
     [string]$VMName,
     [string]$MemoryStartupBytes = '1GB',
@@ -35,6 +35,7 @@ param(
     [string]$SwitchName
 )
 
+# Vérification de la disponibilité du module Hyper-V
 if (-not (Get-Module -ListAvailable -Name Hyper-V)) {
     Write-Error 'Hyper-V module is not installed. Please enable the Hyper-V feature.'
     return
@@ -44,7 +45,7 @@ Import-Module Hyper-V
 switch ($Action.ToLower()) {
     'create' {
         if (-not $VMName -or -not $VhdPath -or -not $SwitchName) {
-            Write-Error 'VMName, VhdPath and SwitchName are required to create a VM.'
+            Write-Error 'VMName, VhdPath, and SwitchName are required to create a VM.'
             break
         }
         try {
@@ -74,6 +75,17 @@ switch ($Action.ToLower()) {
             Stop-VM -Name $VMName -Force -ErrorAction Stop
         } catch {
             Write-Error "Failed to stop VM '$VMName'. $_"
+        }
+    }
+    'restart' {
+        if (-not $VMName) {
+            Write-Error 'VMName is required to restart a VM.'
+            break
+        }
+        try {
+            Restart-VM -Name $VMName -ErrorAction Stop
+        } catch {
+            Write-Error "Failed to restart VM '$VMName'. $_"
         }
     }
     'remove' {
