@@ -1,23 +1,27 @@
 #!/bin/bash
 # setup_api.sh - Installe un environnement Python pour une API
 # et configure Ollama avec le modèle Mistral.
-set -e
+set -euo pipefail
 
-# Mise à jour des paquets et installation des dépendances de base
+# Variables
+APP_PATH="$HOME/mistral_api.py"
+
+echo "🔧 Mise à jour des paquets et installation des dépendances..."
 sudo apt-get update
 sudo apt-get install -y python3 python3-pip curl
 
-# Installation des dépendances Python
+echo "🐍 Installation des bibliothèques Python..."
+pip3 install --upgrade pip
 pip3 install flask requests
 
-# Installation d'Ollama (inclut les dépendances du modèle)
+echo "⬇️ Installation d'Ollama..."
 curl -fsSL https://ollama.ai/install.sh | bash
 
-# Téléchargement du modèle Mistral
+echo "📦 Téléchargement du modèle Mistral..."
 ollama pull mistral
 
-# Création d'un petit exemple d'API utilisant Flask
-cat <<'APP' > ~/mistral_api.py
+echo "🛠 Création de l'API Flask dans $APP_PATH..."
+cat <<'APP' > "$APP_PATH"
 from flask import Flask, request, jsonify
 import subprocess
 
@@ -27,12 +31,16 @@ app = Flask(__name__)
 def generate():
     data = request.get_json(force=True)
     prompt = data.get('prompt', '')
+    if not prompt.strip():
+        return jsonify({"error": "Prompt vide"}), 400
     result = subprocess.run(['ollama', 'run', 'mistral', prompt], capture_output=True, text=True)
+    if result.returncode != 0:
+        return jsonify({"error": result.stderr.strip()}), 500
     return jsonify({"response": result.stdout.strip()})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
 APP
 
-echo "API exemple creee dans ~/mistral_api.py"
-echo "Lancez-la avec : python3 ~/mistral_api.py"
+echo "✅ API créée avec succès : $APP_PATH"
+echo "▶️ Lancez-la avec : python3 $APP_PATH"
