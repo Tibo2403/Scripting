@@ -1,0 +1,17 @@
+[
+  {
+    "timestamp": "2025-06-13T10:15:00Z",
+    "level": "INFO",
+    "message": "Service started"
+  },
+  {
+    "timestamp": "2025-06-13T10:16:05Z",
+    "level": "WARN",
+    "message": "High memory usage detected"
+  },
+  {
+    "timestamp": "2025-06-13T10:17:30Z",
+    "level": "ERROR",
+    "message": "Unable to connect to database"
+  }
+]
