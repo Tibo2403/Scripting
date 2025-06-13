@@ -10,6 +10,7 @@ scripts/
 ├── Get-SystemInfo.ps1    # Informations système de base
 ├── ManageServices.ps1    # Démarrer/Arrêter/Redémarrer un service Windows
 ├── VMManagement.ps1      # Gérer les machines virtuelles Hyper-V
+├── setup_api.sh          # Installe Python, Ollama et un exemple d'API Flask
 └── UserManagement.ps1    # Gestion des comptes utilisateurs locaux
 ```
 
@@ -34,3 +35,10 @@ Les scripts peuvent être lancés via PowerShell :
 > **Exemple :** cherchez "PowerShell" dans le menu Démarrer, faites un clic droit puis sélectionnez "Exécuter en tant qu'administrateur".
 
 Chacun des scripts possède des paramètres décrits en début de fichier.
+
+```bash
+# Installation de l'API Mistral
+bash scripts/setup_api.sh
+# Puis lancer l'API
+python3 ~/mistral_api.py
+```
