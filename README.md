@@ -10,6 +10,7 @@ scripts/
 ├── Get-SystemInfo.ps1    # Informations système de base
 ├── ManageServices.ps1    # Démarrer/Arrêter/Redémarrer un service Windows
 ├── VMManagement.ps1      # Gérer les machines virtuelles Hyper-V
+├── LinkCrawler.ps1       # Vérifier les liens d'un site web
 ├── setup_api.sh          # Installe Python, Ollama et un exemple d'API Flask
 └── UserManagement.ps1    # Gestion des comptes utilisateurs locaux
 ```
