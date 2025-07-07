@@ -12,6 +12,7 @@ scripts/
 ├── VMManagement.ps1      # Gérer les machines virtuelles Hyper-V
 ├── LinkCrawler.ps1       # Vérifier les liens d'un site web
 ├── TeamsManagement.ps1   # Gérer Microsoft Teams
+├── ExchangeOnlineManagement.ps1   # Gérer Exchange Online
 ├── setup_api.sh          # Installe Python, Ollama et un exemple d'API Flask
 └── UserManagement.ps1    # Gestion des comptes utilisateurs locaux
 ```
@@ -34,6 +35,8 @@ Les scripts peuvent être lancés via PowerShell :
 .\scripts\VMManagement.ps1 -Action start -VMName "TestVM"
 # Exemple : lister les equipes Teams
 .\scripts\TeamsManagement.ps1 -Action list
+# Exemple : lister les boîtes aux lettres Exchange Online
+.\scripts\ExchangeOnlineManagement.ps1 -Action list
 ```
 > **Note :** `ManageServices.ps1` et `UserManagement.ps1` doivent être exécutés dans une session PowerShell élevée.
 > **Exemple :** cherchez "PowerShell" dans le menu Démarrer, faites un clic droit puis sélectionnez "Exécuter en tant qu'administrateur".
