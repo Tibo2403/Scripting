@@ -63,3 +63,7 @@ bash scripts/pentest_verification.sh
 # Phase d'exploitation (si autorisée)
 bash scripts/pentest_exploitation.sh
 ```
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
