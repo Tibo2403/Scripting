@@ -14,6 +14,9 @@ scripts/
 ├── TeamsManagement.ps1   # Gérer Microsoft Teams
 ├── ExchangeOnlineManagement.ps1   # Gérer Exchange Online
 ├── setup_api.sh          # Installe Python, Ollama et un exemple d'API Flask
+├── pentest_discovery.sh   # Phase de découverte (Nmap)
+├── pentest_verification.sh   # Phase de vérification des vulnérabilités
+├── pentest_exploitation.sh   # Phase d'exploitation (facultative)
 └── UserManagement.ps1    # Gestion des comptes utilisateurs locaux
 ```
 
@@ -48,4 +51,15 @@ Chacun des scripts possède des paramètres décrits en début de fichier.
 bash scripts/setup_api.sh
 # Puis lancer l'API
 python3 ~/mistral_api.py
+```
+
+### Scripts Kali Linux
+
+```bash
+# Phase de découverte
+bash scripts/pentest_discovery.sh
+# Phase de vérification des vulnérabilités
+bash scripts/pentest_verification.sh
+# Phase d'exploitation (si autorisée)
+bash scripts/pentest_exploitation.sh
 ```
