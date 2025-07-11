@@ -15,7 +15,7 @@ scripts/
 ├── ExchangeOnlineManagement.ps1   # Gérer Exchange Online
 ├── setup_api.sh          # Installe Python, Ollama et un exemple d'API Flask
 ├── pentest_discovery.sh   # Phase de découverte (Nmap complet + scripts vuln)
-├── pentest_verification.sh   # Phase de vérification des vulnérabilités
+├── pentest_verification.sh   # Phase de vérification des vulnérabilités (Nmap, Metasploit, OpenVAS)
 ├── pentest_exploitation.sh   # Phase d'exploitation (facultative)
 └── UserManagement.ps1    # Gestion des comptes utilisateurs locaux
 ```
