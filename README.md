@@ -17,8 +17,13 @@ scripts/
 ├── pentest_discovery.sh   # Phase de découverte (Nmap complet + scripts vuln)
 ├── pentest_verification.sh   # Phase de vérification des vulnérabilités
 ├── pentest_exploitation.sh   # Phase d'exploitation (facultative)
+├── scan_wifi.sh           # Scan et capture de handshake WiFi
+├── stealth_post.sh        # Exemple d'exfiltration discrète de données
+├── sample_logs.json       # Journalisation fictive pour tests
 └── UserManagement.ps1    # Gestion des comptes utilisateurs locaux
 ```
+
+Le fichier `targets.txt` à la racine contient la liste des cibles pour les scripts de pentest.
 
 ## ⚙️ Utilisation rapide
 
