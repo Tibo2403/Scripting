@@ -56,6 +56,7 @@ python3 ~/mistral_api.py
 ### Scripts Kali Linux
 
 ```bash
+
 # Phase de découverte (scan complet et scripts de vulnérabilités)
 bash scripts/pentest_discovery.sh
 # Phase de vérification des vulnérabilités
