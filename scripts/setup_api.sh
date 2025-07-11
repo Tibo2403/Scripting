@@ -15,6 +15,12 @@ pip3 install --upgrade pip
 pip3 install flask requests
 
 echo "⬇️ Installation d'Ollama..."
+# WARNING: executing a remote script with curl | bash can be dangerous.
+# Review https://ollama.ai/install.sh or verify its checksum before running.
+# Example:
+#   curl -fsSL https://ollama.ai/install.sh -o install.sh
+#   sha256sum install.sh # compare with the expected value
+#   bash install.sh
 curl -fsSL https://ollama.ai/install.sh | bash
 
 echo "📦 Téléchargement du modèle Mistral..."
