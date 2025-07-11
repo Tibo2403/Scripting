@@ -1,4 +1,4 @@
-<#[
+<#
 .SYNOPSIS
     Crawls a website to verify the status of internal and external links.
 .DESCRIPTION
