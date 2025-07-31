@@ -45,6 +45,8 @@ Les scripts peuvent être lancés via PowerShell :
 .\scripts\powershell\VMManagement.ps1 -Action start -VMName "TestVM"
 # Exemple : lister les equipes Teams
 .\scripts\powershell\TeamsManagement.ps1 -Action list
+# Exemple : se déconnecter de Microsoft Teams
+.\scripts\powershell\TeamsManagement.ps1 -Action disconnect
 # Exemple : lister les boîtes aux lettres Exchange Online
 .\scripts\powershell\ExchangeOnlineManagement.ps1 -Action list
 ```

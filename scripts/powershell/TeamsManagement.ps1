@@ -5,7 +5,7 @@
     Allows listing teams, creating a new team, and adding or removing users from a team
     using the Microsoft Teams PowerShell module.
 .PARAMETER Action
-    Operation to perform: list, create, adduser or removeuser.
+    Operation to perform: list, create, adduser, removeuser, or disconnect.
 .PARAMETER TeamName
     Name of the team for create, adduser or removeuser actions.
 .PARAMETER User
@@ -19,12 +19,15 @@
 .EXAMPLE
     PS> .\TeamsManagement.ps1 -Action adduser -TeamName "Marketing" -User bob@example.com
     Adds the user to the specified team.
+.EXAMPLE
+    PS> .\TeamsManagement.ps1 -Action disconnect
+    Disconnects the current Microsoft Teams session.
 #>
 
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$true)]
-    [ValidateSet('list','create','adduser','removeuser')]
+    [ValidateSet('list','create','adduser','removeuser','disconnect')]
     [string]$Action,
     [string]$TeamName,
     [string]$User
@@ -41,11 +44,13 @@ try {
     return
 }
 
-try {
-    Connect-MicrosoftTeams -ErrorAction Stop | Out-Null
-} catch {
-    Write-Error "Failed to connect to Microsoft Teams. $_"
-    return
+if ($Action -ne 'disconnect') {
+    try {
+        Connect-MicrosoftTeams -ErrorAction Stop | Out-Null
+    } catch {
+        Write-Error "Failed to connect to Microsoft Teams. $_"
+        return
+    }
 }
 
 switch ($Action.ToLower()) {
@@ -90,4 +95,14 @@ switch ($Action.ToLower()) {
             Write-Error "Failed to remove $User from '$TeamName'. $_"
         }
     }
+    'disconnect' {
+        Disconnect-MicrosoftTeams -ErrorAction SilentlyContinue
+    }
+    default {
+        Write-Error "Unknown action '$Action'."
+    }
+}
+
+if ($Action -ne 'disconnect') {
+    Disconnect-MicrosoftTeams -ErrorAction SilentlyContinue
 }
