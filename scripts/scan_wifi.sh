@@ -82,4 +82,11 @@ echo "[*] Attente du handshake pendant $CAPTURE_TIME s..."
 sleep "$CAPTURE_TIME"
 kill "$AIRDUMP_PID" 2>/dev/null || true
 
-HANDSHAKE_FILE=$(ls "$OUT_
+# Vérifie la présence du fichier de capture
+HANDSHAKE_FILE="$OUTPUT_DIR/${CAP_BASENAME}-01.cap"
+if [[ -f "$HANDSHAKE_FILE" ]]; then
+    echo "✅ Handshake capturé : $HANDSHAKE_FILE"
+else
+    echo "❌ Handshake non trouvé" >&2
+fi
+

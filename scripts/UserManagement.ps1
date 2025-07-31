@@ -28,6 +28,12 @@ param(
     [string]$Password
 )
 
+# Ensure script runs with administrative privileges
+if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)) {
+    Write-Error 'This script must be run as Administrator.'
+    return
+}
+
 switch ($Action.ToLower()) {
     'create' {
         if (-not $UserName -or -not $Password) {
