@@ -6,6 +6,12 @@ set -euo pipefail
 # Variables
 APP_PATH="$HOME/mistral_api.py"
 
+# Require root privileges for package installation
+if [[ $EUID -ne 0 ]]; then
+    echo "❌ Ce script doit être exécuté en tant que root" >&2
+    exit 1
+fi
+
 echo "🔧 Mise à jour des paquets et installation des dépendances..."
 sudo apt-get update
 sudo apt-get install -y python3 python3-pip curl
