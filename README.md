@@ -45,6 +45,10 @@ Les scripts peuvent être lancés via PowerShell :
 .\scripts\powershell\VMManagement.ps1 -Action start -VMName "TestVM"
 # Exemple : lister les equipes Teams
 .\scripts\powershell\TeamsManagement.ps1 -Action list
+# Exemple : créer un canal Teams
+.\scripts\powershell\TeamsManagement.ps1 -Action createchannel -TeamName "Marketing" -ChannelName "Général"
+# Exemple : ajouter plusieurs membres depuis un CSV
+.\scripts\powershell\TeamsManagement.ps1 -Action bulkadd -TeamName "Marketing" -CsvPath .\users.csv
 # Exemple : lister les boîtes aux lettres Exchange Online
 .\scripts\powershell\ExchangeOnlineManagement.ps1 -Action list
 ```
