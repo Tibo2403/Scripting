@@ -21,14 +21,17 @@ pip3 install --upgrade pip
 pip3 install flask requests
 
 echo "⬇️ Installation d'Ollama..."
-# SECURITY WARNING: the line below downloads a script from the internet and
-# pipes it directly to Bash. If the remote server or network is compromised,
-# malicious code could be executed with your permissions. To reduce the risk,
-# download the script separately and verify its integrity before running it:
-#   curl -fsSL https://ollama.ai/install.sh -o install.sh
-#   sha256sum install.sh  # compare with the official checksum
-#   bash install.sh
-curl -fsSL https://ollama.ai/install.sh | bash
+# Télécharge install.sh séparément, vérifie son empreinte SHA-256 puis l'exécute.
+# Le fichier install.sh.sha256 fourni par Ollama contient la somme attendue.
+curl -fsSL https://ollama.ai/install.sh -o install.sh
+curl -fsSL https://ollama.ai/install.sh.sha256 -o install.sh.sha256
+if sha256sum -c install.sh.sha256; then
+    bash install.sh
+    rm -f install.sh install.sh.sha256
+else
+    echo "❌ Échec de la vérification de l'intégrité d'install.sh" >&2
+    exit 1
+fi
 
 echo "📦 Téléchargement du modèle Mistral..."
 ollama pull mistral
