@@ -1,0 +1,10 @@
+# Ignore penetration test results
+pentest_results/
+
+# Ignore wifi capture files
+wifi_captures/
+
+# Ignore log files and temporary logs
+*.log
+*.tmp
+logs/
