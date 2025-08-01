@@ -68,6 +68,24 @@ try {
     return
 }
 
+function Get-UserList {
+    param(
+        [string]$User,
+        [string]$CsvPath
+    )
+
+    $list = @()
+    if ($CsvPath) {
+        if (-not (Test-Path $CsvPath)) {
+            throw "CSV file '$CsvPath' not found."
+        }
+        $list = (Import-Csv -Path $CsvPath).User
+    } elseif ($User) {
+        $list = @($User)
+    }
+    return $list
+}
+
 switch ($Action.ToLower()) {
     'list' {
         Get-Team
@@ -102,16 +120,13 @@ switch ($Action.ToLower()) {
             Write-Error 'TeamName is required to add a user.'
             break
         }
-        $userList = @()
-        if ($CsvPath) {
-            if (-not (Test-Path $CsvPath)) {
-                Write-Error "CSV file '$CsvPath' not found."
-                break
-            }
-            $userList = (Import-Csv -Path $CsvPath).User
-        } elseif ($User) {
-            $userList = @($User)
-        } else {
+        try {
+            $userList = Get-UserList -User $User -CsvPath $CsvPath
+        } catch {
+            Write-Error $_
+            break
+        }
+        if (-not $userList) {
             Write-Error 'User or CsvPath is required to add a user.'
             break
         }
@@ -134,16 +149,13 @@ switch ($Action.ToLower()) {
             Write-Error 'TeamName is required to remove a user.'
             break
         }
-        $userList = @()
-        if ($CsvPath) {
-            if (-not (Test-Path $CsvPath)) {
-                Write-Error "CSV file '$CsvPath' not found."
-                break
-            }
-            $userList = (Import-Csv -Path $CsvPath).User
-        } elseif ($User) {
-            $userList = @($User)
-        } else {
+        try {
+            $userList = Get-UserList -User $User -CsvPath $CsvPath
+        } catch {
+            Write-Error $_
+            break
+        }
+        if (-not $userList) {
             Write-Error 'User or CsvPath is required to remove a user.'
             break
         }
@@ -206,13 +218,18 @@ switch ($Action.ToLower()) {
             Write-Error 'TeamName and CsvPath are required for bulkadd.'
             break
         }
-        if (-not (Test-Path $CsvPath)) {
-            Write-Error "CSV file '$CsvPath' not found."
+        try {
+            $userList = Get-UserList -CsvPath $CsvPath
+        } catch {
+            Write-Error $_
+            break
+        }
+        if (-not $userList) {
+            Write-Error 'CsvPath is required for bulkadd.'
             break
         }
         try {
             $team = Get-Team -DisplayName $TeamName -ErrorAction Stop
-            $userList = (Import-Csv -Path $CsvPath).User
             foreach ($u in $userList) {
                 try {
                     Add-TeamUser -GroupId $team.GroupId -User $u -ErrorAction Stop
