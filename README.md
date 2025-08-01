@@ -21,7 +21,8 @@ scripts/
 │   ├── LinkCrawler.ps1
 │   ├── TeamsManagement.ps1
 │   ├── ExchangeOnlineManagement.ps1
-│   └── UserManagement.ps1
+│   ├── UserManagement.ps1
+│   └── SecurityCheck.ps1
 ├── sample_logs.json   # Journalisation fictive pour tests
 ```
 
@@ -51,6 +52,8 @@ Les scripts peuvent être lancés via PowerShell :
 .\scripts\powershell\TeamsManagement.ps1 -Action bulkadd -TeamName "Marketing" -CsvPath .\users.csv
 # Exemple : lister les boîtes aux lettres Exchange Online
 .\scripts\powershell\ExchangeOnlineManagement.ps1 -Action list
+# Exemple : vérifier les paramètres de sécurité
+.\scripts\powershell\SecurityCheck.ps1
 ```
 > **Note :** `ManageServices.ps1` et `UserManagement.ps1` doivent être exécutés dans une session PowerShell élevée.
 > **Exemple :** cherchez "PowerShell" dans le menu Démarrer, faites un clic droit puis sélectionnez "Exécuter en tant qu'administrateur".
