@@ -28,6 +28,11 @@ scripts/
 
 Le fichier `targets.txt` à la racine contient la liste des cibles pour les scripts de pentest.
 
+## 🛠️ Prérequis / Prerequisites
+
+- **Outils / Tools** : `nmap`, `gvm-cli` et les modules PowerShell nécessaires (Hyper-V, ExchangeOnlineManagement, Teams, etc.).
+- **Privilèges / Privileges** : certains scripts exigent des droits administrateur ou root.
+
 ## ⚙️ Utilisation rapide
 
 Les scripts peuvent être lancés via PowerShell :
@@ -78,6 +83,12 @@ bash scripts/linux/pentest_verification.sh
 # Phase d'exploitation (si autorisée)
 bash scripts/linux/pentest_exploitation.sh
 ```
+
+## ⚠️ Disclaimer / Avertissement
+
+Pentest scripts (dont `pentest_discovery.sh`, `pentest_verification.sh`, `pentest_exploitation.sh`) et `stealth_post.sh` doivent être utilisés uniquement sur des systèmes pour lesquels vous disposez d'une autorisation explicite.
+
+Pentest scripts and `stealth_post.sh` must only be run on systems where you have been granted explicit permission. Unauthorized use may be illegal.
 
 ## License
 
