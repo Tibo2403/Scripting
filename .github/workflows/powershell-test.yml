@@ -5,6 +5,21 @@ on:
   pull_request:
 
 jobs:
+  lint-scripts:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y shellcheck
+        pwsh -Command Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
+    - name: Run shellcheck
+      run: shellcheck scripts/linux/*.sh
+    - name: Run PSScriptAnalyzer
+      shell: pwsh
+      run: Invoke-ScriptAnalyzer -Path './scripts/powershell' -Recurse -ErrorAction Stop
+
   test-scripts:
     runs-on: windows-latest
     steps:
