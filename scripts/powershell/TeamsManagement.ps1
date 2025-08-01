@@ -6,8 +6,8 @@
     creating channels, exporting membership information and performing bulk
     operations using the Microsoft Teams PowerShell module.
 .PARAMETER Action
-    Operation to perform: list, create, delete, adduser, removeuser, addowner,
-    createchannel, export or bulkadd.
+    Operation to perform: connect, disconnect, list, create, delete,
+    adduser, removeuser, addowner, createchannel, export or bulkadd.
 .PARAMETER TeamName
     Name of the team for actions that require a team.
 .PARAMETER User
@@ -16,6 +16,12 @@
     Name of the channel when using the createchannel action.
 .PARAMETER CsvPath
     Path to a CSV file for bulkadd or export actions.
+.EXAMPLE
+    PS> .\TeamsManagement.ps1 -Action connect
+    Establishes a session with Microsoft Teams.
+.EXAMPLE
+    PS> .\TeamsManagement.ps1 -Action disconnect
+    Disconnects the current Teams session.
 .EXAMPLE
     PS> .\TeamsManagement.ps1 -Action list
     Lists all Microsoft Teams.
@@ -42,7 +48,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$true)]
-    [ValidateSet('list','create','delete','adduser','removeuser','addowner','createchannel','export','bulkadd')]
+    [ValidateSet('connect','disconnect','list','create','delete','adduser','removeuser','addowner','createchannel','export','bulkadd')]
     [string]$Action,
     [string]$TeamName,
     [string]$User,
@@ -58,6 +64,21 @@ try {
     Import-Module MicrosoftTeams -ErrorAction Stop
 } catch {
     Write-Error "Failed to import Microsoft Teams module. $_"
+    return
+}
+
+if ($Action.ToLower() -eq 'connect') {
+    try {
+        Connect-MicrosoftTeams -ErrorAction Stop | Out-Null
+        Write-Output 'Connected to Microsoft Teams.'
+    } catch {
+        Write-Error "Failed to connect to Microsoft Teams. $_"
+    }
+    return
+}
+
+if ($Action.ToLower() -eq 'disconnect') {
+    Disconnect-MicrosoftTeams
     return
 }
 
