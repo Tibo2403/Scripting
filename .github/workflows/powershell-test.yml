@@ -12,16 +12,16 @@ jobs:
       uses: actions/checkout@v3
     - name: Run DiskUsageReport
       shell: pwsh
-      run: ./scripts/DiskUsageReport.ps1
+      run: ./scripts/powershell/DiskUsageReport.ps1
     - name: Run Get-SystemInfo
       shell: pwsh
-      run: ./scripts/Get-SystemInfo.ps1
+      run: ./scripts/powershell/Get-SystemInfo.ps1
     - name: Test ManageServices status
       shell: pwsh
-      run: ./scripts/ManageServices.ps1 -Action status -ServiceName spooler
+      run: ./scripts/powershell/ManageServices.ps1 -Action status -ServiceName spooler
     - name: List local users
       shell: pwsh
-      run: ./scripts/UserManagement.ps1 -Action list
+      run: ./scripts/powershell/UserManagement.ps1 -Action list
     - name: Test VMManagement list
       shell: pwsh
-      run: ./scripts/VMManagement.ps1 -Action list
+      run: ./scripts/powershell/VMManagement.ps1 -Action list
