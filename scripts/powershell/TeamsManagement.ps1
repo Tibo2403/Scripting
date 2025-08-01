@@ -63,12 +63,8 @@ try {
 
 try {
     Connect-MicrosoftTeams -ErrorAction Stop | Out-Null
-} catch {
-    Write-Error "Failed to connect to Microsoft Teams. $_"
-    return
-}
 
-switch ($Action.ToLower()) {
+    switch ($Action.ToLower()) {
     'list' {
         Get-Team
     }
@@ -225,4 +221,9 @@ switch ($Action.ToLower()) {
             Write-Error "Failed bulk add operation. $_"
         }
     }
+}
+} catch {
+    Write-Error "Failed to execute Teams action. $_"
+} finally {
+    Disconnect-MicrosoftTeams | Out-Null
 }
