@@ -26,7 +26,7 @@ scripts/
 ├── sample_logs.json   # Journalisation fictive pour tests
 ```
 
-Le fichier `targets.txt` à la racine contient la liste des cibles pour les scripts de pentest.
+Le fichier `targets.txt` à la racine contient la liste des cibles pour les scripts de pentest. Les scripts Bash utilisent un chemin relatif basé sur leur propre emplacement pour le retrouver, ce qui permet de les lancer depuis n'importe quel répertoire.
 
 ## 🛠️ Prérequis / Prerequisites
 
