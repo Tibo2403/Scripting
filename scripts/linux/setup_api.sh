@@ -16,9 +16,12 @@ echo "🔧 Mise à jour des paquets et installation des dépendances..."
 sudo apt-get update
 sudo apt-get install -y python3 python3-pip curl
 
+python3 -m venv /opt/mistral-env
+source /opt/mistral-env/bin/activate
+
 echo "🐍 Installation des bibliothèques Python..."
-pip3 install --upgrade pip
-pip3 install flask requests
+pip install --upgrade pip
+pip install flask requests
 
 echo "⬇️ Installation d'Ollama..."
 # Télécharge install.sh séparément, vérifie son empreinte SHA-256 puis l'exécute.
@@ -59,4 +62,5 @@ if __name__ == '__main__':
 APP
 
 echo "✅ API créée avec succès : $APP_PATH"
-echo "▶️ Lancez-la avec : python3 $APP_PATH"
+echo "▶️ Avant de la lancer, activez l'environnement : source /opt/mistral-env/bin/activate"
+echo "▶️ Lancez-la avec : python $APP_PATH"
