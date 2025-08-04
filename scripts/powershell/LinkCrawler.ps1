@@ -19,6 +19,8 @@
     Optional email address to notify if broken links are found.
 .PARAMETER ToastNotify
     Display a toast notification when broken links are detected.
+.PARAMETER MaxJobs
+    Maximum number of concurrent jobs when testing external links. Default is 10.
 .EXAMPLE
     PS> .\LinkCrawler.ps1 -BaseUrl "https://example.com" -MaxDepth 2 -ContentTypes html,image -HtmlReportPath report.html
 .EXAMPLE
@@ -34,7 +36,8 @@ param (
     [string[]]$ContentTypes = @('html'),
     [string]$HtmlReportPath,
     [string]$NotifyEmail,
-    [switch]$ToastNotify
+    [switch]$ToastNotify,
+    [int]$MaxJobs = 10
 )
 
 $visitedUrls = @{}
@@ -95,7 +98,8 @@ function Test-UrlsParallel {
     if (-not $urls) { return @() }
     $jobs = @()
     foreach ($u in $urls) {
-        $jobs += Start-Job -ScriptBlock {
+        while ((Get-Job -State Running).Count -ge $MaxJobs) { Start-Sleep -Seconds 1 }
+        $jobs += Start-ThreadJob -ScriptBlock {
             param($link)
             try {
                 $r = Invoke-WebRequest -Uri $link -Method Head -TimeoutSec 10 -ErrorAction Stop
