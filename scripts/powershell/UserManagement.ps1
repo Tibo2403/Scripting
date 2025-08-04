@@ -9,13 +9,14 @@
 .PARAMETER UserName
     Name of the user account to create or delete.
 .PARAMETER Password
-    Password for the new account when using the create action.
+    Secure password for the new account when using the create action. If not
+    supplied, you will be prompted to enter one.
 .EXAMPLE
     PS> .\UserManagement.ps1 -Action list
     Lists all local user accounts.
 .EXAMPLE
-    PS> .\UserManagement.ps1 -Action create -UserName alice -Password P@ssw0rd
-    Creates a user named 'alice' with the specified password.
+    PS> .\UserManagement.ps1 -Action create -UserName alice -Password (Read-Host -AsSecureString)
+    Prompts for a secure password and creates a user named 'alice'.
 .EXAMPLE
     PS> .\UserManagement.ps1 -Action delete -UserName alice
     Removes the user account named 'alice'.
@@ -25,7 +26,7 @@ param(
     [ValidateSet('create','delete','list')]
     [string]$Action = 'list',
     [string]$UserName,
-    [string]$Password
+    [SecureString]$Password
 )
 
 # Ensure script runs with administrative privileges
@@ -36,16 +37,22 @@ if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
 
 switch ($Action.ToLower()) {
     'create' {
-        if (-not $UserName -or -not $Password) {
-            Write-Error 'UserName and Password are required to create a user.'
+        if (-not $UserName) {
+            Write-Error 'UserName is required to create a user.'
+            break
+        }
+        if (-not $Password) {
+            $Password = Read-Host -Prompt 'Enter password' -AsSecureString
+        }
+        if (-not $Password) {
+            Write-Error 'Password is required to create a user.'
             break
         }
         if (Get-LocalUser -Name $UserName -ErrorAction SilentlyContinue) {
             Write-Error "User '$UserName' already exists."
             break
         }
-        $secure = ConvertTo-SecureString $Password -AsPlainText -Force
-        New-LocalUser -Name $UserName -Password $secure
+        New-LocalUser -Name $UserName -Password $Password
     }
     'delete' {
         if (-not $UserName) {
