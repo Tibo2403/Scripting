@@ -92,6 +92,9 @@ export FTP_PATH="uploads/sysinfo.txt"
 bash scripts/linux/stealth_post.sh
 ```
 
+Chaque exécution de `pentest_discovery.sh` crée un sous-dossier horodaté dans `pentest_results`, conservant les résultats des scans précédents.
+Each run of `pentest_discovery.sh` outputs to a timestamped subfolder inside `pentest_results`, preserving previous scan results.
+
 ## ⚠️ Disclaimer / Avertissement
 
 Pentest scripts (dont `pentest_discovery.sh`, `pentest_verification.sh`, `pentest_exploitation.sh`) et `stealth_post.sh` doivent être utilisés uniquement sur des systèmes pour lesquels vous disposez d'une autorisation explicite.
