@@ -69,8 +69,9 @@ Chacun des scripts possède des paramètres décrits en début de fichier.
 # Installation de l'API Mistral
 # Le script télécharge install.sh séparément et vérifie son empreinte SHA-256
 bash scripts/linux/setup_api.sh
-# Puis lancer l'API
-python3 ~/mistral_api.py
+# Activer l'environnement virtuel puis lancer l'API
+source /opt/mistral-env/bin/activate
+python ~/mistral_api.py
 ```
 
 ### Scripts Kali Linux
