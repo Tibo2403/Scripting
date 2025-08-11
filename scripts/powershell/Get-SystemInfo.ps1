@@ -25,6 +25,9 @@
 .EXAMPLE
     PS> .\Get-SystemInfo.ps1
     Displays a brief summary of the current system in the console.
+.NOTES
+    Uses Get-CimInstance for hardware queries and skips CPU temperature metrics
+    when the required provider isn't available.
 #>
 
 [CmdletBinding()]
@@ -54,13 +57,13 @@ if ($IncludeGPU) {
 
 if ($HealthStatus) {
     $cpuLoad = (Get-CimInstance Win32_Processor).LoadPercentage
-    $tempObj = Get-WmiObject -Namespace root/wmi -Class MSAcpi_ThermalZoneTemperature -ErrorAction SilentlyContinue | Select-Object -First 1
+    $tempObj = Get-CimInstance -Namespace root/wmi -Class MSAcpi_ThermalZoneTemperature -ErrorAction SilentlyContinue | Select-Object -First 1
+    $health = [pscustomobject]@{
+        CpuLoadPercentage = $cpuLoad
+    }
     if ($tempObj) {
         $tempC = [math]::Round(($tempObj.CurrentTemperature - 2732) / 10, 1)
-    }
-    $health = [pscustomobject]@{
-        CpuLoadPercentage    = $cpuLoad
-        CpuTemperatureCelsius = $tempC
+        $health | Add-Member -MemberType NoteProperty -Name CpuTemperatureCelsius -Value $tempC
     }
     $sys | Add-Member -MemberType NoteProperty -Name HealthStatus -Value $health
 }
