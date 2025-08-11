@@ -22,27 +22,33 @@ OUTPUT_DIR="wifi_captures"
 CHANNEL=6
 CAPTURE_TIME=20
 DEAUTH_COUNT=5
+BSSID=""
+ESSID=""
 
 usage() {
     cat <<EOF >&2
-Usage: $0 [-i interface] [-c channel] [-o output_dir] [-t seconds] [-d count]
+Usage: $0 [-i interface] [-c channel] [-o output_dir] [-t seconds] [-d count] [-b bssid] [-e essid]
   -i interface : interface WiFi à utiliser (par défaut: $INTERFACE)
   -c channel   : canal WiFi (par défaut: $CHANNEL)
   -o dir       : dossier de sortie pour la capture (par défaut: $OUTPUT_DIR)
   -t seconds   : durée de capture (par défaut: $CAPTURE_TIME)
   -d count     : nombre de paquets de désauth (par défaut: $DEAUTH_COUNT)
+  -b bssid     : BSSID cible (sinon demandé)
+  -e essid     : ESSID du réseau (sinon demandé)
 EOF
     exit 1
 }
 
 # Analyse des options
-while getopts "i:c:o:t:d:h" opt; do
+while getopts "i:c:o:t:d:b:e:h" opt; do
     case $opt in
         i) INTERFACE="$OPTARG" ;;
         c) CHANNEL="$OPTARG" ;;
         o) OUTPUT_DIR="$OPTARG" ;;
         t) CAPTURE_TIME="$OPTARG" ;;
         d) DEAUTH_COUNT="$OPTARG" ;;
+        b) BSSID="$OPTARG" ;;
+        e) ESSID="$OPTARG" ;;
         h|*) usage ;;
     esac
 done
@@ -66,8 +72,12 @@ trap cleanup EXIT
 echo "[*] Lancement du scan des réseaux disponibles..."
 timeout 20s airodump-ng "$MONITOR_IF"
 
-read -rp "Entrez le BSSID cible : " BSSID
-read -rp "Entrez le nom (SSID) du réseau : " ESSID
+if [[ -z "$BSSID" ]]; then
+    read -rp "Entrez le BSSID cible : " BSSID
+fi
+if [[ -z "$ESSID" ]]; then
+    read -rp "Entrez le nom (SSID) du réseau : " ESSID
+fi
 
 echo "[*] Capture du handshake sur $ESSID ($BSSID)..."
 CAP_BASENAME="handshake_$(date +%Y%m%d_%H%M%S)"
