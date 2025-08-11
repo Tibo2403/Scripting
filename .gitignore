@@ -8,3 +8,6 @@ wifi_captures/
 *.log
 *.tmp
 logs/
+# Ignore data files
+*.csv
+*.json
