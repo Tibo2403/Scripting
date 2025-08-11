@@ -25,6 +25,8 @@
     PS> .\LinkCrawler.ps1 -BaseUrl "https://example.com" -MaxDepth 2 -ContentTypes html,image -HtmlReportPath report.html
 .EXAMPLE
     PS> .\LinkCrawler.ps1 -BaseUrl "https://example.com" -NotifyEmail admin@example.com
+.NOTES
+    Parallel execution requires PowerShell 7 or the ThreadJob module; otherwise URLs are tested sequentially.
 #>
 
 [CmdletBinding()]
@@ -42,6 +44,8 @@ param (
 
 $visitedUrls = @{}
 $results = @()
+
+$threadJobAvailable = [bool](Get-Module -ListAvailable -Name ThreadJob)
 
 $HtmlExt  = @('.html','.htm','/')
 $ImageExt = @('.jpg','.jpeg','.png','.gif','.bmp','.svg','.webp')
@@ -96,6 +100,9 @@ function Test-Url {
 function Test-UrlsParallel {
     param([string[]]$urls)
     if (-not $urls) { return @() }
+    if (-not $threadJobAvailable) {
+        return $urls | ForEach-Object { [pscustomobject](Test-Url -url $_) }
+    }
     $jobs = @()
     foreach ($u in $urls) {
         while ((Get-Job -State Running).Count -ge $MaxJobs) { Start-Sleep -Seconds 1 }
