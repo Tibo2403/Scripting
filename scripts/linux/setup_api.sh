@@ -12,9 +12,19 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
+if ! command -v apt-get >/dev/null 2>&1; then
+    echo "❌ apt-get n'est pas disponible sur ce système" >&2
+    exit 1
+fi
+
 echo "🔧 Mise à jour des paquets et installation des dépendances..."
-sudo apt-get update
-sudo apt-get install -y python3 python3-pip curl
+apt-get update
+apt-get install -y python3 python3-pip curl
+
+if ! command -v curl >/dev/null 2>&1; then
+    echo "❌ curl n'est pas disponible" >&2
+    exit 1
+fi
 
 python3 -m venv /opt/mistral-env
 source /opt/mistral-env/bin/activate
