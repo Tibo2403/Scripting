@@ -16,6 +16,12 @@
     Optional path to export the disk usage report as CSV.
 .PARAMETER SmtpServer
     SMTP server to use when sending alert emails.
+.PARAMETER SmtpPort
+    Port number of the SMTP server. Defaults to 25.
+.PARAMETER Credential
+    Credentials for authenticating to the SMTP server.
+.PARAMETER UseSsl
+    Use SSL/TLS when connecting to the SMTP server.
 .PARAMETER From
     Sender address for alert emails.
 .PARAMETER To
@@ -38,6 +44,9 @@ param(
     [int]$AlertThreshold = 20,
     [string]$CsvPath,
     [string]$SmtpServer,
+    [int]$SmtpPort = 25,
+    [pscredential]$Credential,
+    [switch]$UseSsl,
     [string]$From,
     [string]$To,
     [string]$Subject = 'Low Disk Space Alert'
@@ -71,11 +80,19 @@ foreach ($entry in $report) {
         Write-Warning $message
         if ($SmtpServer -and $From -and $To) {
             try {
-                Send-MailMessage -SmtpServer $SmtpServer -From $From -To $To -Subject $Subject -Body $message
+                $mail = [System.Net.Mail.MailMessage]::new($From, $To, $Subject, $message)
+                $smtp = [System.Net.Mail.SmtpClient]::new($SmtpServer, $SmtpPort)
+                if ($UseSsl) { $smtp.EnableSsl = $true }
+                if ($Credential) { $smtp.Credentials = $Credential.GetNetworkCredential() }
+                $smtp.Send($mail)
             }
             catch {
                 Write-Error "Failed to send alert email: $_"
                 exit 2
+            }
+            finally {
+                if ($null -ne $mail) { $mail.Dispose() }
+                if ($null -ne $smtp) { $smtp.Dispose() }
             }
         }
     }
