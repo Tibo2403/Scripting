@@ -17,6 +17,14 @@
     Optional path to save an HTML report.
 .PARAMETER NotifyEmail
     Optional email address to notify if broken links are found.
+.PARAMETER SmtpServer
+    SMTP server to use when sending notification emails.
+.PARAMETER SmtpPort
+    Port number of the SMTP server. Defaults to 25.
+.PARAMETER Credential
+    Credentials for authenticating to the SMTP server.
+.PARAMETER UseSsl
+    Use SSL/TLS when connecting to the SMTP server.
 .PARAMETER ToastNotify
     Display a toast notification when broken links are detected.
 .PARAMETER MaxJobs
@@ -38,6 +46,10 @@ param (
     [string[]]$ContentTypes = @('html'),
     [string]$HtmlReportPath,
     [string]$NotifyEmail,
+    [string]$SmtpServer,
+    [int]$SmtpPort = 25,
+    [pscredential]$Credential,
+    [switch]$UseSsl,
     [switch]$ToastNotify,
     [int]$MaxJobs = 10
 )
@@ -186,12 +198,19 @@ $($rows -join "`n")
 function Send-Notifications {
     param([object[]]$errors)
     if (-not $errors) { return }
-    if ($NotifyEmail) {
+    if ($NotifyEmail -and $SmtpServer) {
         $body = $errors | Format-Table Url,Code,Message -AutoSize | Out-String
         try {
-            Send-MailMessage -To $NotifyEmail -From $NotifyEmail -Subject "Broken Links" -Body $body -SmtpServer 'localhost'
+            $mail = [System.Net.Mail.MailMessage]::new($NotifyEmail, $NotifyEmail, 'Broken Links', $body)
+            $smtp = [System.Net.Mail.SmtpClient]::new($SmtpServer, $SmtpPort)
+            if ($UseSsl) { $smtp.EnableSsl = $true }
+            if ($Credential) { $smtp.Credentials = $Credential.GetNetworkCredential() }
+            $smtp.Send($mail)
         } catch {
             Write-Warning "Failed to send email notification: $_"
+        } finally {
+            if ($null -ne $mail) { $mail.Dispose() }
+            if ($null -ne $smtp) { $smtp.Dispose() }
         }
     }
     if ($ToastNotify) {
