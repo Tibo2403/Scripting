@@ -264,3 +264,5 @@ switch ($Action.ToLower()) {
         }
     }
 }
+
+Disconnect-MicrosoftTeams -ErrorAction SilentlyContinue
