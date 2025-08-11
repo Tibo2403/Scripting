@@ -56,7 +56,13 @@ $report = $drives | Select-Object DeviceID,
     @{Name="PercentFree";Expression={[math]::round(($_.FreeSpace/$_.Size)*100,2)}}
 
 if ($CsvPath) {
-    $report | Export-Csv -Path $CsvPath -NoTypeInformation
+    try {
+        $report | Export-Csv -Path $CsvPath -NoTypeInformation
+    }
+    catch {
+        Write-Error "Failed to export report to CSV at $CsvPath: $_"
+        exit 1
+    }
 }
 
 foreach ($entry in $report) {
@@ -64,7 +70,13 @@ foreach ($entry in $report) {
         $message = "Drive $($entry.DeviceID) is below $AlertThreshold% free space ($($entry.PercentFree)% remaining)."
         Write-Warning $message
         if ($SmtpServer -and $From -and $To) {
-            Send-MailMessage -SmtpServer $SmtpServer -From $From -To $To -Subject $Subject -Body $message
+            try {
+                Send-MailMessage -SmtpServer $SmtpServer -From $From -To $To -Subject $Subject -Body $message
+            }
+            catch {
+                Write-Error "Failed to send alert email: $_"
+                exit 2
+            }
         }
     }
 }
