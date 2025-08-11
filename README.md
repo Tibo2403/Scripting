@@ -20,7 +20,7 @@ scripts/
 │   ├── VMManagement.ps1
 │   ├── LinkCrawler.ps1
 │   ├── TeamsManagement.ps1
-│   ├── ExchangeOnlineManagement.ps1
+│   ├── SharePointManagement.ps1
 │   ├── UserManagement.ps1
 │   └── SecurityCheck.ps1
 ├── sample_logs.json   # Journalisation fictive pour tests
@@ -57,6 +57,10 @@ Les scripts peuvent être lancés via PowerShell :
 .\scripts\powershell\TeamsManagement.ps1 -Action bulkadd -TeamName "Marketing" -CsvPath .\users.csv
 # Exemple : lister les boîtes aux lettres Exchange Online
 .\scripts\powershell\ExchangeOnlineManagement.ps1 -Action list
+# Exemple : lister les sites SharePoint Online
+.\scripts\powershell\SharePointManagement.ps1 -Mode Online -Action ListSites -Credential (Get-Credential)
+# Exemple : créer un site SharePoint On-Premise
+.\scripts\powershell\SharePointManagement.ps1 -Mode OnPrem -Action CreateSite -SiteUrl "http://spserver/sites/test" -Template STS#0 -Credential (Get-Credential)
 # Exemple : vérifier les paramètres de sécurité
 .\scripts\powershell\SecurityCheck.ps1
 ```
