@@ -1,0 +1,145 @@
+name: AI Refactor (hourly, no external script)
+
+on:
+  schedule:
+    - cron: "17 * * * *"   # toutes les heures à HH:17 (UTC)
+  workflow_dispatch:
+
+jobs:
+  ai-refactor:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    env:
+      OPENAI_MODEL: gpt-4.1   # ou un modèle plus récent si dispo
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare tools (jq)
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y jq
+
+      - id: generate
+        name: Call OpenAI and build patch (inline bash only)
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ env.OPENAI_MODEL }}
+        run: |
+          set -euo pipefail
+
+          # 1) Sélection des fichiers (texte/code) et construction d'un contexte compact
+          MAX_BYTES=180000
+          TMPCTX="$(mktemp)"
+          INCLUDE_EXT="py js ts tsx jsx md json yml yaml toml css html"
+          EXCLUDE_DIRS="^.git/|^.github/|^node_modules/|^dist/|^build/|^__pycache__/"
+
+          while IFS= read -r -d '' f; do
+            size=$(stat -c%s "$f")
+            if [ "$size" -lt 200000 ]; then
+              printf '<<<FILE:%s>>>\n' "$f" >> "$TMPCTX"
+              sed -e 's/\r$//' "$f" >> "$TMPCTX" || true
+              printf '\n<<<END>>>\n' >> "$TMPCTX"
+            fi
+            # Stop si on dépasse MAX_BYTES
+            cur=$(stat -c%s "$TMPCTX")
+            if [ "$cur" -gt "$MAX_BYTES" ]; then
+              break
+            fi
+          done < <(
+            # Trouve les fichiers par extension, exclut certains répertoires, trie par taille croissante
+            find . -type f \( $(printf -- '-name "*.%s" -o ' $INCLUDE_EXT | sed 's/ -o $//') \) \
+              | grep -Ev "$EXCLUDE_DIRS" \
+              | xargs -I{} bash -c 'printf "%s\t" "$(stat -c%s "{}")"; printf "%s\n" "{}"' \
+              | sort -n | cut -f2- | tr '\n' '\0'
+          )
+
+          # 2) Prompts (system + user) encodés proprement en JSON
+          CTX_JSON=$(jq -Rs . < "$TMPCTX")
+          DATE_UTC=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          read -r -d '' SYSTEM_MSG <<'EOF'
+Tu es un ingénieur logiciel senior.
+Analyse un échantillon de fichiers du dépôt et propose de petites améliorations sûres :
+- simplifications, micro-optimisations lisibles, corrections stylistiques,
+- suppression de code mort, meilleure gestion d'erreurs,
+- docstrings/commentaires concis.
+NE CHANGE PAS l'API publique ni la logique métier sans nécessité claire.
+Réponds UNIQUEMENT avec un patch au format diff unifié (git), chemins relatifs racine.
+Aucun texte avant/après le diff.
+EOF
+
+          USER_MSG=$(cat <<EOF
+Date: ${DATE_UTC} (UTC)
+
+Répertoire (échantillon de fichiers):
+$(jq -r <<<"$CTX_JSON")
+
+Exigences:
+- Patch minimal, sûr, auto-contenu.
+- Format: diff unifié valide (---/+++ depuis la racine), prêt pour \`git apply\`.
+- Limite à quelques fichiers si nécessaire.
+- Si aucune amélioration sûre n'est trouvée, renvoie un diff vide (aucune sortie).
+EOF
+)
+
+          BODY=$(jq -n --arg sys "$SYSTEM_MSG" --arg usr "$USER_MSG" --arg model "$OPENAI_MODEL" '
+            {
+              model: $model,
+              input: [
+                { "role":"system", "content": $sys },
+                { "role":"user",   "content": $usr }
+              ],
+              temperature: 0,
+              max_output_tokens: 4096,
+              response_format: { "type":"text" }
+            }
+          ')
+
+          # 3) Appel API (Responses) et extraction du texte de sortie
+          RESP=$(curl -sS https://api.openai.com/v1/responses \
+            -H "Authorization: Bearer ${OPENAI_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "$BODY")
+
+          echo "$RESP" | jq -r '.output_text' > ai.patch || true
+
+          # 4) Validation rapide
+          if [ -s ai.patch ] && head -n1 ai.patch | grep -q '^--- '; then
+            if git apply --check ai.patch; then
+              echo "has_patch=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "Patch not applicable (check failed). Keeping file for inspection."
+              echo "has_patch=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            # Vide ou pas un diff; on nettoie pour éviter des commits vides
+            : > ai.patch
+            echo "has_patch=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Apply patch and commit
+        if: steps.generate.outputs.has_patch == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name "ai-bot"
+          git config user.email "ai-bot@users.noreply.github.com"
+          git checkout -b ai/refactor-${{ github.run_id }}
+          git apply --whitespace=fix ai.patch
+          git add -A
+          git commit -m "AI refactor: automated suggestions"
+
+      - name: Create Pull Request
+        if: steps.generate.outputs.has_patch == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          title: "AI refactor (hourly)"
+          body: |
+            PR générée automatiquement par le workflow (sans script externe).
+            Merci de relire attentivement avant merge.
+          branch: ai/refactor-${{ github.run_id }}
+          delete-branch: true
