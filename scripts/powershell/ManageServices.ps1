@@ -16,7 +16,7 @@
     Restarts the Windows Update service.
 #>
 
-[CmdletBinding()]
+[CmdletBinding(SupportsShouldProcess=$true)]
 param(
     [Parameter(Mandatory=$true)]
     [ValidateSet('start','stop','restart','status')]
@@ -40,10 +40,30 @@ try {
 
 try {
     switch ($Action.ToLower()) {
-        'start'   { Start-Service   -InputObject $service }
-        'stop'    { Stop-Service    -InputObject $service }
-        'restart' { Restart-Service -InputObject $service }
-        'status'  { $service | Format-List Name, Status }
+        'start' {
+            if ($PSCmdlet.ShouldProcess($ServiceName, $Action)) {
+                Start-Service -InputObject $service
+                Write-Output "Service '$ServiceName' started successfully."
+            }
+        }
+        'stop' {
+            if ($PSCmdlet.ShouldProcess($ServiceName, $Action)) {
+                Stop-Service -InputObject $service
+                Write-Output "Service '$ServiceName' stopped successfully."
+            }
+        }
+        'restart' {
+            if ($PSCmdlet.ShouldProcess($ServiceName, $Action)) {
+                Restart-Service -InputObject $service
+                Write-Output "Service '$ServiceName' restarted successfully."
+            }
+        }
+        'status' {
+            if ($PSCmdlet.ShouldProcess($ServiceName, $Action)) {
+                $service | Format-List Name, Status
+                Write-Output "Service '$ServiceName' status retrieved successfully."
+            }
+        }
     }
 } catch {
     Write-Error "Failed to $Action service '$ServiceName'. $_"
