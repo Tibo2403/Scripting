@@ -1,3 +1,4 @@
+#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
     Starts, stops, restarts or checks the status of a Windows service.
@@ -24,12 +25,6 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$ServiceName
 )
-
-# Ensure script runs with administrative privileges
-if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)) {
-    Write-Error 'This script must be run as Administrator.'
-    return
-}
 
 try {
     $service = Get-Service -Name $ServiceName -ErrorAction Stop
