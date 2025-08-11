@@ -76,19 +76,36 @@ function Should-IncludeLink {
 
 function Get-LinksFromPage {
     param (
-        [string]$htmlContent,
+        [string]$url,
         [string]$baseUrl
     )
 
-    $matches = Select-String -InputObject $htmlContent -Pattern 'href="(.*?)"' -AllMatches
     $links = @()
 
-    foreach ($match in $matches.Matches) {
-        $href = $match.Groups[1].Value
-        if ($href -like "http*") {
-            $links += $href
-        } elseif ($href -like "/*") {
-            $links += "$baseUrl$href"
+    $response = Invoke-WebRequest -Uri $url -TimeoutSec 10 -ErrorAction Stop
+
+    if ([Type]::GetType('HtmlAgilityPack.HtmlDocument')) {
+        $doc = [HtmlAgilityPack.HtmlDocument]::new()
+        $doc.LoadHtml($response.Content)
+        $nodes = $doc.DocumentNode.SelectNodes('//a[@href]')
+        if ($nodes) {
+            foreach ($node in $nodes) {
+                $href = $node.GetAttributeValue('href','')
+                if ($href -like 'http*') {
+                    $links += $href
+                } elseif ($href.StartsWith('/')) {
+                    $links += "$baseUrl$href"
+                }
+            }
+        }
+    } else {
+        foreach ($link in $response.Links) {
+            $href = $link.href
+            if ($href -like 'http*') {
+                $links += $href
+            } elseif ($href.StartsWith('/')) {
+                $links += "$baseUrl$href"
+            }
         }
     }
 
@@ -145,11 +162,9 @@ function Crawl {
     $visitedUrls[$url] = $true
 
     try {
-        $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
+        $links = Get-LinksFromPage -url $url -baseUrl $BaseUrl
         $result = Test-Url -url $url
         $results += [pscustomobject]$result
-
-        $links = Get-LinksFromPage -htmlContent $response.Content -baseUrl $BaseUrl
         $external = @()
         foreach ($link in $links) {
             if ($link.StartsWith($BaseUrl)) {
