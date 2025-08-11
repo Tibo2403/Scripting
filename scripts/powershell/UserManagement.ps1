@@ -1,3 +1,4 @@
+#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
     Creates, removes or lists local user accounts.
@@ -28,12 +29,6 @@ param(
     [string]$UserName,
     [SecureString]$Password
 )
-
-# Ensure script runs with administrative privileges
-if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)) {
-    Write-Error 'This script must be run as Administrator.'
-    return
-}
 
 switch ($Action.ToLower()) {
     'create' {
