@@ -3,8 +3,8 @@
     Performs a basic security audit of the local Windows system.
 .DESCRIPTION
     Checks the status of Windows Firewall, antivirus (Windows Defender),
-    the Windows Update service and BitLocker encryption for the system drive.
-    Results can optionally be saved to a JSON report file.
+    the Windows Update service, BitLocker encryption, local administrator accounts
+    and basic update compliance. Results can optionally be saved to a JSON report file.
 .PARAMETER ReportPath
     Optional path to save the audit results as JSON.
 .EXAMPLE
@@ -54,16 +54,36 @@ try {
     $results.WindowsUpdate = @{ Error = $_.Exception.Message }
 }
 
-# BitLocker status for system drive
+# BitLocker status for all fixed drives
 if (Get-Command Get-BitLockerVolume -ErrorAction SilentlyContinue) {
     try {
-        $blv = Get-BitLockerVolume -MountPoint $env:SystemDrive
-        $results.BitLocker = @{ ProtectionStatus = $blv.ProtectionStatus; VolumeStatus = $blv.VolumeStatus }
+        $blv = Get-BitLockerVolume
+        $results.BitLocker = $blv | Select-Object MountPoint, VolumeType, ProtectionStatus
     } catch {
         $results.BitLocker = @{ Error = $_.Exception.Message }
     }
 } else {
     $results.BitLocker = @{ Error = 'Get-BitLockerVolume not available.' }
+}
+
+# Local Administrators
+if (Get-Command Get-LocalGroupMember -ErrorAction SilentlyContinue) {
+    try {
+        $admins = Get-LocalGroupMember -Group 'Administrators'
+        $results.LocalAdministrators = $admins | Select-Object Name, ObjectClass
+    } catch {
+        $results.LocalAdministrators = @{ Error = $_.Exception.Message }
+    }
+} else {
+    $results.LocalAdministrators = @{ Error = 'Get-LocalGroupMember not available.' }
+}
+
+# Update compliance - last installed hotfix
+try {
+    $lastHotfix = Get-HotFix | Sort-Object -Property InstalledOn -Descending | Select-Object -First 1
+    $results.UpdateCompliance = @{ LastHotFixInstalledOn = $lastHotfix.InstalledOn }
+} catch {
+    $results.UpdateCompliance = @{ Error = $_.Exception.Message }
 }
 
 $results | Format-List
