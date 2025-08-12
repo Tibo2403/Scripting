@@ -88,6 +88,7 @@ bash scripts/linux/pentest_discovery.sh
 bash scripts/linux/pentest_verification.sh
 # Phase d'exploitation (si autorisée)
 bash scripts/linux/pentest_exploitation.sh
+# Génère un fichier de suggestions avec searchsploit si des CVE ont été détectées
 # Exfiltration basique (si autorisée)
 export FTP_USER="utilisateur"
 export FTP_PASS="motdepasse"
