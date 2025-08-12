@@ -17,6 +17,13 @@ if ! command -v apt-get >/dev/null 2>&1; then
     exit 1
 fi
 
+# Vérifie la connectivité réseau avant d'installer quoi que ce soit
+echo "🌐 Vérification de la connectivité réseau..."
+if ! ping -c1 -W3 8.8.8.8 >/dev/null 2>&1; then
+    echo "❌ Aucune connectivité réseau. Vérifiez votre connexion." >&2
+    exit 1
+fi
+
 echo "🔧 Mise à jour des paquets et installation des dépendances..."
 apt-get update
 apt-get install -y python3 python3-pip curl
@@ -31,7 +38,7 @@ source /opt/mistral-env/bin/activate
 
 echo "🐍 Installation des bibliothèques Python..."
 pip install --upgrade pip
-pip install flask requests
+pip install flask==2.3.2 requests==2.31.0
 
 echo "⬇️ Installation d'Ollama..."
 # Télécharge install.sh séparément, vérifie son empreinte SHA-256 puis l'exécute.
