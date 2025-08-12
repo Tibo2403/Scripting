@@ -66,6 +66,30 @@ if (Get-Command Get-BitLockerVolume -ErrorAction SilentlyContinue) {
     $results.BitLocker = @{ Error = 'Get-BitLockerVolume not available.' }
 }
 
+# Secure Boot status
+if (Get-Command Confirm-SecureBootUEFI -ErrorAction SilentlyContinue) {
+    try {
+        $secureBoot = Confirm-SecureBootUEFI
+        $results.SecureBoot = @{ Enabled = $secureBoot }
+    } catch {
+        $results.SecureBoot = @{ Error = $_.Exception.Message }
+    }
+} else {
+    $results.SecureBoot = @{ Error = 'Confirm-SecureBootUEFI not available.' }
+}
+
+# TPM module status
+if (Get-Command Get-Tpm -ErrorAction SilentlyContinue) {
+    try {
+        $tpm = Get-Tpm
+        $results.TPM = $tpm | Select-Object TpmPresent, TpmEnabled, TpmActivated, TpmOwned
+    } catch {
+        $results.TPM = @{ Error = $_.Exception.Message }
+    }
+} else {
+    $results.TPM = @{ Error = 'Get-Tpm not available.' }
+}
+
 # Local Administrators
 if (Get-Command Get-LocalGroupMember -ErrorAction SilentlyContinue) {
     try {
