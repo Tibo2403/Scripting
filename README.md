@@ -7,6 +7,7 @@ Ce dépôt contient une collection de scripts PowerShell utiles pour l'administr
 ```
 scripts/
 ├── linux/             # Scripts Bash pour Linux
+│   ├── check_dependencies.sh
 │   ├── setup_api.sh
 │   ├── pentest_discovery.sh
 │   ├── pentest_verification.sh
@@ -81,6 +82,9 @@ python ~/mistral_api.py
 ### Scripts Kali Linux
 
 ```bash
+
+# Vérifier les dépendances nécessaires
+bash scripts/linux/check_dependencies.sh
 
 # Phase de découverte (scan complet et scripts de vulnérabilités)
 bash scripts/linux/pentest_discovery.sh
