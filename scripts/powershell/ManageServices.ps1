@@ -51,30 +51,42 @@ foreach ($name in $ServiceName) {
         switch ($Action.ToLower()) {
             'start' {
                 if ($PSCmdlet.ShouldProcess("$name on $ComputerName", $Action)) {
-                    if ($Credential) {
-                        Start-Service -InputObject $service -Credential $Credential
-                    } else {
+                    if ($ComputerName -eq $env:COMPUTERNAME) {
                         Start-Service -InputObject $service
+                    } else {
+                        if ($Credential) {
+                            Invoke-Command -ComputerName $ComputerName -Credential $Credential -ScriptBlock { Start-Service -InputObject $using:service }
+                        } else {
+                            Invoke-Command -ComputerName $ComputerName -ScriptBlock { Start-Service -InputObject $using:service }
+                        }
                     }
                     Write-Output "Service '$name' started successfully on $ComputerName."
                 }
             }
             'stop' {
                 if ($PSCmdlet.ShouldProcess("$name on $ComputerName", $Action)) {
-                    if ($Credential) {
-                        Stop-Service -InputObject $service -Credential $Credential
-                    } else {
+                    if ($ComputerName -eq $env:COMPUTERNAME) {
                         Stop-Service -InputObject $service
+                    } else {
+                        if ($Credential) {
+                            Invoke-Command -ComputerName $ComputerName -Credential $Credential -ScriptBlock { Stop-Service -InputObject $using:service }
+                        } else {
+                            Invoke-Command -ComputerName $ComputerName -ScriptBlock { Stop-Service -InputObject $using:service }
+                        }
                     }
                     Write-Output "Service '$name' stopped successfully on $ComputerName."
                 }
             }
             'restart' {
                 if ($PSCmdlet.ShouldProcess("$name on $ComputerName", $Action)) {
-                    if ($Credential) {
-                        Restart-Service -InputObject $service -Credential $Credential
-                    } else {
+                    if ($ComputerName -eq $env:COMPUTERNAME) {
                         Restart-Service -InputObject $service
+                    } else {
+                        if ($Credential) {
+                            Invoke-Command -ComputerName $ComputerName -Credential $Credential -ScriptBlock { Restart-Service -InputObject $using:service }
+                        } else {
+                            Invoke-Command -ComputerName $ComputerName -ScriptBlock { Restart-Service -InputObject $using:service }
+                        }
                     }
                     Write-Output "Service '$name' restarted successfully on $ComputerName."
                 }
