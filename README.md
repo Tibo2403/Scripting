@@ -2,6 +2,21 @@
 
 Ce dépôt contient une collection de scripts PowerShell utiles pour l'administration système et l'automatisation de tâches courantes.
 
+## Table des matières
+
+- [⚠️ Avertissements légaux](#-avertissements-légaux)
+- [📂 Structure du dépôt](#-structure-du-dépôt)
+- [🛠️ Prérequis / Prerequisites](#-prérequis--prerequisites)
+- [📦 Installation](#-installation)
+- [📚 Exemples d'utilisation](#-exemples-dutilisation)
+- [License](#license)
+
+## ⚠️ Avertissements légaux
+
+Pentest scripts (dont `pentest_discovery.sh`, `pentest_verification.sh`, `pentest_exploitation.sh`) et `stealth_post.sh` doivent être utilisés uniquement sur des systèmes pour lesquels vous disposez d'une autorisation explicite.
+
+Pentest scripts and `stealth_post.sh` must only be run on systems where you have been granted explicit permission. Unauthorized use may be illegal.
+
 ## 📂 Structure du dépôt
 
 ```
@@ -34,7 +49,18 @@ Le fichier `targets.txt` à la racine contient la liste des cibles pour les scri
 - **Outils / Tools** : `nmap`, `gvm-cli` et les modules PowerShell nécessaires (Hyper-V, ExchangeOnlineManagement, Teams, etc.).
 - **Privilèges / Privileges** : certains scripts exigent des droits administrateur ou root.
 
-## ⚙️ Utilisation rapide
+## 📦 Installation
+
+```bash
+# Installation de l'API Mistral
+# Le script télécharge install.sh séparément et vérifie son empreinte SHA-256
+bash scripts/linux/setup_api.sh
+# Activer l'environnement virtuel puis lancer l'API
+source /opt/mistral-env/bin/activate
+python ~/mistral_api.py
+```
+
+## 📚 Exemples d'utilisation
 
 Les scripts peuvent être lancés via PowerShell :
 
@@ -70,15 +96,6 @@ Les scripts peuvent être lancés via PowerShell :
 
 Chacun des scripts possède des paramètres décrits en début de fichier.
 
-```bash
-# Installation de l'API Mistral
-# Le script télécharge install.sh séparément et vérifie son empreinte SHA-256
-bash scripts/linux/setup_api.sh
-# Activer l'environnement virtuel puis lancer l'API
-source /opt/mistral-env/bin/activate
-python ~/mistral_api.py
-```
-
 ### Scripts Kali Linux
 
 ```bash
@@ -103,13 +120,7 @@ bash scripts/linux/stealth_post.sh
 
 Chaque exécution de `pentest_discovery.sh` crée un sous-dossier horodaté dans `pentest_results`, conservant les résultats des scans précédents.
 Each run of `pentest_discovery.sh` outputs to a timestamped subfolder inside `pentest_results`, preserving previous scan results.
-
-## ⚠️ Disclaimer / Avertissement
-
-Pentest scripts (dont `pentest_discovery.sh`, `pentest_verification.sh`, `pentest_exploitation.sh`) et `stealth_post.sh` doivent être utilisés uniquement sur des systèmes pour lesquels vous disposez d'une autorisation explicite.
-
-Pentest scripts and `stealth_post.sh` must only be run on systems where you have been granted explicit permission. Unauthorized use may be illegal.
-
+ 
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
