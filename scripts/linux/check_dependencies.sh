@@ -58,11 +58,16 @@ install_package() {
     fi
 }
 
-# Outils en ligne de commande requis
-CLI_DEPS=(nmap gvm-cli pwsh)
-
-# Modules PowerShell à vérifier
-PS_MODULES=("Hyper-V" "ExchangeOnlineManagement" "MicrosoftTeams" "PnP.PowerShell")
+# Chargement de la configuration des dépendances
+CONFIG_FILE="${CONFIG_FILE:-$(dirname "$0")/dependencies.conf}"
+if [[ -f "$CONFIG_FILE" ]]; then
+    # shellcheck source=/dev/null
+    source "$CONFIG_FILE"
+else
+    # Valeurs par défaut si aucun fichier n'est trouvé
+    CLI_DEPS=(nmap gvm-cli pwsh)
+    PS_MODULES=("Hyper-V" "ExchangeOnlineManagement" "MicrosoftTeams" "PnP.PowerShell")
+fi
 
 missing=0
 
