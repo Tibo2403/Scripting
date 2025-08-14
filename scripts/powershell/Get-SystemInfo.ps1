@@ -13,9 +13,11 @@
 .PARAMETER HealthStatus
     Include CPU temperature and usage statistics.
 .PARAMETER OutCsv
-    Export the collected information to 'SystemInfo.csv'.
+    Export the collected information to '<OutputPath>.csv'.
 .PARAMETER OutJson
-    Export the collected information to 'SystemInfo.json'.
+    Export the collected information to '<OutputPath>.json'.
+.PARAMETER OutputPath
+    Base path for exported files. Defaults to 'SystemInfo' in the script directory.
 .EXAMPLE
     PS> .\Get-SystemInfo.ps1 -IncludeNetwork -OutJson
     Writes system information including network adapters to SystemInfo.json.
@@ -36,26 +38,32 @@ param(
     [switch]$IncludeGPU,
     [switch]$HealthStatus,
     [switch]$OutCsv,
-    [switch]$OutJson
+    [switch]$OutJson,
+    [ValidateScript({Test-Path (Split-Path $_)})]
+    [string]$OutputPath = (Join-Path -Path $PSScriptRoot -ChildPath 'SystemInfo')
 )
 
+Get-Command Get-ComputerInfo -ErrorAction Stop
 $sys = Get-ComputerInfo |
     Select-Object OSName, OSVersion, CsTotalPhysicalMemory,
                   CsNumberOfLogicalProcessors, CsSystemType
 
 if ($IncludeNetwork) {
+    Get-Command Get-NetAdapter -ErrorAction Stop
     $net = Get-NetAdapter |
         Select-Object Name, InterfaceDescription, Status, MacAddress
     $sys | Add-Member -MemberType NoteProperty -Name NetworkAdapters -Value $net
 }
 
 if ($IncludeGPU) {
+    Get-Command Get-CimInstance -ErrorAction Stop
     $gpu = Get-CimInstance Win32_VideoController |
         Select-Object Name, DriverVersion
     $sys | Add-Member -MemberType NoteProperty -Name GPUs -Value $gpu
 }
 
 if ($HealthStatus) {
+    Get-Command Get-CimInstance -ErrorAction Stop
     $cpuLoad = (Get-CimInstance Win32_Processor).LoadPercentage
     $tempObj = Get-CimInstance -Namespace root/wmi -Class MSAcpi_ThermalZoneTemperature -ErrorAction SilentlyContinue | Select-Object -First 1
     $health = [pscustomobject]@{
@@ -69,11 +77,11 @@ if ($HealthStatus) {
 }
 
 if ($OutCsv) {
-    $sys | ConvertTo-Csv -NoTypeInformation | Set-Content -Path '.\SystemInfo.csv'
+    $sys | ConvertTo-Csv -NoTypeInformation | Set-Content -Path "$OutputPath.csv"
 }
 
 if ($OutJson) {
-    $sys | ConvertTo-Json -Depth 4 | Set-Content -Path '.\SystemInfo.json'
+    $sys | ConvertTo-Json -Depth 4 | Set-Content -Path "$OutputPath.json"
 }
 
 if (-not $OutCsv -and -not $OutJson) {
