@@ -38,13 +38,15 @@
     an email if any drive has less than 10% free space.
 #>
 
-[CmdletBinding()]
+[CmdletBinding(SupportsShouldProcess=$true)]
 param(
     [string[]]$Volume,
+    [ValidateRange(1,100)]
     [int]$AlertThreshold = 20,
     [string]$CsvPath,
     [string]$SmtpServer,
-    [int]$SmtpPort = 25,
+    [ValidatePattern('^\d{2,5}$')]
+    [string]$SmtpPort = '25',
     [pscredential]$Credential,
     [switch]$UseSsl,
     [string]$From,
@@ -84,7 +86,9 @@ foreach ($entry in $report) {
                 $smtp = [System.Net.Mail.SmtpClient]::new($SmtpServer, $SmtpPort)
                 if ($UseSsl) { $smtp.EnableSsl = $true }
                 if ($Credential) { $smtp.Credentials = $Credential.GetNetworkCredential() }
-                $smtp.Send($mail)
+                if ($PSCmdlet.ShouldProcess("send alert email to $To", "Send email")) {
+                    $smtp.Send($mail)
+                }
             }
             catch {
                 Write-Error "Failed to send alert email: $_"
