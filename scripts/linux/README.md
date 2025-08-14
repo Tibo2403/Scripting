@@ -2,7 +2,7 @@
 
 Ce dossier regroupe les scripts destinés aux systèmes GNU/Linux.
 
-- `check_dependencies.sh` – vérifie la présence des outils requis et peut tenter de les installer avec l'option `--install` (compatible avec `apt-get`, `yum`, `dnf` et `pacman`).
+- `check_dependencies.sh` – vérifie la présence des outils requis et peut tenter de les installer avec l'option `--install` (compatible avec `apt-get`, `yum`, `dnf` et `pacman`). Les listes de dépendances peuvent être adaptées dans `dependencies.conf`.
 - `setup_api.sh` – installe et configure l'API Mistral.
 - `pentest_discovery.sh` – phase de découverte lors d'un pentest.
 - `pentest_verification.sh` – vérification des vulnérabilités détectées.
