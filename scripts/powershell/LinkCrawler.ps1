@@ -29,6 +29,8 @@
     Display a toast notification when broken links are detected.
 .PARAMETER MaxJobs
     Maximum number of concurrent jobs when testing external links. Default is 10.
+.PARAMETER UserAgent
+    User-Agent string used for HTTP requests.
 .EXAMPLE
     PS> .\LinkCrawler.ps1 -BaseUrl "https://example.com" -MaxDepth 2 -ContentTypes html,image -HtmlReportPath report.html
 .EXAMPLE
@@ -52,7 +54,8 @@ param (
     [pscredential]$Credential,
     [switch]$UseSsl,
     [switch]$ToastNotify,
-    [int]$MaxJobs = 10
+    [int]$MaxJobs = 10,
+    [string]$UserAgent = 'LinkCrawler/1.0'
 )
 
 $visitedUrls = @{}
@@ -63,6 +66,60 @@ $threadJobAvailable = [bool](Get-Module -ListAvailable -Name ThreadJob)
 $HtmlExt  = @('.html','.htm','/')
 $ImageExt = @('.jpg','.jpeg','.png','.gif','.bmp','.svg','.webp')
 $DocExt   = @('.pdf','.doc','.docx','.xls','.xlsx','.ppt','.pptx','.txt','.rtf')
+
+$AdaptiveDelay = 0
+$DisallowedPaths = @()
+
+function Invoke-Request {
+    param(
+        [string]$Uri,
+        [string]$Method = 'Get'
+    )
+
+    if ($AdaptiveDelay -gt 0) { Start-Sleep -Seconds $AdaptiveDelay }
+    try {
+        $params = @{ Uri = $Uri; Method = $Method; TimeoutSec = 10; ErrorAction = 'Stop'; UserAgent = $UserAgent }
+        return Invoke-WebRequest @params
+    } catch {
+        if ($_.Exception.Response -and $_.Exception.Response.StatusCode.value__ -eq 429) {
+            $retry = [int]$_.Exception.Response.Headers['Retry-After']
+            if ($retry -le 0) { $retry = [Math]::Min([Math]::Max(1,$AdaptiveDelay * 2),60) }
+            $AdaptiveDelay = $retry
+            Start-Sleep -Seconds $retry
+            return Invoke-Request -Uri $Uri -Method $Method
+        }
+        throw
+    }
+}
+
+function Initialize-Robots {
+    try {
+        $robotsUrl = (Join-Path $BaseUrl 'robots.txt')
+        $resp = Invoke-Request -Uri $robotsUrl
+        $current = ''
+        foreach ($line in $resp.Content -split "`n") {
+            $t = $line.Split('#')[0].Trim()
+            if ($t -match '^User-agent:\s*(.+)') {
+                $current = $Matches[1].Trim()
+            } elseif ($current -in @('*',$UserAgent) -and $t -match '^Disallow:\s*(.+)') {
+                $path = $Matches[1].Trim()
+                if ($path) { $DisallowedPaths += $path }
+            }
+        }
+    } catch {
+        # robots.txt absent
+    }
+}
+
+function Is-AllowedUrl {
+    param([string]$url)
+    if (-not $DisallowedPaths) { return $true }
+    $uri = [System.Uri]$url
+    foreach ($d in $DisallowedPaths) {
+        if ($uri.AbsolutePath -like "$d*") { return $false }
+    }
+    return $true
+}
 
 function Should-IncludeLink {
     param([string]$link)
@@ -83,7 +140,7 @@ function Get-LinksFromPage {
 
     $links = @()
 
-    $response = Invoke-WebRequest -Uri $url -TimeoutSec 10 -ErrorAction Stop
+    $response = Invoke-Request -Uri $url
 
     if ([Type]::GetType('HtmlAgilityPack.HtmlDocument')) {
         $doc = [HtmlAgilityPack.HtmlDocument]::new()
@@ -110,7 +167,7 @@ function Get-LinksFromPage {
         }
     }
 
-    return $links | Sort-Object -Unique | Where-Object { Should-IncludeLink $_ }
+    return $links | Sort-Object -Unique | Where-Object { Should-IncludeLink $_ -and Is-AllowedUrl $_ }
 }
 
 function Test-Url {
@@ -119,7 +176,7 @@ function Test-Url {
     )
 
     try {
-        $response = Invoke-WebRequest -Uri $url -Method Head -TimeoutSec 10 -ErrorAction Stop
+        $response = Invoke-Request -Uri $url -Method Head
         return @{ Url = $url; Status = 'OK'; Code = $response.StatusCode; Message = '' }
     } catch {
         $code = if ($_.Exception.Response) { $_.Exception.Response.StatusCode.value__ } else { 'NA' }
@@ -135,17 +192,31 @@ function Test-UrlsParallel {
     }
     $jobs = @()
     foreach ($u in $urls) {
-        while ((Get-Job -State Running).Count -ge $MaxJobs) { Start-Sleep -Seconds 1 }
+        while ((Get-Job -State Running).Count -ge $MaxJobs) { Start-Sleep -Seconds ([Math]::Max(1,$AdaptiveDelay)) }
         $jobs += Start-ThreadJob -ScriptBlock {
-            param($link)
-            try {
-                $r = Invoke-WebRequest -Uri $link -Method Head -TimeoutSec 10 -ErrorAction Stop
-                [pscustomobject]@{ Url = $link; Status = 'OK'; Code = $r.StatusCode; Message = '' }
-            } catch {
-                $c = if ($_.Exception.Response) { $_.Exception.Response.StatusCode.value__ } else { 'NA' }
-                [pscustomobject]@{ Url = $link; Status = 'ERROR'; Code = $c; Message = $_.Exception.Message }
-            }
-        } -ArgumentList $u
+            param($link,$ua,$delay)
+            $attempt = 0
+            do {
+                if ($delay -gt 0) { Start-Sleep -Seconds $delay }
+                try {
+                    $r = Invoke-WebRequest -Uri $link -Method Head -TimeoutSec 10 -UserAgent $ua -ErrorAction Stop
+                    $result = [pscustomobject]@{ Url = $link; Status = 'OK'; Code = $r.StatusCode; Message = '' }
+                    break
+                } catch {
+                    $c = if ($_.Exception.Response) { $_.Exception.Response.StatusCode.value__ } else { 'NA' }
+                    if ($c -eq 429 -and $attempt -lt 2) {
+                        $retry = [int]$_.Exception.Response.Headers['Retry-After']
+                        if ($retry -le 0) { $retry = [Math]::Max(1,$delay*2) }
+                        Start-Sleep -Seconds $retry
+                        $attempt++
+                    } else {
+                        $result = [pscustomobject]@{ Url = $link; Status = 'ERROR'; Code = $c; Message = $_.Exception.Message }
+                        break
+                    }
+                }
+            } while ($true)
+            $result
+        } -ArgumentList $u, $UserAgent, $AdaptiveDelay
     }
     Wait-Job $jobs | Out-Null
     $res = $jobs | Receive-Job
@@ -159,7 +230,7 @@ function Crawl {
         [int]$depth
     )
 
-    if ($visitedUrls.ContainsKey($url) -or $depth -gt $MaxDepth) { return }
+    if ($visitedUrls.ContainsKey($url) -or $depth -gt $MaxDepth -or -not (Is-AllowedUrl -url $url)) { return }
     $visitedUrls[$url] = $true
 
     try {
@@ -238,6 +309,8 @@ function Send-Notifications {
         }
     }
 }
+
+Initialize-Robots
 
 Write-Host "Début du scan récursif de $BaseUrl (profondeur max : $MaxDepth)" -ForegroundColor Cyan
 Crawl -url $BaseUrl -depth 0
