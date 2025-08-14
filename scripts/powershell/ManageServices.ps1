@@ -35,70 +35,115 @@ param(
     [PSCredential]$Credential
 )
 
-foreach ($name in $ServiceName) {
-    try {
-        if ($Credential) {
-            $service = Get-Service -Name $name -ComputerName $ComputerName -Credential $Credential -ErrorAction Stop
-        } else {
-            $service = Get-Service -Name $name -ComputerName $ComputerName -ErrorAction Stop
+function Invoke-ServiceAction {
+    [CmdletBinding(SupportsShouldProcess=$true)]
+    param(
+        [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
+        [string]$Name,
+        [Parameter(Mandatory=$true)]
+        [ValidateSet('start','stop')]
+        [string]$Action,
+        [string]$ComputerName = $env:COMPUTERNAME,
+        [PSCredential]$Credential
+    )
+    process {
+        try {
+            if ($Credential) {
+                Get-Service -Name $Name -ComputerName $ComputerName -Credential $Credential -ErrorAction Stop | Out-Null
+            } else {
+                Get-Service -Name $Name -ComputerName $ComputerName -ErrorAction Stop | Out-Null
+            }
+        } catch {
+            Write-Error "Service '$Name' was not found on $ComputerName."
+            return
         }
-    } catch {
-        Write-Error "Service '$name' was not found on $ComputerName."
-        continue
-    }
 
-    try {
-        switch ($Action.ToLower()) {
-            'start' {
-                if ($PSCmdlet.ShouldProcess("$name on $ComputerName", $Action)) {
-                    if ($ComputerName -eq $env:COMPUTERNAME) {
-                        Start-Service -InputObject $service
+        if ($PSCmdlet.ShouldProcess("$Name on $ComputerName", $Action)) {
+            try {
+                if ($ComputerName -eq $env:COMPUTERNAME) {
+                    if ($Action -eq 'start') {
+                        Start-Service -Name $Name
                     } else {
-                        if ($Credential) {
-                            Invoke-Command -ComputerName $ComputerName -Credential $Credential -ScriptBlock { Start-Service -InputObject $using:service }
+                        Stop-Service -Name $Name
+                    }
+                } else {
+                    $scriptBlock = {
+                        param($svcName, $svcAction)
+                        if ($svcAction -eq 'start') {
+                            Start-Service -Name $svcName
                         } else {
-                            Invoke-Command -ComputerName $ComputerName -ScriptBlock { Start-Service -InputObject $using:service }
+                            Stop-Service -Name $svcName
                         }
                     }
-                    Write-Output "Service '$name' started successfully on $ComputerName."
-                }
-            }
-            'stop' {
-                if ($PSCmdlet.ShouldProcess("$name on $ComputerName", $Action)) {
-                    if ($ComputerName -eq $env:COMPUTERNAME) {
-                        Stop-Service -InputObject $service
+                    if ($Credential) {
+                        Invoke-Command -ComputerName $ComputerName -Credential $Credential -ScriptBlock $scriptBlock -ArgumentList $Name,$Action
                     } else {
-                        if ($Credential) {
-                            Invoke-Command -ComputerName $ComputerName -Credential $Credential -ScriptBlock { Stop-Service -InputObject $using:service }
-                        } else {
-                            Invoke-Command -ComputerName $ComputerName -ScriptBlock { Stop-Service -InputObject $using:service }
-                        }
+                        Invoke-Command -ComputerName $ComputerName -ScriptBlock $scriptBlock -ArgumentList $Name,$Action
                     }
-                    Write-Output "Service '$name' stopped successfully on $ComputerName."
                 }
+                Write-Output "Service '$Name' $($Action + 'ed') successfully on $ComputerName."
+            } catch {
+                Write-Error "Failed to $Action service '$Name' on $ComputerName. $_"
             }
-            'restart' {
-                if ($PSCmdlet.ShouldProcess("$name on $ComputerName", $Action)) {
+        }
+    }
+}
+
+switch ($Action.ToLower()) {
+    'start' {
+        $ServiceName | Invoke-ServiceAction -Action 'start' -ComputerName $ComputerName -Credential $Credential
+    }
+    'stop' {
+        $ServiceName | Invoke-ServiceAction -Action 'stop' -ComputerName $ComputerName -Credential $Credential
+    }
+    'restart' {
+        foreach ($name in $ServiceName) {
+            try {
+                if ($Credential) {
+                    $service = Get-Service -Name $name -ComputerName $ComputerName -Credential $Credential -ErrorAction Stop
+                } else {
+                    $service = Get-Service -Name $name -ComputerName $ComputerName -ErrorAction Stop
+                }
+            } catch {
+                Write-Error "Service '$name' was not found on $ComputerName."
+                continue
+            }
+
+            if ($PSCmdlet.ShouldProcess("$name on $ComputerName", $Action)) {
+                try {
                     if ($ComputerName -eq $env:COMPUTERNAME) {
                         Restart-Service -InputObject $service
                     } else {
                         if ($Credential) {
-                            Invoke-Command -ComputerName $ComputerName -Credential $Credential -ScriptBlock { Restart-Service -InputObject $using:service }
+                            Invoke-Command -ComputerName $ComputerName -Credential $Credential -ScriptBlock { Restart-Service -Name $using:name }
                         } else {
-                            Invoke-Command -ComputerName $ComputerName -ScriptBlock { Restart-Service -InputObject $using:service }
+                            Invoke-Command -ComputerName $ComputerName -ScriptBlock { Restart-Service -Name $using:name }
                         }
                     }
                     Write-Output "Service '$name' restarted successfully on $ComputerName."
-                }
-            }
-            'status' {
-                if ($PSCmdlet.ShouldProcess("$name on $ComputerName", $Action)) {
-                    $service | Format-List Name, Status
-                    Write-Output "Service '$name' status retrieved successfully on $ComputerName."
+                } catch {
+                    Write-Error "Failed to restart service '$name' on $ComputerName. $_"
                 }
             }
         }
-    } catch {
-        Write-Error "Failed to $Action service '$name' on $ComputerName. $_"
+    }
+    'status' {
+        foreach ($name in $ServiceName) {
+            try {
+                if ($Credential) {
+                    $service = Get-Service -Name $name -ComputerName $ComputerName -Credential $Credential -ErrorAction Stop
+                } else {
+                    $service = Get-Service -Name $name -ComputerName $ComputerName -ErrorAction Stop
+                }
+            } catch {
+                Write-Error "Service '$name' was not found on $ComputerName."
+                continue
+            }
+
+            if ($PSCmdlet.ShouldProcess("$name on $ComputerName", $Action)) {
+                $service | Format-List Name, Status
+                Write-Output "Service '$name' status retrieved successfully on $ComputerName."
+            }
+        }
     }
 }
