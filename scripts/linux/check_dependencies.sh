@@ -8,6 +8,27 @@ if [[ "${1:-}" == "--install" ]]; then
     INSTALL=true
 fi
 
+# Installe un paquet en utilisant le gestionnaire de paquets disponible
+install_package() {
+    local pkg="$1"
+    if command -v apt-get >/dev/null 2>&1; then
+        echo "Tentative d'installation de $pkg via apt-get..."
+        sudo apt-get update -qq && sudo apt-get install -y "$pkg"
+    elif command -v yum >/dev/null 2>&1; then
+        echo "Tentative d'installation de $pkg via yum..."
+        sudo yum install -y "$pkg"
+    elif command -v dnf >/dev/null 2>&1; then
+        echo "Tentative d'installation de $pkg via dnf..."
+        sudo dnf install -y "$pkg"
+    elif command -v pacman >/dev/null 2>&1; then
+        echo "Tentative d'installation de $pkg via pacman..."
+        sudo pacman -Sy --noconfirm "$pkg"
+    else
+        echo "Veuillez installer $pkg manuellement." >&2
+        return 1
+    fi
+}
+
 # Outils en ligne de commande requis
 CLI_DEPS=(nmap gvm-cli pwsh)
 
@@ -23,14 +44,9 @@ for cmd in "${CLI_DEPS[@]}"; do
         echo "❌ $cmd introuvable" >&2
         missing=1
         if $INSTALL; then
-            if command -v apt-get >/dev/null 2>&1; then
-                echo "Tentative d'installation de $cmd via apt-get..."
-                sudo apt-get update -qq && sudo apt-get install -y "$cmd" || echo "Échec de l'installation de $cmd" >&2
-            else
-                echo "Veuillez installer $cmd manuellement." >&2
-            fi
+            install_package "$cmd" || echo "Échec de l'installation de $cmd" >&2
         else
-            echo "→ Installez avec : sudo apt-get install -y $cmd"
+            echo "→ Installez $cmd avec votre gestionnaire de paquets (apt-get, yum, dnf ou pacman)"
         fi
     fi
 done
@@ -53,7 +69,7 @@ if command -v pwsh >/dev/null 2>&1; then
 else
     echo "❌ pwsh introuvable - impossible de vérifier les modules PowerShell" >&2
     if $INSTALL; then
-        echo "→ Installez PowerShell avec : sudo apt-get install -y powershell" >&2
+        install_package "powershell" || echo "Échec de l'installation de powershell" >&2
     fi
 fi
 
