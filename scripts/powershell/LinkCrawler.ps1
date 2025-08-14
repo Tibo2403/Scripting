@@ -6,7 +6,7 @@
     Each link is requested using Invoke-WebRequest and the results are exported to a CSV file.
     Optionally generates an HTML report and sends notifications when broken links are detected.
 .PARAMETER BaseUrl
-    Root URL to start crawling from.
+    Root URL to start crawling from. This parameter is mandatory.
 .PARAMETER CsvPath
     Path to the CSV output file.
 .PARAMETER MaxDepth
@@ -39,7 +39,8 @@
 
 [CmdletBinding()]
 param (
-    [string]$BaseUrl = "https://exemple.com",
+    [Parameter(Mandatory=$true)]
+    [string]$BaseUrl,
     [string]$CsvPath = "./liens_verifies.csv",
     [int]$MaxDepth = 3,
     [ValidateSet('html','image','document','all')]
