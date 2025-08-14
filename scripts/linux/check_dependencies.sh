@@ -1,19 +1,48 @@
 #!/bin/bash
 # check_dependencies.sh - Vérifie la présence des outils requis pour les scripts du dépôt
-# ⚠️  Utiliser avant d'exécuter les scripts pour s'assurer que toutes les dépendances sont installées
+# Utilisation : check_dependencies.sh [--install] [--help]
+# Sans option, le script signale les dépendances manquantes sans les installer.
+#   --install : installe automatiquement les dépendances manquantes.
+#   --help    : affiche ce message et quitte.
 set -euo pipefail
 
 INSTALL=false
-if [[ "${1:-}" == "--install" ]]; then
-    INSTALL=true
-fi
+APT_UPDATED=false
+
+show_help() {
+    cat <<'EOF'
+Usage: check_dependencies.sh [--install] [--help]
+Vérifie la présence des dépendances requises pour les scripts du dépôt.
+Sans option, le script se contente de signaler les dépendances manquantes.
+  --install : installe automatiquement les dépendances manquantes.
+  --help    : affiche cette aide et quitte.
+EOF
+}
+
+for arg in "$@"; do
+    case "$arg" in
+        --install) INSTALL=true ;;
+        --help|-h)
+            show_help
+            exit 0
+            ;;
+        *)
+            echo "Option inconnue: $arg" >&2
+            exit 1
+            ;;
+    esac
+done
 
 # Installe un paquet en utilisant le gestionnaire de paquets disponible
 install_package() {
     local pkg="$1"
     if command -v apt-get >/dev/null 2>&1; then
         echo "Tentative d'installation de $pkg via apt-get..."
-        sudo apt-get update -qq && sudo apt-get install -y "$pkg"
+        if ! $APT_UPDATED; then
+            sudo apt-get update -qq
+            APT_UPDATED=true
+        fi
+        sudo apt-get install -y "$pkg"
     elif command -v yum >/dev/null 2>&1; then
         echo "Tentative d'installation de $pkg via yum..."
         sudo yum install -y "$pkg"
