@@ -1,39 +1,145 @@
 #!/bin/bash
 # check_dependencies.sh - Vérifie la présence des outils requis pour les scripts du dépôt
-# ⚠️  Utiliser avant d'exécuter les scripts pour s'assurer que toutes les dépendances sont installées
+# Options :
+#   --help        Affiche l'usage et les dépendances
+#   --install     Installe les dépendances manquantes
+#   --dry-run     Simule l'installation sans effectuer de modifications
+#   --prefix DIR  Installe les paquets dans DIR sans droits root
 set -euo pipefail
 
+# Outils en ligne de commande requis
+CLI_DEPS=(nmap gvm-cli pwsh)
+# Modules PowerShell à vérifier
+PS_MODULES=("Hyper-V" "ExchangeOnlineManagement" "MicrosoftTeams" "PnP.PowerShell")
+
 INSTALL=false
-if [[ "${1:-}" == "--install" ]]; then
-    INSTALL=true
-fi
+DRY_RUN=false
+PREFIX=""
+
+usage() {
+    cat <<EOF
+Usage: $0 [--help] [--install] [--dry-run] [--prefix DIR]
+Vérifie la présence des dépendances nécessaires aux scripts.
+
+Options:
+  --help        Affiche cette aide et la liste des dépendances
+  --install     Installe les dépendances manquantes
+  --dry-run     Simule l'installation (aucune modification)
+  --prefix DIR  Installe les paquets dans DIR sans droits root
+
+Dépendances CLI : ${CLI_DEPS[*]}
+Modules PowerShell : ${PS_MODULES[*]}
+EOF
+}
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --install) INSTALL=true ;;
+        --dry-run) DRY_RUN=true ;;
+        --prefix)
+            if [[ -n "${2:-}" ]]; then
+                PREFIX="$2"
+                shift
+            else
+                echo "--prefix nécessite un argument" >&2
+                exit 1
+            fi
+            ;;
+        --help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Option inconnue : $1" >&2
+            usage
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+APT_UPDATED=false
+apt_update() {
+    if ! $APT_UPDATED; then
+        if $DRY_RUN; then
+            echo "(dry-run) apt-get update -qq"
+        else
+            if command -v apt-get >/dev/null 2>&1; then
+                if [[ $EUID -ne 0 ]]; then
+                    sudo apt-get update -qq
+                else
+                    apt-get update -qq
+                fi
+            fi
+        fi
+        APT_UPDATED=true
+    fi
+}
 
 # Installe un paquet en utilisant le gestionnaire de paquets disponible
 install_package() {
     local pkg="$1"
+    if $DRY_RUN; then
+        apt_update
+        echo "(dry-run) installation de $pkg"
+        return 0
+    fi
+
     if command -v apt-get >/dev/null 2>&1; then
-        echo "Tentative d'installation de $pkg via apt-get..."
-        sudo apt-get update -qq && sudo apt-get install -y "$pkg"
+        if [[ -n "$PREFIX" ]]; then
+            apt_update
+            tmpdir=$(mktemp -d)
+            if (cd "$tmpdir" && apt-get download "$pkg" >/dev/null 2>&1); then
+                deb=$(find "$tmpdir" -name "*.deb" | head -n1)
+                if [[ -n "$deb" ]]; then
+                    mkdir -p "$PREFIX"
+                    dpkg -x "$deb" "$PREFIX" >/dev/null 2>&1 && \
+                        echo "✅ $pkg installé dans $PREFIX" || \
+                        echo "❌ Échec de l'installation de $pkg" >&2
+                else
+                    echo "❌ Téléchargement de $pkg échoué" >&2
+                    return 1
+                fi
+            else
+                echo "❌ Impossible de télécharger $pkg" >&2
+                return 1
+            fi
+            rm -rf "$tmpdir"
+        else
+            apt_update
+            if [[ $EUID -ne 0 ]]; then
+                sudo apt-get install -y "$pkg"
+            else
+                apt-get install -y "$pkg"
+            fi
+        fi
     elif command -v yum >/dev/null 2>&1; then
         echo "Tentative d'installation de $pkg via yum..."
-        sudo yum install -y "$pkg"
+        if [[ $EUID -ne 0 ]]; then
+            sudo yum install -y "$pkg"
+        else
+            yum install -y "$pkg"
+        fi
     elif command -v dnf >/dev/null 2>&1; then
         echo "Tentative d'installation de $pkg via dnf..."
-        sudo dnf install -y "$pkg"
+        if [[ $EUID -ne 0 ]]; then
+            sudo dnf install -y "$pkg"
+        else
+            dnf install -y "$pkg"
+        fi
     elif command -v pacman >/dev/null 2>&1; then
         echo "Tentative d'installation de $pkg via pacman..."
-        sudo pacman -Sy --noconfirm "$pkg"
+        if [[ $EUID -ne 0 ]]; then
+            sudo pacman -Sy --noconfirm "$pkg"
+        else
+            pacman -Sy --noconfirm "$pkg"
+        fi
     else
         echo "Veuillez installer $pkg manuellement." >&2
         return 1
     fi
 }
-
-# Outils en ligne de commande requis
-CLI_DEPS=(nmap gvm-cli pwsh)
-
-# Modules PowerShell à vérifier
-PS_MODULES=("Hyper-V" "ExchangeOnlineManagement" "MicrosoftTeams" "PnP.PowerShell")
 
 missing=0
 
@@ -59,8 +165,13 @@ if command -v pwsh >/dev/null 2>&1; then
             echo "❌ Module PowerShell $mod manquant" >&2
             missing=1
             if $INSTALL; then
-                echo "Tentative d'installation du module $mod..."
-                pwsh -NoProfile -Command "Install-Module -Name '$mod' -Scope CurrentUser -Force" || echo "Échec de l'installation de $mod" >&2
+                if $DRY_RUN; then
+                    echo "(dry-run) installation du module $mod"
+                else
+                    echo "Tentative d'installation du module $mod..."
+                    pwsh -NoProfile -Command "Install-Module -Name '$mod' -Scope CurrentUser -Force" || \
+                        echo "Échec de l'installation de $mod" >&2
+                fi
             else
                 echo "→ Installez avec : pwsh -NoProfile -Command \"Install-Module -Name '$mod'\""
             fi
@@ -78,3 +189,8 @@ if [[ $missing -eq 0 ]]; then
 else
     echo "Certaines dépendances sont manquantes. Veuillez les installer." >&2
 fi
+
+if [[ -n "$PREFIX" ]]; then
+    echo "ℹ️  Pensez à ajouter $PREFIX/usr/bin à votre PATH pour utiliser les outils installés."
+fi
+
