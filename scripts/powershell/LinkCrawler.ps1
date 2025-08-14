@@ -39,7 +39,7 @@
     Parallel execution requires PowerShell 7 or the ThreadJob module; otherwise URLs are tested sequentially.
 #>
 
-[CmdletBinding()]
+[CmdletBinding(SupportsShouldProcess=$true)]
 param (
     [Parameter(Mandatory=$true)]
     [string]$BaseUrl,
@@ -50,7 +50,8 @@ param (
     [string]$HtmlReportPath,
     [string]$NotifyEmail,
     [string]$SmtpServer,
-    [int]$SmtpPort = 25,
+    [ValidatePattern('^\d{2,5}$')]
+    [string]$SmtpPort = '25',
     [pscredential]$Credential,
     [switch]$UseSsl,
     [switch]$ToastNotify,
@@ -283,6 +284,7 @@ $($rows -join "`n")
 }
 
 function Send-Notifications {
+    [CmdletBinding(SupportsShouldProcess=$true)]
     param([object[]]$errors)
     if (-not $errors) { return }
     if ($NotifyEmail -and $SmtpServer) {
@@ -292,7 +294,9 @@ function Send-Notifications {
             $smtp = [System.Net.Mail.SmtpClient]::new($SmtpServer, $SmtpPort)
             if ($UseSsl) { $smtp.EnableSsl = $true }
             if ($Credential) { $smtp.Credentials = $Credential.GetNetworkCredential() }
-            $smtp.Send($mail)
+            if ($PSCmdlet.ShouldProcess("send notification email to $NotifyEmail", "Send email")) {
+                $smtp.Send($mail)
+            }
         } catch {
             Write-Warning "Failed to send email notification: $_"
         } finally {
