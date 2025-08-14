@@ -71,6 +71,11 @@ if [[ "$OFFLINE" = false ]]; then
     # Le fichier install.sh.sha256 fourni par Ollama contient la somme attendue.
     curl -fsSL https://ollama.ai/install.sh -o install.sh
     curl -fsSL https://ollama.ai/install.sh.sha256 -o install.sh.sha256
+    # Vérifie la disponibilité de sha256sum avant la vérification d'intégrité
+    if ! command -v sha256sum >/dev/null 2>&1; then
+        echo "❌ sha256sum n'est pas disponible" >&2
+        exit 1
+    fi
     if sha256sum -c install.sh.sha256; then
         bash install.sh
         rm -f install.sh install.sh.sha256
