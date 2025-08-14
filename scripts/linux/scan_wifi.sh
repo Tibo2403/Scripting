@@ -9,7 +9,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 # Vérification des outils requis
-for cmd in airmon-ng airodump-ng aireplay-ng; do
+for cmd in airmon-ng airodump-ng aireplay-ng aircrack-ng; do
     if ! command -v "$cmd" &>/dev/null; then
         echo "❌ Outil manquant : $cmd" >&2
         exit 1
@@ -24,23 +24,27 @@ CAPTURE_TIME=20
 DEAUTH_COUNT=5
 BSSID=""
 ESSID=""
+NON_INTERACTIVE=false
 
 usage() {
     cat <<EOF >&2
-Usage: $0 [-i interface] [-c channel] [-o output_dir] [-t seconds] [-d count] [-b bssid] [-e essid]
-  -i interface : interface WiFi à utiliser (par défaut: $INTERFACE)
-  -c channel   : canal WiFi (par défaut: $CHANNEL)
-  -o dir       : dossier de sortie pour la capture (par défaut: $OUTPUT_DIR)
-  -t seconds   : durée de capture (par défaut: $CAPTURE_TIME)
-  -d count     : nombre de paquets de désauth (par défaut: $DEAUTH_COUNT)
-  -b bssid     : BSSID cible (sinon demandé)
-  -e essid     : ESSID du réseau (sinon demandé)
+Usage: $0 [options]
+  -i interface        : interface WiFi à utiliser (par défaut: $INTERFACE)
+  -c channel          : canal WiFi (par défaut: $CHANNEL)
+  -o dir              : dossier de sortie pour la capture (par défaut: $OUTPUT_DIR)
+  -t seconds          : durée de capture (par défaut: $CAPTURE_TIME)
+  -d count            : nombre de paquets de désauth (par défaut: $DEAUTH_COUNT)
+  -b bssid            : BSSID cible (sinon demandé)
+  -e essid            : ESSID du réseau (sinon demandé)
+  --bssid <bssid>     : BSSID cible
+  --essid <essid>     : ESSID du réseau
+  --non-interactive   : n'interagit pas; nécessite --bssid et --essid
 EOF
     exit 1
 }
 
 # Analyse des options
-while getopts "i:c:o:t:d:b:e:h" opt; do
+while getopts "i:c:o:t:d:b:e:-:h" opt; do
     case $opt in
         i) INTERFACE="$OPTARG" ;;
         c) CHANNEL="$OPTARG" ;;
@@ -49,9 +53,35 @@ while getopts "i:c:o:t:d:b:e:h" opt; do
         d) DEAUTH_COUNT="$OPTARG" ;;
         b) BSSID="$OPTARG" ;;
         e) ESSID="$OPTARG" ;;
+        -)
+            case "$OPTARG" in
+                bssid)
+                    BSSID="${!OPTIND}"
+                    OPTIND=$((OPTIND + 1))
+                    ;;
+                essid)
+                    ESSID="${!OPTIND}"
+                    OPTIND=$((OPTIND + 1))
+                    ;;
+                non-interactive)
+                    NON_INTERACTIVE=true
+                    ;;
+                *)
+                    usage
+                    ;;
+            esac
+            ;;
         h|*) usage ;;
     esac
 done
+shift $((OPTIND - 1))
+
+if [[ "$NON_INTERACTIVE" == true ]]; then
+    if [[ -z "$BSSID" || -z "$ESSID" ]]; then
+        echo "❌ --bssid et --essid sont requis en mode non interactif" >&2
+        exit 1
+    fi
+fi
 
 MONITOR_IF="${INTERFACE}mon"
 
@@ -98,6 +128,12 @@ kill "$AIRDUMP_PID" 2>/dev/null || true
 HANDSHAKE_FILE="$OUTPUT_DIR/${CAP_BASENAME}-01.cap"
 if [[ -f "$HANDSHAKE_FILE" ]]; then
     echo "✅ Handshake capturé : $HANDSHAKE_FILE"
+    echo "[*] Validation du handshake..."
+    if aircrack-ng -w /dev/null "$HANDSHAKE_FILE" >/dev/null; then
+        echo "✅ Handshake valide"
+    else
+        echo "❌ Handshake invalide" >&2
+    fi
 else
     echo "❌ Handshake non trouvé" >&2
 fi
