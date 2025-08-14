@@ -56,6 +56,8 @@ done
 MONITOR_IF="${INTERFACE}mon"
 
 mkdir -p "$OUTPUT_DIR"
+LOG_FILE="$OUTPUT_DIR/scan_wifi.log"
+exec > >(tee -a "$LOG_FILE") 2>&1
 
 echo "[*] Activation du mode monitor sur $INTERFACE..."
 airmon-ng start "$INTERFACE" >/dev/null
@@ -99,4 +101,6 @@ if [[ -f "$HANDSHAKE_FILE" ]]; then
 else
     echo "❌ Handshake non trouvé" >&2
 fi
+
+echo "📄 Journal enregistré dans $LOG_FILE"
 
