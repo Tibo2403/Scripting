@@ -71,7 +71,7 @@ if ($CsvPath) {
         $report | Export-Csv -Path $CsvPath -NoTypeInformation
     }
     catch {
-        Write-Error "Failed to export report to CSV at $CsvPath: $_"
+        Write-Error "Failed to export report to CSV at ${CsvPath}: $_"
         exit 1
     }
 }

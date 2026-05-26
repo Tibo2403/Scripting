@@ -8,12 +8,23 @@ jobs:
   lint-scripts:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Install dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y shellcheck
         pwsh -Command Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
+    - name: Parse PowerShell scripts
+      shell: pwsh
+      run: |
+        Get-ChildItem -Path './scripts/powershell' -Recurse -Include *.ps1,*.psm1,*.psd1 | ForEach-Object {
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error "$($_.Extent.File):$($_.Extent.StartLineNumber): $($_.Message)" }
+          }
+        }
     - name: Run shellcheck
       run: shellcheck scripts/linux/*.sh
     - name: Run PSScriptAnalyzer
@@ -24,7 +35,7 @@ jobs:
     runs-on: windows-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     - name: Run DiskUsageReport
       shell: pwsh
       run: ./scripts/powershell/DiskUsageReport.ps1
