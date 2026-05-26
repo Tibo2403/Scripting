@@ -62,7 +62,7 @@ jobs:
           CTX_JSON=$(jq -Rs . < "$TMPCTX")
           DATE_UTC=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-          read -r -d '' SYSTEM_MSG <<'EOF'
+          SYSTEM_MSG=$(cat <<'EOF'
 Tu es un ingénieur logiciel senior.
 Analyse un échantillon de fichiers du dépôt et propose de petites améliorations sûres :
 - simplifications, micro-optimisations lisibles, corrections stylistiques,
@@ -72,6 +72,7 @@ NE CHANGE PAS l'API publique ni la logique métier sans nécessité claire.
 Réponds UNIQUEMENT avec un patch au format diff unifié (git), chemins relatifs racine.
 Aucun texte avant/après le diff.
 EOF
+)
 
           USER_MSG=$(cat <<EOF
 Date: ${DATE_UTC} (UTC)
