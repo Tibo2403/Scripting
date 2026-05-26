@@ -63,30 +63,30 @@ jobs:
           DATE_UTC=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
           SYSTEM_MSG=$(cat <<'EOF'
-Tu es un ingénieur logiciel senior.
-Analyse un échantillon de fichiers du dépôt et propose de petites améliorations sûres :
-- simplifications, micro-optimisations lisibles, corrections stylistiques,
-- suppression de code mort, meilleure gestion d'erreurs,
-- docstrings/commentaires concis.
-NE CHANGE PAS l'API publique ni la logique métier sans nécessité claire.
-Réponds UNIQUEMENT avec un patch au format diff unifié (git), chemins relatifs racine.
-Aucun texte avant/après le diff.
-EOF
-)
+          Tu es un ingénieur logiciel senior.
+          Analyse un échantillon de fichiers du dépôt et propose de petites améliorations sûres :
+          - simplifications, micro-optimisations lisibles, corrections stylistiques,
+          - suppression de code mort, meilleure gestion d'erreurs,
+          - docstrings/commentaires concis.
+          NE CHANGE PAS l'API publique ni la logique métier sans nécessité claire.
+          Réponds UNIQUEMENT avec un patch au format diff unifié (git), chemins relatifs racine.
+          Aucun texte avant/après le diff.
+          EOF
+          )
 
           USER_MSG=$(cat <<EOF
-Date: ${DATE_UTC} (UTC)
+          Date: ${DATE_UTC} (UTC)
 
-Répertoire (échantillon de fichiers):
-$(jq -r <<<"$CTX_JSON")
+          Répertoire (échantillon de fichiers):
+          $(jq -r <<<"$CTX_JSON")
 
-Exigences:
-- Patch minimal, sûr, auto-contenu.
-- Format: diff unifié valide (---/+++ depuis la racine), prêt pour \`git apply\`.
-- Limite à quelques fichiers si nécessaire.
-- Si aucune amélioration sûre n'est trouvée, renvoie un diff vide (aucune sortie).
-EOF
-)
+          Exigences:
+          - Patch minimal, sûr, auto-contenu.
+          - Format: diff unifié valide (---/+++ depuis la racine), prêt pour \`git apply\`.
+          - Limite à quelques fichiers si nécessaire.
+          - Si aucune amélioration sûre n'est trouvée, renvoie un diff vide (aucune sortie).
+          EOF
+          )
 
           BODY=$(jq -n --arg sys "$SYSTEM_MSG" --arg usr "$USER_MSG" --arg model "$OPENAI_MODEL" '
             {

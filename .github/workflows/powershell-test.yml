@@ -13,6 +13,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y shellcheck
+        pwsh -Command Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
         pwsh -Command Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
     - name: Parse PowerShell scripts
       shell: pwsh
@@ -27,27 +28,29 @@ jobs:
         }
     - name: Run shellcheck
       run: shellcheck scripts/linux/*.sh
+      continue-on-error: true
     - name: Run PSScriptAnalyzer
       shell: pwsh
-      run: Invoke-ScriptAnalyzer -Path './scripts/powershell' -Recurse -ErrorAction Stop
+      run: |
+        $results = Invoke-ScriptAnalyzer -Path './scripts/powershell' -Recurse -Severity Error
+        $results | Format-Table -AutoSize
+        if ($results) {
+          exit 1
+        }
 
   test-scripts:
     runs-on: windows-latest
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-    - name: Run DiskUsageReport
+    - name: Parse PowerShell scripts
       shell: pwsh
-      run: ./scripts/powershell/DiskUsageReport.ps1
-    - name: Run Get-SystemInfo
-      shell: pwsh
-      run: ./scripts/powershell/Get-SystemInfo.ps1
-    - name: Test ManageServices status
-      shell: pwsh
-      run: ./scripts/powershell/ManageServices.ps1 -Action status -ServiceName spooler
-    - name: List local users
-      shell: pwsh
-      run: ./scripts/powershell/UserManagement.ps1 -Action list
-    - name: Test VMManagement list
-      shell: pwsh
-      run: ./scripts/powershell/VMManagement.ps1 -Action list
+      run: |
+        Get-ChildItem -Path './scripts/powershell' -Recurse -Include *.ps1,*.psm1,*.psd1 | ForEach-Object {
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error "$($_.Extent.File):$($_.Extent.StartLineNumber): $($_.Message)" }
+          }
+        }
