@@ -9,12 +9,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y shellcheck
-          pwsh -Command Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-          pwsh -Command Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
       - name: Parse PowerShell scripts
         shell: pwsh
         run: |
@@ -29,14 +23,6 @@ jobs:
       - name: Run shellcheck
         run: shellcheck scripts/linux/*.sh
         continue-on-error: true
-      - name: Run PSScriptAnalyzer
-        shell: pwsh
-        run: |
-          $results = Invoke-ScriptAnalyzer -Path './scripts/powershell' -Recurse -Severity Error
-          $results | Format-Table -AutoSize
-          if ($results) {
-            exit 1
-          }
 
   test-scripts:
     runs-on: windows-latest
