@@ -14,27 +14,27 @@ The scripts in `scripts/linux/pentest_*.sh`, `scan_wifi.sh`, and `stealth_post.s
 
 ```text
 scripts/
-├── linux/
-│   ├── check_dependencies.sh
-│   ├── dependencies.conf
-│   ├── pentest_discovery.sh
-│   ├── pentest_verification.sh
-│   ├── pentest_exploitation.sh
-│   ├── scan_wifi.sh
-│   ├── setup_api.sh
-│   └── stealth_post.sh
-└── powershell/
-    ├── DiskUsageReport.ps1
-    ├── ExchangeOnlineManagement.ps1
-    ├── Get-SystemInfo.ps1
-    ├── LinkCrawler.ps1
-    ├── ManageServices.ps1
-    ├── SecurityCheck.ps1
-    ├── SharePointManagement.ps1
-    ├── TeamsManagement.ps1
-    ├── Test-ScriptSyntax.ps1
-    ├── UserManagement.ps1
-    └── VMManagement.ps1
+|-- linux/
+|   |-- check_dependencies.sh
+|   |-- dependencies.conf
+|   |-- pentest_discovery.sh
+|   |-- pentest_verification.sh
+|   |-- pentest_exploitation.sh
+|   |-- scan_wifi.sh
+|   |-- setup_api.sh
+|   `-- stealth_post.sh
+`-- powershell/
+    |-- DiskUsageReport.ps1
+    |-- ExchangeOnlineManagement.ps1
+    |-- Get-SystemInfo.ps1
+    |-- LinkCrawler.ps1
+    |-- ManageServices.ps1
+    |-- SecurityCheck.ps1
+    |-- SharePointManagement.ps1
+    |-- TeamsManagement.ps1
+    |-- Test-ScriptSyntax.ps1
+    |-- UserManagement.ps1
+    `-- VMManagement.ps1
 ```
 
 `targets.txt` contains example targets used by the pentest scripts. Keep it limited to systems that you are allowed to test.
@@ -55,10 +55,23 @@ Validate PowerShell syntax:
 .\scripts\powershell\Test-ScriptSyntax.ps1 -Path .\scripts\powershell
 ```
 
+Run PowerShell static analysis:
+
+```powershell
+Install-Module -Name PSScriptAnalyzer -Scope CurrentUser
+Invoke-ScriptAnalyzer -Path .\scripts\powershell -Recurse -Severity Error
+```
+
 Validate Bash syntax from Linux, WSL, Git Bash, or CI:
 
 ```bash
 find scripts/linux -name "*.sh" -print0 | xargs -0 -n1 bash -n
+```
+
+Run Bash static analysis:
+
+```bash
+find scripts/linux -name "*.sh" -print0 | xargs -0 shellcheck --severity=error
 ```
 
 Check Linux dependencies:
@@ -105,7 +118,9 @@ bash scripts/linux/stealth_post.sh
 The `script-validation.yml` workflow checks:
 
 - PowerShell syntax for every `.ps1`, `.psm1`, and `.psd1` file.
+- PSScriptAnalyzer error-level findings.
 - Bash syntax for every Linux shell script.
+- ShellCheck error-level findings.
 
 The AI refactor workflow is manual-only to avoid surprise API usage and automatic hourly write attempts.
 
