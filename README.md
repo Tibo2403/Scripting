@@ -39,6 +39,8 @@ scripts/
 
 `targets.txt` contains example targets used by the pentest scripts. Keep it limited to systems that you are allowed to test.
 
+See `docs/compatibility-matrix.md` for OS support, privilege requirements, dependencies, risk level, and dry-run availability per script.
+
 ## Prerequisites
 
 - PowerShell 5.1+ or PowerShell 7+ for Windows scripts.
@@ -59,7 +61,7 @@ Run PowerShell static analysis:
 
 ```powershell
 Install-Module -Name PSScriptAnalyzer -Scope CurrentUser
-Invoke-ScriptAnalyzer -Path .\scripts\powershell -Recurse -Severity Error
+Invoke-ScriptAnalyzer -Path .\scripts\powershell -Recurse -Settings .\PSScriptAnalyzerSettings.psd1
 ```
 
 Validate Bash syntax from Linux, WSL, Git Bash, or CI:
@@ -78,6 +80,12 @@ Check Linux dependencies:
 
 ```bash
 bash scripts/linux/check_dependencies.sh
+```
+
+Run the Linux safety smoke tests:
+
+```bash
+bash scripts/tests/test-linux-safety.sh
 ```
 
 ## PowerShell Examples
@@ -115,14 +123,17 @@ bash scripts/linux/stealth_post.sh --dry-run --yes-i-am-authorized
 
 Sensitive Linux scripts require either an interactive `AUTHORIZED` confirmation or the explicit `--yes-i-am-authorized` flag. Use `--dry-run` first to review planned scans, captures, or transfers.
 
+Use the safe placeholders in `examples/` for lab demos and documentation. Do not commit real targets, credentials, tenant identifiers, scan output, packet captures, or customer data.
+
 ## CI
 
 The `script-validation.yml` workflow checks:
 
 - PowerShell syntax for every `.ps1`, `.psm1`, and `.psd1` file.
-- PSScriptAnalyzer error-level findings as review output.
+- PSScriptAnalyzer error-level findings using `PSScriptAnalyzerSettings.psd1`.
 - Bash syntax for every Linux shell script.
 - ShellCheck error-level findings.
+- Linux `--help` and `--dry-run` safety smoke tests.
 
 The AI refactor workflow is manual-only to avoid surprise API usage and automatic hourly write attempts.
 

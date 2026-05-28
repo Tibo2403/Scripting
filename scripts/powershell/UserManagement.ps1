@@ -30,6 +30,7 @@
     Imports users listed in an Excel or CSV file with 'UserName' and 'Password' columns.
 #>
 
+[CmdletBinding(SupportsShouldProcess = $true)]
 param(
     [ValidateSet('create','delete','list','import')]
     [string]$Action = 'list',
@@ -55,7 +56,9 @@ switch ($Action.ToLower()) {
             Write-Error "User '$UserName' already exists."
             break
         }
-        New-LocalUser -Name $UserName -Password $Password
+        if ($PSCmdlet.ShouldProcess("local user '$UserName'", 'Create')) {
+            New-LocalUser -Name $UserName -Password $Password
+        }
     }
     'delete' {
         if (-not $UserName) {
@@ -66,7 +69,9 @@ switch ($Action.ToLower()) {
             Write-Error "User '$UserName' does not exist."
             break
         }
-        Remove-LocalUser -Name $UserName
+        if ($PSCmdlet.ShouldProcess("local user '$UserName'", 'Delete')) {
+            Remove-LocalUser -Name $UserName
+        }
     }
     'list' {
         Get-LocalUser
@@ -104,7 +109,9 @@ switch ($Action.ToLower()) {
                 continue
             }
             $secPwd = ConvertTo-SecureString $pwdText -AsPlainText -Force
-            New-LocalUser -Name $name -Password $secPwd
+            if ($PSCmdlet.ShouldProcess("local user '$name'", 'Import')) {
+                New-LocalUser -Name $name -Password $secPwd
+            }
         }
     }
 }

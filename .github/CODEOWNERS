@@ -1,0 +1,8 @@
+# Repository-wide ownership.
+* @Tibo2403
+
+# High-risk automation and security scripts deserve explicit review.
+/scripts/linux/pentest_*.sh @Tibo2403
+/scripts/linux/scan_wifi.sh @Tibo2403
+/scripts/linux/stealth_post.sh @Tibo2403
+/.github/workflows/ @Tibo2403

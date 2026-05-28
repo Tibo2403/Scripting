@@ -1,0 +1,4 @@
+# Lab targets only. Replace with systems explicitly approved for testing.
+192.168.56.10
+192.168.56.11
+test-lab.example.local

@@ -12,6 +12,7 @@ DRY_RUN=false
 ASSUME_AUTHORIZED="${SCRIPTING_ASSUME_AUTHORIZED:-false}"
 
 usage() {
+    local exit_code="${1:-1}"
     cat <<'EOF' >&2
 Usage: stealth_post.sh [options]
   --dry-run                Validate configuration and print planned transfer
@@ -21,7 +22,7 @@ Usage: stealth_post.sh [options]
 Required environment variables or ~/.stealth_post.conf values:
   FTP_USER, FTP_PASS, FTP_HOST, FTP_PATH, GPG_PASSPHRASE
 EOF
-    exit 1
+    exit "$exit_code"
 }
 
 require_authorization() {
@@ -52,7 +53,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --help|-h)
-            usage
+            usage 0
             ;;
         *)
             usage

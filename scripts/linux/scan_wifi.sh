@@ -14,6 +14,7 @@ DRY_RUN=false
 ASSUME_AUTHORIZED="${SCRIPTING_ASSUME_AUTHORIZED:-false}"
 
 usage() {
+    local exit_code="${1:-1}"
     cat <<EOF >&2
 Usage: $0 [options]
   -i interface             Wi-Fi interface (default: $INTERFACE)
@@ -30,7 +31,7 @@ Usage: $0 [options]
   --yes-i-am-authorized    Confirm explicit authorization
   --help                   Show this help
 EOF
-    exit 1
+    exit "$exit_code"
 }
 
 require_authorization() {
@@ -79,7 +80,7 @@ while getopts "i:c:o:t:d:b:e:-:h" opt; do
                     ASSUME_AUTHORIZED=true
                     ;;
                 help)
-                    usage
+                    usage 0
                     ;;
                 *)
                     usage

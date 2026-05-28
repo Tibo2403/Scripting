@@ -29,10 +29,10 @@ jobs:
       - name: Run PSScriptAnalyzer
         shell: pwsh
         run: |
-          $results = Invoke-ScriptAnalyzer -Path ./scripts/powershell -Recurse -Severity Error
+          $results = Invoke-ScriptAnalyzer -Path ./scripts/powershell -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
           $results | Format-Table -AutoSize
           if ($results) {
-            Write-Warning "PSScriptAnalyzer found error-level findings. Review the table above before changing these scripts."
+            exit 1
           }
 
   bash:
@@ -46,7 +46,7 @@ jobs:
       - name: Validate shell syntax
         run: |
           set -euo pipefail
-          find scripts/linux -name "*.sh" -print0 | xargs -0 -n1 bash -n
+          find scripts -name "*.sh" -print0 | xargs -0 -n1 bash -n
 
       - name: Install ShellCheck
         run: |
@@ -56,4 +56,7 @@ jobs:
       - name: Run ShellCheck
         run: |
           set -euo pipefail
-          find scripts/linux -name "*.sh" -print0 | xargs -0 shellcheck --severity=error
+          find scripts -name "*.sh" -print0 | xargs -0 shellcheck --severity=error
+
+      - name: Run Linux safety tests
+        run: bash scripts/tests/test-linux-safety.sh

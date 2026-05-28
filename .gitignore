@@ -11,3 +11,7 @@ logs/
 # Ignore data files
 *.csv
 *.json
+
+# Keep sanitized examples tracked.
+!examples/*.csv
+!examples/*.json

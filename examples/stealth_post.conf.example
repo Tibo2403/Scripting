@@ -1,0 +1,7 @@
+# Copy to ~/.stealth_post.conf and fill with assessment-approved values.
+# Do not commit the real file.
+FTP_USER="assessment_user"
+FTP_PASS="replace_me"
+FTP_HOST="files.example.com"
+FTP_PATH="uploads/host-metadata.gpg"
+GPG_PASSPHRASE="replace_me"
