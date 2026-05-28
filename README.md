@@ -41,6 +41,13 @@ scripts/
 
 See `docs/compatibility-matrix.md` for OS support, privilege requirements, dependencies, risk level, and dry-run availability per script.
 
+Portfolio and maintenance docs:
+
+- `docs/portfolio.md` explains the repository in recruiter/client terms.
+- `docs/demo-media.md` lists screenshots and GIFs to capture.
+- `docs/issue-backlog.md` contains ready-to-create GitHub issues.
+- `CHANGELOG.md` tracks release notes.
+
 ## Prerequisites
 
 - PowerShell 5.1+ or PowerShell 7+ for Windows scripts.
