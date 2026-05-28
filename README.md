@@ -97,9 +97,9 @@ bash scripts/linux/check_dependencies.sh
 
 ```bash
 bash scripts/linux/check_dependencies.sh
-bash scripts/linux/pentest_discovery.sh
-bash scripts/linux/pentest_verification.sh
-bash scripts/linux/pentest_exploitation.sh
+bash scripts/linux/pentest_discovery.sh --dry-run --yes-i-am-authorized
+bash scripts/linux/pentest_verification.sh --dry-run --yes-i-am-authorized
+bash scripts/linux/pentest_exploitation.sh --dry-run --yes-i-am-authorized
 ```
 
 For `stealth_post.sh`, pass credentials through environment variables or a local config file that is never committed:
@@ -110,8 +110,10 @@ export FTP_PASS="password"
 export FTP_HOST="example.com"
 export FTP_PATH="uploads/sysinfo.txt.gpg"
 export GPG_PASSPHRASE="secret_passphrase"
-bash scripts/linux/stealth_post.sh
+bash scripts/linux/stealth_post.sh --dry-run --yes-i-am-authorized
 ```
+
+Sensitive Linux scripts require either an interactive `AUTHORIZED` confirmation or the explicit `--yes-i-am-authorized` flag. Use `--dry-run` first to review planned scans, captures, or transfers.
 
 ## CI
 

