@@ -1,0 +1,34 @@
+name: Script Validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  powershell:
+    name: PowerShell syntax
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate PowerShell syntax
+        shell: pwsh
+        run: ./scripts/powershell/Test-ScriptSyntax.ps1 -Path ./scripts/powershell
+
+  bash:
+    name: Bash syntax
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate shell syntax
+        run: |
+          set -euo pipefail
+          find scripts/linux -name "*.sh" -print0 | xargs -0 -n1 bash -n

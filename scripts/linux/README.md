@@ -1,14 +1,39 @@
-# Scripts Bash pour Linux
+# Linux Scripts
 
-Ce dossier regroupe les scripts destinés aux systèmes GNU/Linux.
+This directory contains Bash scripts for Linux administration, dependency checks, and authorized security testing.
 
-- `check_dependencies.sh` – vérifie la présence des outils requis et peut tenter de les installer avec l'option `--install` (compatible avec `apt-get`, `yum`, `dnf` et `pacman`). Les listes de dépendances peuvent être adaptées dans `dependencies.conf`.
-- `setup_api.sh` – installe et configure l'API Mistral.
-- `pentest_discovery.sh` – phase de découverte lors d'un pentest.
-- `pentest_verification.sh` – vérification des vulnérabilités détectées.
-- `pentest_exploitation.sh` – exploitation des vulnérabilités.
-- `scan_wifi.sh` – analyse des réseaux Wi-Fi.
-  Le script consigne désormais toutes les actions et erreurs dans `wifi_captures/scan_wifi.log`.
-- `stealth_post.sh` – exfiltration basique des informations.
+## Scripts
 
-Les scripts utilisent `targets.txt` situé à la racine du dépôt pour définir les cibles de test.
+- `check_dependencies.sh` - checks required command line tools and can optionally install missing packages with `--install`.
+- `dependencies.conf` - configurable list of CLI dependencies and PowerShell modules used by `check_dependencies.sh`.
+- `setup_api.sh` - installs and configures a local Mistral API environment.
+- `pentest_discovery.sh` - discovery phase for authorized security assessments.
+- `pentest_verification.sh` - verification phase for discovered findings.
+- `pentest_exploitation.sh` - exploitation phase for explicitly authorized tests.
+- `scan_wifi.sh` - Wi-Fi scan helper with logging in `wifi_captures/scan_wifi.log`.
+- `stealth_post.sh` - encrypted FTPS transfer helper for authorized post-assessment collection.
+
+## Safety Rules
+
+- Run pentest scripts only against assets listed in an approved scope.
+- Keep `targets.txt` limited to systems you own or are authorized to test.
+- Do not commit credentials, passphrases, scan output, packet captures, or customer data.
+- Prefer lab targets when demonstrating the repository publicly.
+
+## Validation
+
+```bash
+find . -name "*.sh" -print0 | xargs -0 -n1 bash -n
+```
+
+Check dependencies:
+
+```bash
+bash check_dependencies.sh
+```
+
+Attempt dependency installation:
+
+```bash
+bash check_dependencies.sh --install
+```

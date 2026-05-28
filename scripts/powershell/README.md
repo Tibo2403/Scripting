@@ -1,15 +1,29 @@
-# Scripts PowerShell pour Windows
+# PowerShell Scripts
 
-Ce dossier regroupe des scripts PowerShell pour l'administration système et la sécurité.
+This directory contains PowerShell scripts for Windows administration, Microsoft 365 operations, security checks, and local automation.
 
-- `DiskUsageReport.ps1` – génère un rapport d'utilisation disque.
-- `Get-SystemInfo.ps1` – affiche des informations système.
-- `ManageServices.ps1` – gère l'état des services.
-- `VMManagement.ps1` – gère des machines virtuelles Hyper-V.
-- `LinkCrawler.ps1` – explore les liens d'un site.
-- `TeamsManagement.ps1` – administre Microsoft Teams.
-- `SharePointManagement.ps1` – automatise des actions sur SharePoint.
-- `UserManagement.ps1` – gestion de comptes utilisateurs.
-- `SecurityCheck.ps1` – vérifie quelques paramètres de sécurité.
+## Scripts
 
-Chaque script possède un bloc d'aide accessible avec `Get-Help`.
+- `DiskUsageReport.ps1` - generates a disk usage report.
+- `ExchangeOnlineManagement.ps1` - manages common Exchange Online operations.
+- `Get-SystemInfo.ps1` - displays local system information.
+- `LinkCrawler.ps1` - crawls links from a website.
+- `ManageServices.ps1` - manages Windows services.
+- `SecurityCheck.ps1` - checks selected security settings.
+- `SharePointManagement.ps1` - automates SharePoint Online or on-premises actions.
+- `TeamsManagement.ps1` - manages Microsoft Teams resources.
+- `Test-ScriptSyntax.ps1` - validates PowerShell script syntax.
+- `UserManagement.ps1` - manages local users.
+- `VMManagement.ps1` - manages Hyper-V virtual machines.
+
+## Validation
+
+```powershell
+.\Test-ScriptSyntax.ps1 -Path .
+```
+
+## Notes
+
+- Use elevated PowerShell sessions for scripts that manage services, local users, or Hyper-V.
+- Review each script's parameter block and help before running it in production.
+- Avoid committing tenant names, user exports, access tokens, or generated reports that contain sensitive data.
