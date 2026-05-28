@@ -14,8 +14,8 @@
     Secure password for the new account when using the create action. If not
     supplied, you will be prompted to enter one.
 .PARAMETER ExcelPath
-    Path to an Excel (xlsx) or CSV file containing 'UserName' and 'Password'
-    columns when using the import action.
+    Path to an Excel (xlsx) or CSV file containing 'UserName' and
+    'EncryptedPassword' columns when using the import action.
 .EXAMPLE
     PS> .\UserManagement.ps1 -Action list
     Lists all local user accounts.
@@ -27,7 +27,9 @@
     Removes the user account named 'alice'.
 .EXAMPLE
     PS> .\UserManagement.ps1 -Action import -ExcelPath users.xlsx
-    Imports users listed in an Excel or CSV file with 'UserName' and 'Password' columns.
+    Imports users listed in an Excel or CSV file with 'UserName' and
+    'EncryptedPassword' columns. Generate values with:
+    Read-Host -AsSecureString | ConvertFrom-SecureString
 #>
 
 [CmdletBinding(SupportsShouldProcess = $true)]
@@ -99,16 +101,16 @@ switch ($Action.ToLower()) {
 
         foreach ($u in $users) {
             $name = $u.UserName
-            $pwdText = $u.Password
-            if (-not $name -or -not $pwdText) {
-                Write-Warning 'Skipping entry missing UserName or Password.'
+            $encryptedPassword = $u.EncryptedPassword
+            if (-not $name -or -not $encryptedPassword) {
+                Write-Warning 'Skipping entry missing UserName or EncryptedPassword.'
                 continue
             }
             if (Get-LocalUser -Name $name -ErrorAction SilentlyContinue) {
                 Write-Warning "User '$name' already exists. Skipping."
                 continue
             }
-            $secPwd = ConvertTo-SecureString $pwdText -AsPlainText -Force
+            $secPwd = ConvertTo-SecureString $encryptedPassword
             if ($PSCmdlet.ShouldProcess("local user '$name'", 'Import')) {
                 New-LocalUser -Name $name -Password $secPwd
             }

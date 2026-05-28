@@ -17,7 +17,7 @@
 | `scripts/powershell/TeamsManagement.ps1` | Windows/Linux PowerShell | Microsoft 365 role | MicrosoftTeams module | Medium | Manual review |
 | `scripts/powershell/ExchangeOnlineManagement.ps1` | Windows/Linux PowerShell | Microsoft 365 role | ExchangeOnlineManagement module | Medium | Manual review |
 | `scripts/powershell/SharePointManagement.ps1` | Windows/Linux PowerShell | SharePoint admin | SharePoint modules | Medium | Manual review |
-| `scripts/powershell/UserManagement.ps1` | Windows | admin | LocalAccounts, optional ImportExcel | High | `-WhatIf` |
+| `scripts/powershell/UserManagement.ps1` | Windows | admin | LocalAccounts, optional ImportExcel, encrypted import passwords | High | `-WhatIf` |
 | `scripts/powershell/SecurityCheck.ps1` | Windows | user/admin depending check | built-in PowerShell | Low | Not needed |
 
 High-risk scripts require explicit authorization before use. Prefer `--dry-run` or `-WhatIf` where available, and keep generated outputs out of commits.
