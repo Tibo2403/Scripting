@@ -118,7 +118,7 @@ bash scripts/linux/stealth_post.sh
 The `script-validation.yml` workflow checks:
 
 - PowerShell syntax for every `.ps1`, `.psm1`, and `.psd1` file.
-- PSScriptAnalyzer error-level findings.
+- PSScriptAnalyzer error-level findings as review output.
 - Bash syntax for every Linux shell script.
 - ShellCheck error-level findings.
 
