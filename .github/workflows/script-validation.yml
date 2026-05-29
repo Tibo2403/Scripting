@@ -7,10 +7,18 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: script-validation-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   powershell:
     name: PowerShell validation
     runs-on: windows-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -38,6 +46,7 @@ jobs:
   bash:
     name: Bash validation
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout

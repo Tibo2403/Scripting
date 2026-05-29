@@ -3,9 +3,14 @@ name: AI Refactor (manual)
 on:
   workflow_dispatch:
 
+concurrency:
+  group: ai-refactor-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   ai-refactor:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
       pull-requests: write
