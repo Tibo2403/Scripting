@@ -15,11 +15,8 @@ from pathlib import Path
 from typing import Any
 
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-PLUGIN_TEMPLATE = SCRIPT_DIR / "plugins" / "litellm_cost_router.toml"
 CODEX_HOME = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
 CODEX_CONFIG = CODEX_HOME / "config.toml"
-CODEX_PLUGIN = CODEX_HOME / "plugins" / "litellm_cost_router.toml"
 LOG_DIR = CODEX_HOME / "logs"
 LOG_FILE = LOG_DIR / "cost_router.jsonl"
 STATE_FILE = LOG_DIR / "cost_router_state.json"
@@ -98,7 +95,6 @@ def utc_now() -> str:
 def ensure_directories() -> None:
     """Create Codex directories used by this optional tool."""
     CODEX_HOME.mkdir(parents=True, exist_ok=True)
-    CODEX_PLUGIN.parent.mkdir(parents=True, exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -268,10 +264,6 @@ def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
 def enable_router() -> int:
     """Install the optional profile while preserving all existing Codex settings."""
     ensure_directories()
-    if not PLUGIN_TEMPLATE.exists():
-        raise FileNotFoundError(f"Missing plugin template: {PLUGIN_TEMPLATE}")
-    shutil.copyfile(PLUGIN_TEMPLATE, CODEX_PLUGIN)
-
     config = read_text(CODEX_CONFIG)
     if BEGIN_MARKER not in config and CODEX_CONFIG.exists():
         shutil.copyfile(CODEX_CONFIG, CONFIG_BACKUP)
@@ -296,17 +288,15 @@ def disable_router() -> int:
         CONFIG_BACKUP.unlink()
     else:
         write_text(CODEX_CONFIG, remove_profile_block(read_text(CODEX_CONFIG)))
-    if CODEX_PLUGIN.exists():
-        CODEX_PLUGIN.unlink()
     save_state(enabled=False, disabled_at=utc_now())
     print("Cost routing disabled. Existing Codex configuration was preserved.")
     return 0
 
 
 def router_enabled() -> bool:
-    """Check that both managed config markers and plugin fragment exist."""
+    """Check that both managed profile markers exist."""
     config = read_text(CODEX_CONFIG)
-    return BEGIN_MARKER in config and END_MARKER in config and CODEX_PLUGIN.exists()
+    return BEGIN_MARKER in config and END_MARKER in config
 
 
 def print_status() -> int:
@@ -316,7 +306,7 @@ def print_status() -> int:
     latest = history[-1] if history else {}
     print("Codex Cost Router")
     print("-----------------")
-    print(f"Plugin active      : {'yes' if router_enabled() else 'no'}")
+    print(f"Profile active     : {'yes' if router_enabled() else 'no'}")
     print(f"Current model      : {latest.get('model', state.get('current_model', 'codex-auto'))}")
     print(f"Last estimated cost: ${latest.get('estimated_cost_usd', 0):.8f}")
     print(f"Last routing       : {latest.get('routing_reason', 'none')}")

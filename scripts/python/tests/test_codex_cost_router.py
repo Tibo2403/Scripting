@@ -61,7 +61,6 @@ class CodexCostRouterTests(unittest.TestCase):
             with (
                 patch.object(ROUTER, "CODEX_HOME", home),
                 patch.object(ROUTER, "CODEX_CONFIG", config),
-                patch.object(ROUTER, "CODEX_PLUGIN", home / "plugins" / "litellm_cost_router.toml"),
                 patch.object(ROUTER, "LOG_DIR", home / "logs"),
                 patch.object(ROUTER, "LOG_FILE", home / "logs" / "cost_router.jsonl"),
                 patch.object(ROUTER, "STATE_FILE", home / "logs" / "cost_router_state.json"),

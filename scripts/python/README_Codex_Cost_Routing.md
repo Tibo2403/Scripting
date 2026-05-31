@@ -39,13 +39,7 @@ for this command only. The script:
 
 There is no key to copy and no second terminal is required.
 
-To start only the proxy without opening Codex:
-
-```powershell
-.\scripts\python\codex-cost-routing.cmd Start
-```
-
-Stop a proxy started separately:
+Stop and restore the Codex configuration after an interrupted session:
 
 ```powershell
 .\scripts\python\codex-cost-routing.cmd Stop
@@ -97,11 +91,10 @@ Prompts and API keys are not logged.
 
 ## Files
 
-- `Manage-CodexCostRouting.ps1`: install, run, start, status, and stop workflow.
+- `Manage-CodexCostRouting.ps1`: automatic run, status, and stop workflow.
 - `codex-cost-routing.cmd`: simple Windows launcher.
 - `codex_cost_router.py`: prompt optimization and one-shot routing.
 - `litellm-cost-routing.yaml`: local LiteLLM OSS model aliases and fallbacks.
-- `plugins/litellm_cost_router.toml`: optional Codex profile fragment.
 
 ## Notes
 

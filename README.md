@@ -41,8 +41,6 @@ scripts/
     |-- litellm-cost-routing.yaml
     |-- Manage-CodexCostRouting.ps1
     |-- mcp_server.py
-    |-- plugins/
-    |   `-- litellm_cost_router.toml
     |-- README.md
     |-- README_Codex_Cost_Routing.md
     `-- requirements.txt
