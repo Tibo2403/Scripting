@@ -36,8 +36,10 @@ scripts/
     |-- UserManagement.ps1
     `-- VMManagement.ps1
 `-- python/
+    |-- codex-cost-routing.cmd
     |-- codex_cost_router.py
     |-- litellm-cost-routing.yaml
+    |-- Manage-CodexCostRouting.ps1
     |-- mcp_server.py
     |-- plugins/
     |   `-- litellm_cost_router.toml

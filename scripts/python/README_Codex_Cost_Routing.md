@@ -1,132 +1,74 @@
 # Codex Cost Router
 
-`codex_cost_router.py` is an optional Windows-friendly wrapper for Codex CLI and
-a local, self-hosted LiteLLM OSS proxy. It never stores API keys and does not use
-LiteLLM Enterprise or LiteLLM Cloud features.
+Optional cost routing for Codex CLI on Windows using the official open-source
+[`BerriAI/litellm`](https://github.com/BerriAI/litellm) proxy.
 
-## Architecture
-
-```text
-Optimized one-shot mode:
-User -> codex_cost_router.py -> Codex CLI -> LiteLLM OSS -> provider model
-
-Direct profile mode:
-User -> Codex CLI --profile cost-routing -> LiteLLM OSS -> codex-auto
-```
-
-The Python wrapper is required when you want prompt cleanup and dynamic
-`codex-cheap`, `codex-auto`, or `codex-strong` selection. A Codex profile alone
-selects the proxy but cannot rewrite every interactive message.
-
-## Requirements
-
-- Python 3.10+
-- Codex CLI
-- LiteLLM OSS installed locally:
-
-```powershell
-uv tool install "litellm[proxy]"
-```
-
-The official OSS source is [`BerriAI/litellm`](https://github.com/BerriAI/litellm).
-The command above follows its AI Gateway installation guidance.
-
-If `uv` is unavailable, or Windows reports a path-length error, install the
-proxy into a short virtual-environment path:
-
-```powershell
-python -m venv C:\tmp\litellm-oss
-C:\tmp\litellm-oss\Scripts\python.exe -m pip install "litellm[proxy]"
-```
-
-Set keys only in your PowerShell environment:
-
-```powershell
-$env:OPENAI_API_KEY = "..."
-$env:LITELLM_API_KEY = "local-proxy-key"
-```
-
-Do not write keys into committed files.
-
-## Configure LiteLLM OSS
-
-Review `litellm-cost-routing.yaml` and replace deployment model values when
-needed. The example defines three aliases and optional fallbacks:
+The local Python wrapper cleans prompts, compresses noisy logs, estimates tokens,
+applies budgets, and selects one of these LiteLLM aliases:
 
 - `codex-cheap`
 - `codex-auto`
 - `codex-strong`
 
-Start the local proxy:
+API keys are never committed or written to a configuration file.
+
+## Quick Start
+
+Open PowerShell in the repository:
 
 ```powershell
-litellm --config .\scripts\python\litellm-cost-routing.yaml --port 4000
+cd C:\Users\user\Documents\Scripting
 ```
 
-When using the short Windows virtual environment:
+Start everything with one command:
 
 ```powershell
-$env:PYTHONUTF8 = "1"
-& "C:\tmp\litellm-oss\Scripts\litellm.exe" `
-  --config .\scripts\python\litellm-cost-routing.yaml `
-  --port 4000
+.\scripts\python\codex-cost-routing.cmd Start
 ```
 
-`PYTHONUTF8=1` prevents the LiteLLM startup banner from failing on Windows
-consoles configured with a legacy code page such as `cp1252`.
+The launcher automatically bypasses restrictive PowerShell execution policies
+for this command only. The script:
 
-The repository also includes a Windows launcher that validates environment
-variables and enables UTF-8 automatically:
+1. installs the official LiteLLM OSS proxy in `C:\tmp\litellm-oss` when needed;
+2. asks for the OpenAI key with masked input when it is missing;
+3. creates a random local `LITELLM_API_KEY` in memory;
+4. starts the LiteLLM proxy in the background;
+5. enables the optional Codex `cost-routing` profile.
 
-```powershell
-.\scripts\python\Start-LiteLLMProxy.ps1
-```
-
-## Enable Or Disable
-
-Enable the optional profile:
+Open a second terminal and copy the local LiteLLM key shown by the launcher into
+an environment variable before running Codex:
 
 ```powershell
-python .\scripts\python\codex_cost_router.py enable
-```
-
-This copies `plugins/litellm_cost_router.toml` into `%USERPROFILE%\.codex\plugins`
-and appends one managed `cost-routing` profile to
-`%USERPROFILE%\.codex\config.toml`.
-
-Run Codex directly through the LiteLLM proxy:
-
-```powershell
+$env:LITELLM_API_KEY = "local-key-shown-by-the-launcher"
 codex --profile cost-routing
 ```
 
-Disable the profile without changing unrelated Codex settings:
+Stop the proxy and disable the optional profile:
 
 ```powershell
-python .\scripts\python\codex_cost_router.py disable
+.\scripts\python\codex-cost-routing.cmd Stop
 ```
 
-On activation, the tool stores a local backup under `%USERPROFILE%\.codex\logs`
-so disabling can restore the previous `config.toml` byte-for-byte. The backup
-stays on the local machine and is removed after restoration.
-
-The convenience forms `--enable`, `--disable`, and `--status` are also accepted.
-
-## Optimized Routing
-
-Preview routing and compression without calling Codex:
+## Status
 
 ```powershell
-python .\scripts\python\codex_cost_router.py run --dry-run "Document this Python API"
+.\scripts\python\codex-cost-routing.cmd Status
+python .\scripts\python\codex_cost_router.py doctor
 ```
 
-Optimize a task and invoke `codex exec`:
+If a browser opened on `http://localhost:4000/health` shows `Unauthorized`,
+that is expected: the local proxy is protected by `LITELLM_API_KEY`.
+
+## Optimized One-Shot Requests
+
+Use the Python wrapper when prompt cleanup and dynamic model routing are needed:
 
 ```powershell
-python .\scripts\python\codex_cost_router.py run "Refactor this TypeScript API and add tests"
+python .\scripts\python\codex_cost_router.py run --dry-run "Document this API"
+python .\scripts\python\codex_cost_router.py run "Refactor this Python API and add tests"
 ```
 
-Force an alias or change token budgets:
+Optional budgets and forced routing:
 
 ```powershell
 python .\scripts\python\codex_cost_router.py run `
@@ -136,38 +78,33 @@ python .\scripts\python\codex_cost_router.py run `
   "Review this production migration for security issues"
 ```
 
-## Status And Statistics
+## History
 
 ```powershell
-python .\scripts\python\codex_cost_router.py status
-python .\scripts\python\codex_cost_router.py doctor
 python .\scripts\python\codex_cost_router.py history --limit 20
 python .\scripts\python\codex_cost_router.py stats
 ```
 
-Routing records are appended to:
+Routing metadata is written to:
 
 ```text
 %USERPROFILE%\.codex\logs\cost_router.jsonl
 ```
 
-The log stores token estimates, routing decisions, execution mode, compression
-ratio, and estimated costs. It does not store prompts or API keys.
+Prompts and API keys are not logged.
 
-If `http://localhost:4000/health` refuses the connection, the LiteLLM proxy is
-not running. Use `doctor`, then start the local proxy with the command shown in
-the LiteLLM OSS setup section.
+## Files
 
-## Cost Estimates
-
-The Python script uses editable placeholder rates for local estimates. Actual
-provider billing remains authoritative. Update `ESTIMATED_RATES` in the script
-to match the LiteLLM deployments you configure.
+- `Manage-CodexCostRouting.ps1`: install, start, status, and stop workflow.
+- `codex-cost-routing.cmd`: simple Windows launcher.
+- `codex_cost_router.py`: prompt optimization and one-shot routing.
+- `litellm-cost-routing.yaml`: local LiteLLM OSS model aliases and fallbacks.
+- `plugins/litellm_cost_router.toml`: optional Codex profile fragment.
 
 ## Notes
 
-- The tool uses only Python standard-library modules.
-- The LiteLLM proxy remains fully local and OSS.
-- The sample YAML intentionally avoids Enterprise-only settings.
-- Provider-specific authentication must be configured through environment
-  variables supported by your chosen LiteLLM providers.
+- LiteLLM runs locally and self-hosted.
+- The configuration does not enable LiteLLM Cloud or Enterprise features.
+- Actual provider billing remains authoritative.
+- The router remains optional: stopping it restores the previous Codex
+  `config.toml` byte-for-byte.
