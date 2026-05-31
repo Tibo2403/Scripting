@@ -29,6 +29,7 @@ scripts/
     |-- Get-SystemInfo.ps1
     |-- LinkCrawler.ps1
     |-- ManageServices.ps1
+    |-- Optimize-CodexWorkspace.ps1
     |-- SecurityCheck.ps1
     |-- SharePointManagement.ps1
     |-- TeamsManagement.ps1
@@ -110,6 +111,7 @@ bash scripts/tests/test-linux-safety.sh
 ```powershell
 .\scripts\powershell\Get-SystemInfo.ps1
 .\scripts\powershell\ManageServices.ps1 -Action status -ServiceName spooler
+.\scripts\powershell\Optimize-CodexWorkspace.ps1 -ProjectPath . -Fix
 .\scripts\powershell\VMManagement.ps1 -Action list
 .\scripts\powershell\TeamsManagement.ps1 -Action list
 .\scripts\powershell\ExchangeOnlineManagement.ps1 -Action list
@@ -117,6 +119,10 @@ bash scripts/tests/test-linux-safety.sh
 ```
 
 `ManageServices.ps1` and `UserManagement.ps1` require an elevated PowerShell session for privileged actions.
+
+`Optimize-CodexWorkspace.ps1` audits a project before a Codex CLI session and
+can maintain a generated section in `AGENTS.md`. See
+[`docs/codex-workspace-doctor.md`](docs/codex-workspace-doctor.md).
 
 ## Linux Examples
 

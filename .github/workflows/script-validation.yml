@@ -26,7 +26,7 @@ jobs:
 
       - name: Validate PowerShell syntax
         shell: pwsh
-        run: ./scripts/powershell/Test-ScriptSyntax.ps1 -Path ./scripts/powershell
+        run: ./scripts/powershell/Test-ScriptSyntax.ps1 -Path ./scripts
 
       - name: Install PSScriptAnalyzer
         shell: pwsh
@@ -42,6 +42,10 @@ jobs:
           if ($results) {
             exit 1
           }
+
+      - name: Run Codex Workspace Doctor smoke test
+        shell: pwsh
+        run: ./scripts/tests/Test-Optimize-CodexWorkspace.ps1
 
   bash:
     name: Bash validation
