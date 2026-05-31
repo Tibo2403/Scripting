@@ -8,6 +8,11 @@ wifi_captures/
 *.log
 *.tmp
 logs/
+
+# Ignore Python cache files
+__pycache__/
+*.py[cod]
+
 # Ignore data files
 *.csv
 *.json

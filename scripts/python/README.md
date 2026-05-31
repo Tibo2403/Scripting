@@ -47,3 +47,13 @@ npx -y @modelcontextprotocol/inspector
 ```
 
 Connect the inspector to `http://localhost:8000/mcp`.
+
+## Codex Cost Router
+
+`codex_cost_router.py` is an optional Windows-friendly wrapper for Codex CLI and
+a local LiteLLM OSS proxy. It can clean prompts, compress logs, estimate tokens,
+apply budgets, and route one-shot Codex tasks to `codex-cheap`, `codex-auto`, or
+`codex-strong`.
+
+See [`README_Codex_Cost_Routing.md`](README_Codex_Cost_Routing.md) for setup,
+activation, LiteLLM configuration, and usage instructions.

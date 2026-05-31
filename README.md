@@ -36,8 +36,13 @@ scripts/
     |-- UserManagement.ps1
     `-- VMManagement.ps1
 `-- python/
+    |-- codex_cost_router.py
+    |-- litellm-cost-routing.yaml
     |-- mcp_server.py
+    |-- plugins/
+    |   `-- litellm_cost_router.toml
     |-- README.md
+    |-- README_Codex_Cost_Routing.md
     `-- requirements.txt
 ```
 
@@ -151,6 +156,10 @@ python .\scripts\python\mcp_server.py
 Connect an MCP client to `http://localhost:8000/mcp`. See
 [`scripts/python/README.md`](scripts/python/README.md) for setup and inspector
 instructions.
+
+The optional Codex cost router in `scripts/python/codex_cost_router.py` can
+compress one-shot prompts and route them through a self-hosted LiteLLM OSS proxy.
+See [`scripts/python/README_Codex_Cost_Routing.md`](scripts/python/README_Codex_Cost_Routing.md).
 
 ## CI
 

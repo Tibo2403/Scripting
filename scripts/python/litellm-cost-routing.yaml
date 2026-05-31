@@ -1,0 +1,32 @@
+# LiteLLM OSS self-hosted proxy example.
+# Replace the deployment model values with the providers you want to use.
+# API keys are read from environment variables and must never be committed.
+
+model_list:
+  - model_name: codex-cheap
+    litellm_params:
+      model: openai/gpt-5-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: codex-auto
+    litellm_params:
+      model: openai/gpt-5
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: codex-strong
+    litellm_params:
+      model: openai/gpt-5
+      api_key: os.environ/OPENAI_API_KEY
+
+router_settings:
+  fallbacks:
+    - codex-cheap:
+        - codex-auto
+    - codex-auto:
+        - codex-strong
+
+litellm_settings:
+  set_verbose: false
+
+general_settings:
+  master_key: os.environ/LITELLM_API_KEY

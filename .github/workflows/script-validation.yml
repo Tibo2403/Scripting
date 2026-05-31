@@ -69,3 +69,23 @@ jobs:
 
       - name: Run Linux safety tests
         run: bash scripts/tests/test-linux-safety.sh
+
+  python:
+    name: Python validation
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate Python syntax
+        run: python -m py_compile scripts/python/codex_cost_router.py scripts/python/mcp_server.py
+
+      - name: Run Python tests
+        run: python -m unittest discover -s scripts/python/tests -v
