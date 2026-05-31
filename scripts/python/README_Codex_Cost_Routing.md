@@ -20,10 +20,10 @@ Open PowerShell in the repository:
 cd C:\Users\user\Documents\Scripting
 ```
 
-Start everything with one command:
+Start LiteLLM and Codex with one command:
 
 ```powershell
-.\scripts\python\codex-cost-routing.cmd Start
+.\scripts\python\codex-cost-routing.cmd
 ```
 
 The launcher automatically bypasses restrictive PowerShell execution policies
@@ -34,16 +34,18 @@ for this command only. The script:
 3. creates a random local `LITELLM_API_KEY` in memory;
 4. starts the LiteLLM proxy in the background;
 5. enables the optional Codex `cost-routing` profile.
+6. opens Codex with that profile;
+7. stops LiteLLM and restores the previous configuration when Codex closes.
 
-Open a second terminal and copy the local LiteLLM key shown by the launcher into
-an environment variable before running Codex:
+There is no key to copy and no second terminal is required.
+
+To start only the proxy without opening Codex:
 
 ```powershell
-$env:LITELLM_API_KEY = "local-key-shown-by-the-launcher"
-codex --profile cost-routing
+.\scripts\python\codex-cost-routing.cmd Start
 ```
 
-Stop the proxy and disable the optional profile:
+Stop a proxy started separately:
 
 ```powershell
 .\scripts\python\codex-cost-routing.cmd Stop
@@ -95,7 +97,7 @@ Prompts and API keys are not logged.
 
 ## Files
 
-- `Manage-CodexCostRouting.ps1`: install, start, status, and stop workflow.
+- `Manage-CodexCostRouting.ps1`: install, run, start, status, and stop workflow.
 - `codex-cost-routing.cmd`: simple Windows launcher.
 - `codex_cost_router.py`: prompt optimization and one-shot routing.
 - `litellm-cost-routing.yaml`: local LiteLLM OSS model aliases and fallbacks.

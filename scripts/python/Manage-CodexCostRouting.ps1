@@ -1,9 +1,10 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Install', 'Start', 'Status', 'Stop')]
-    [string]$Action = 'Status',
+    [ValidateSet('Install', 'Start', 'Run', 'Status', 'Stop')]
+    [string]$Action = 'Run',
     [string]$ConfigPath = "$PSScriptRoot\litellm-cost-routing.yaml",
     [string]$VenvPath = 'C:\tmp\litellm-oss',
+    [string]$CodexPath,
     [int]$Port = 4000
 )
 
@@ -80,6 +81,9 @@ function New-LocalProxyKey {
 }
 
 function Start-Proxy {
+    param(
+        [switch]$ShowManualInstructions
+    )
     Install-LiteLLM
 
     if (Test-ProxyPort) {
@@ -138,12 +142,40 @@ function Start-Proxy {
 
     Write-Host ''
     Write-Host "READY: LiteLLM OSS Proxy is listening on http://localhost:$Port"
-    Write-Host 'In the PowerShell window where you will run Codex, paste:'
-    Write-Host "  `$env:LITELLM_API_KEY = '$env:LITELLM_API_KEY'"
-    Write-Host 'Then run:'
-    Write-Host '  codex --profile cost-routing'
+    if ($ShowManualInstructions) {
+        Write-Host 'In the PowerShell window where you will run Codex, paste:'
+        Write-Host "  `$env:LITELLM_API_KEY = '$env:LITELLM_API_KEY'"
+        Write-Host 'Then run:'
+        Write-Host '  codex --profile cost-routing'
+    }
     Write-Host ''
     Write-Host 'A browser opened on /health may show Unauthorized. That is expected because the proxy is protected.'
+}
+
+function Start-Codex {
+    Start-Proxy
+
+    $codexExecutable = $CodexPath
+    if (-not $codexExecutable) {
+        $codex = Get-Command codex -ErrorAction SilentlyContinue
+        if ($codex) {
+            $codexExecutable = $codex.Source
+        }
+    }
+
+    if (-not $codexExecutable) {
+        throw 'Codex CLI was not found.'
+    }
+
+    Write-Host ''
+    Write-Host 'Starting Codex with the cost-routing profile.'
+    Write-Host 'Closing Codex will automatically stop LiteLLM and restore the previous Codex configuration.'
+    try {
+        & $codexExecutable --profile cost-routing
+    }
+    finally {
+        Stop-Proxy
+    }
 }
 
 function Stop-Proxy {
@@ -176,7 +208,8 @@ function Show-Status {
 
 switch ($Action) {
     'Install' { Install-LiteLLM }
-    'Start' { Start-Proxy }
+    'Start' { Start-Proxy -ShowManualInstructions }
+    'Run' { Start-Codex }
     'Status' { Show-Status }
     'Stop' { Stop-Proxy }
 }

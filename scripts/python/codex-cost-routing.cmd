@@ -3,7 +3,7 @@ setlocal
 set "SCRIPT_DIR=%~dp0"
 
 if "%~1"=="" (
-  set "ACTION=Status"
+  set "ACTION=Run"
 ) else (
   set "ACTION=%~1"
 )
