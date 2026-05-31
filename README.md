@@ -2,7 +2,7 @@
 
 [![Script Validation](https://github.com/Tibo2403/Scripting/actions/workflows/script-validation.yml/badge.svg)](https://github.com/Tibo2403/Scripting/actions/workflows/script-validation.yml)
 
-Collection of PowerShell and Bash scripts for system administration, security checks, Microsoft 365 operations, Linux dependency checks, and authorized lab or pentest workflows.
+Collection of PowerShell, Bash, and Python scripts for system administration, security checks, Microsoft 365 operations, Linux dependency checks, MCP integrations, and authorized lab or pentest workflows.
 
 ## Legal Notice
 
@@ -23,7 +23,7 @@ scripts/
 |   |-- scan_wifi.sh
 |   |-- setup_api.sh
 |   `-- stealth_post.sh
-`-- powershell/
+|-- powershell/
     |-- DiskUsageReport.ps1
     |-- ExchangeOnlineManagement.ps1
     |-- Get-SystemInfo.ps1
@@ -35,6 +35,10 @@ scripts/
     |-- Test-ScriptSyntax.ps1
     |-- UserManagement.ps1
     `-- VMManagement.ps1
+`-- python/
+    |-- mcp_server.py
+    |-- README.md
+    `-- requirements.txt
 ```
 
 `targets.txt` contains example targets used by the pentest scripts. Keep it limited to systems that you are allowed to test.
@@ -52,6 +56,7 @@ Portfolio and maintenance docs:
 
 - PowerShell 5.1+ or PowerShell 7+ for Windows scripts.
 - Linux shell tools for Bash scripts.
+- Python 3.10+ and the optional `mcp[cli]` package for the MCP server.
 - Optional tools depending on the script: `nmap`, `gvm-cli`, `curl`, `gpg`, `pwsh`.
 - Optional PowerShell modules: Hyper-V, ExchangeOnlineManagement, MicrosoftTeams, PnP.PowerShell.
 - Administrator or root privileges for scripts that manage services, users, VMs, network scans, or security settings.
@@ -131,6 +136,21 @@ bash scripts/linux/stealth_post.sh --dry-run --yes-i-am-authorized
 Sensitive Linux scripts require either an interactive `AUTHORIZED` confirmation or the explicit `--yes-i-am-authorized` flag. Use `--dry-run` first to review planned scans, captures, or transfers.
 
 Use the safe placeholders in `examples/` for lab demos and documentation. Do not commit real targets, credentials, tenant identifiers, scan output, packet captures, or customer data.
+
+## MCP Server
+
+The read-only Python MCP server exposes tools to list, search, inspect, and
+validate scripts without executing them. It can also browse documentation and
+return a repository summary:
+
+```powershell
+pip install -r .\scripts\python\requirements.txt
+python .\scripts\python\mcp_server.py
+```
+
+Connect an MCP client to `http://localhost:8000/mcp`. See
+[`scripts/python/README.md`](scripts/python/README.md) for setup and inspector
+instructions.
 
 ## CI
 
