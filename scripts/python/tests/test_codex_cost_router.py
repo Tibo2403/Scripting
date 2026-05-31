@@ -1,8 +1,10 @@
 """Tests for the optional Codex cost-routing wrapper."""
 
 import importlib.util
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "codex_cost_router.py"
@@ -40,6 +42,25 @@ class CodexCostRouterTests(unittest.TestCase):
             ROUTER.remove_profile_block(config),
             "[features]\njs_repl = false\n",
         )
+
+    def test_enable_disable_restores_original_config_bytes(self) -> None:
+        initial = b"[features]\r\njs_repl = false\r\n"
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            config = home / "config.toml"
+            config.write_bytes(initial)
+            with (
+                patch.object(ROUTER, "CODEX_HOME", home),
+                patch.object(ROUTER, "CODEX_CONFIG", config),
+                patch.object(ROUTER, "CODEX_PLUGIN", home / "plugins" / "litellm_cost_router.toml"),
+                patch.object(ROUTER, "LOG_DIR", home / "logs"),
+                patch.object(ROUTER, "LOG_FILE", home / "logs" / "cost_router.jsonl"),
+                patch.object(ROUTER, "STATE_FILE", home / "logs" / "cost_router_state.json"),
+                patch.object(ROUTER, "CONFIG_BACKUP", home / "logs" / "config.toml.cost_router_backup"),
+            ):
+                ROUTER.enable_router()
+                ROUTER.disable_router()
+            self.assertEqual(config.read_bytes(), initial)
 
 
 if __name__ == "__main__":

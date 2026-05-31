@@ -76,6 +76,10 @@ Disable the profile without changing unrelated Codex settings:
 python .\scripts\python\codex_cost_router.py disable
 ```
 
+On activation, the tool stores a local backup under `%USERPROFILE%\.codex\logs`
+so disabling can restore the previous `config.toml` byte-for-byte. The backup
+stays on the local machine and is removed after restoration.
+
 The convenience forms `--enable`, `--disable`, and `--status` are also accepted.
 
 ## Optimized Routing

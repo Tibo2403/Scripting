@@ -22,6 +22,7 @@ CODEX_PLUGIN = CODEX_HOME / "plugins" / "litellm_cost_router.toml"
 LOG_DIR = CODEX_HOME / "logs"
 LOG_FILE = LOG_DIR / "cost_router.jsonl"
 STATE_FILE = LOG_DIR / "cost_router_state.json"
+CONFIG_BACKUP = LOG_DIR / "config.toml.cost_router_backup"
 BEGIN_MARKER = "# BEGIN CODEX COST ROUTER"
 END_MARKER = "# END CODEX COST ROUTER"
 DEFAULT_MAX_INPUT_TOKENS = 12_000
@@ -267,7 +268,10 @@ def enable_router() -> int:
         raise FileNotFoundError(f"Missing plugin template: {PLUGIN_TEMPLATE}")
     shutil.copyfile(PLUGIN_TEMPLATE, CODEX_PLUGIN)
 
-    config = remove_profile_block(read_text(CODEX_CONFIG))
+    config = read_text(CODEX_CONFIG)
+    if BEGIN_MARKER not in config and CODEX_CONFIG.exists():
+        shutil.copyfile(CODEX_CONFIG, CONFIG_BACKUP)
+    config = remove_profile_block(config)
     updated = config.rstrip() + ("\n\n" if config.strip() else "") + PROFILE_BLOCK
     write_text(CODEX_CONFIG, updated)
     save_state(enabled=True, enabled_at=utc_now(), current_model="codex-auto")
@@ -283,7 +287,11 @@ def enable_router() -> int:
 def disable_router() -> int:
     """Remove only the installed profile and plugin fragment."""
     ensure_directories()
-    write_text(CODEX_CONFIG, remove_profile_block(read_text(CODEX_CONFIG)))
+    if CONFIG_BACKUP.exists():
+        shutil.copyfile(CONFIG_BACKUP, CODEX_CONFIG)
+        CONFIG_BACKUP.unlink()
+    else:
+        write_text(CODEX_CONFIG, remove_profile_block(read_text(CODEX_CONFIG)))
     if CODEX_PLUGIN.exists():
         CODEX_PLUGIN.unlink()
     save_state(enabled=False, disabled_at=utc_now())
