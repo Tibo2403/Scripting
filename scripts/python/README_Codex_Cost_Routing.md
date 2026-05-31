@@ -25,11 +25,14 @@ selects the proxy but cannot rewrite every interactive message.
 - LiteLLM OSS installed locally:
 
 ```powershell
-pip install "litellm[proxy]"
+uv tool install "litellm[proxy]"
 ```
 
-On Windows, installing the proxy into a short virtual-environment path avoids
-the operating-system path-length limit:
+The official OSS source is [`BerriAI/litellm`](https://github.com/BerriAI/litellm).
+The command above follows its AI Gateway installation guidance.
+
+If `uv` is unavailable, or Windows reports a path-length error, install the
+proxy into a short virtual-environment path:
 
 ```powershell
 python -m venv C:\tmp\litellm-oss
