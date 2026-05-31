@@ -43,6 +43,15 @@ class CodexCostRouterTests(unittest.TestCase):
             "[features]\njs_repl = false\n",
         )
 
+    def test_proxy_available_returns_false_when_connection_fails(self) -> None:
+        with patch.object(ROUTER.socket, "create_connection", side_effect=OSError):
+            self.assertFalse(ROUTER.proxy_available())
+
+    def test_find_litellm_uses_configured_existing_path(self) -> None:
+        with tempfile.NamedTemporaryFile() as executable:
+            with patch.dict(ROUTER.os.environ, {"LITELLM_CLI_PATH": executable.name}):
+                self.assertEqual(ROUTER.find_litellm(), executable.name)
+
     def test_enable_disable_restores_original_config_bytes(self) -> None:
         initial = b"[features]\r\njs_repl = false\r\n"
         with tempfile.TemporaryDirectory() as directory:

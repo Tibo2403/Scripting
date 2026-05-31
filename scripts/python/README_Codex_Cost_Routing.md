@@ -28,6 +28,14 @@ selects the proxy but cannot rewrite every interactive message.
 pip install "litellm[proxy]"
 ```
 
+On Windows, installing the proxy into a short virtual-environment path avoids
+the operating-system path-length limit:
+
+```powershell
+python -m venv C:\tmp\litellm-oss
+C:\tmp\litellm-oss\Scripts\python.exe -m pip install "litellm[proxy]"
+```
+
 Set keys only in your PowerShell environment:
 
 ```powershell
@@ -50,6 +58,25 @@ Start the local proxy:
 
 ```powershell
 litellm --config .\scripts\python\litellm-cost-routing.yaml --port 4000
+```
+
+When using the short Windows virtual environment:
+
+```powershell
+$env:PYTHONUTF8 = "1"
+& "C:\tmp\litellm-oss\Scripts\litellm.exe" `
+  --config .\scripts\python\litellm-cost-routing.yaml `
+  --port 4000
+```
+
+`PYTHONUTF8=1` prevents the LiteLLM startup banner from failing on Windows
+consoles configured with a legacy code page such as `cp1252`.
+
+The repository also includes a Windows launcher that validates environment
+variables and enables UTF-8 automatically:
+
+```powershell
+.\scripts\python\Start-LiteLLMProxy.ps1
 ```
 
 ## Enable Or Disable
@@ -110,6 +137,7 @@ python .\scripts\python\codex_cost_router.py run `
 
 ```powershell
 python .\scripts\python\codex_cost_router.py status
+python .\scripts\python\codex_cost_router.py doctor
 python .\scripts\python\codex_cost_router.py history --limit 20
 python .\scripts\python\codex_cost_router.py stats
 ```
@@ -122,6 +150,10 @@ Routing records are appended to:
 
 The log stores token estimates, routing decisions, execution mode, compression
 ratio, and estimated costs. It does not store prompts or API keys.
+
+If `http://localhost:4000/health` refuses the connection, the LiteLLM proxy is
+not running. Use `doctor`, then start the local proxy with the command shown in
+the LiteLLM OSS setup section.
 
 ## Cost Estimates
 

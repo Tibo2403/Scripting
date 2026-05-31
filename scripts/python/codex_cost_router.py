@@ -7,6 +7,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -28,6 +29,9 @@ END_MARKER = "# END CODEX COST ROUTER"
 DEFAULT_MAX_INPUT_TOKENS = 12_000
 DEFAULT_MAX_OUTPUT_TOKENS = 2_000
 MODELS = ("codex-cheap", "codex-auto", "codex-strong")
+LITELLM_HOST = "localhost"
+LITELLM_PORT = 4000
+WINDOWS_LITELLM_FALLBACK = Path(r"C:\tmp\litellm-oss\Scripts\litellm.exe")
 
 # Approximate placeholders in USD per million tokens. Adjust these estimates to
 # match the deployments configured in your local LiteLLM OSS proxy.
@@ -364,6 +368,50 @@ def find_codex() -> str | None:
     return shutil.which("codex") or os.environ.get("CODEX_CLI_PATH")
 
 
+def find_litellm() -> str | None:
+    """Locate LiteLLM CLI, including the documented short-path Windows venv."""
+    configured = os.environ.get("LITELLM_CLI_PATH")
+    if configured and Path(configured).is_file():
+        return configured
+    discovered = shutil.which("litellm")
+    if discovered:
+        return discovered
+    if WINDOWS_LITELLM_FALLBACK.is_file():
+        return str(WINDOWS_LITELLM_FALLBACK)
+    return None
+
+
+def proxy_available() -> bool:
+    """Check whether the local LiteLLM OSS proxy is accepting TCP connections."""
+    try:
+        with socket.create_connection((LITELLM_HOST, LITELLM_PORT), timeout=1):
+            return True
+    except OSError:
+        return False
+
+
+def print_doctor() -> int:
+    """Display local setup checks without printing secret values."""
+    checks = [
+        ("Codex CLI", bool(find_codex()), find_codex() or "not found"),
+        ("LiteLLM command", bool(find_litellm()), find_litellm() or "not found"),
+        ("LiteLLM proxy localhost:4000", proxy_available(), "listening" if proxy_available() else "not listening"),
+        ("LITELLM_API_KEY", bool(os.environ.get("LITELLM_API_KEY")), "set" if os.environ.get("LITELLM_API_KEY") else "missing"),
+        ("OPENAI_API_KEY", bool(os.environ.get("OPENAI_API_KEY")), "set" if os.environ.get("OPENAI_API_KEY") else "missing"),
+        ("PYTHONUTF8", os.environ.get("PYTHONUTF8") == "1", "1" if os.environ.get("PYTHONUTF8") == "1" else "missing or not 1"),
+        ("Cost-routing profile", router_enabled(), "enabled" if router_enabled() else "disabled"),
+    ]
+    print("Codex Cost Router doctor")
+    print("------------------------")
+    for name, passed, detail in checks:
+        print(f"{'OK' if passed else 'FIX':3}  {name:30} {detail}")
+    if not proxy_available():
+        print("\nStart LiteLLM OSS with:")
+        executable = find_litellm() or "litellm"
+        print(f"  & '{executable}' --config .\\scripts\\python\\litellm-cost-routing.yaml --port 4000")
+    return 0 if all(passed for _, passed, _ in checks) else 1
+
+
 def run_router(args: argparse.Namespace) -> int:
     """Optimize, log, and optionally execute a one-shot Codex CLI request."""
     prompt = " ".join(args.prompt).strip()
@@ -407,6 +455,10 @@ def run_router(args: argparse.Namespace) -> int:
     if not router_enabled():
         print("Cost routing is disabled. Run: python codex_cost_router.py enable", file=sys.stderr)
         return 2
+    if not proxy_available():
+        print("LiteLLM OSS proxy is not listening on http://localhost:4000.", file=sys.stderr)
+        print("Run: python codex_cost_router.py doctor", file=sys.stderr)
+        return 4
     codex = find_codex()
     if not codex:
         print("Codex CLI was not found in PATH or CODEX_CLI_PATH.", file=sys.stderr)
@@ -432,6 +484,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("enable", help="Install the optional Codex profile.")
     subparsers.add_parser("disable", help="Remove the optional Codex profile.")
     subparsers.add_parser("status", help="Show activation and latest routing status.")
+    subparsers.add_parser("doctor", help="Check Codex, LiteLLM, keys, proxy, and profile.")
     subparsers.add_parser("stats", help="Show aggregate estimated savings.")
 
     history = subparsers.add_parser("history", help="Show recent routing history.")
@@ -471,6 +524,8 @@ def main(argv: list[str] | None = None) -> int:
         return print_status()
     if args.command == "stats":
         return print_stats()
+    if args.command == "doctor":
+        return print_doctor()
     if args.command == "history":
         return print_history(args.limit)
     return run_router(args)
