@@ -2,6 +2,7 @@ $ErrorActionPreference = 'Stop'
 $doctor = Join-Path $PSScriptRoot '..\powershell\Optimize-CodexWorkspace.ps1'
 $testRoot = Join-Path $env:TEMP 'codex-workspace-doctor-test'
 $reportPath = Join-Path $testRoot 'report.json'
+$trustedReportPath = Join-Path $testRoot 'trusted-report.json'
 $agentsPath = Join-Path $testRoot 'AGENTS.md'
 
 if (Test-Path -LiteralPath $testRoot) {
@@ -48,11 +49,22 @@ try {
     if ($report.Efficiency.Status -eq 'not-measured' -or $report.ValidationResults.Count -eq 0) {
         throw 'Efficiency metric was not calculated from validation results.'
     }
+    $npmValidation = @($report.ValidationResults | Where-Object { $_.Command -eq 'npm run test' })
+    if ($npmValidation.Count -ne 1 -or $npmValidation[0].Status -ne 'skipped') {
+        throw 'Project-defined validation commands ran without explicit opt-in.'
+    }
     if ('README.md' -notin $report.ContextFiles.Missing) {
         throw 'Missing README.md was not reported.'
     }
     if ((Get-Content -LiteralPath $reportPath -Raw) -match [regex]::Escape($fakeKey)) {
         throw 'A secret value leaked into the report.'
+    }
+
+    & $doctor -ProjectPath $testRoot -Validate -AllowProjectCommands -ReportPath $trustedReportPath
+    $trustedReport = Get-Content -LiteralPath $trustedReportPath -Raw | ConvertFrom-Json
+    $trustedNpmValidation = @($trustedReport.ValidationResults | Where-Object { $_.Command -eq 'npm run test' })
+    if ($trustedNpmValidation.Count -ne 1 -or $trustedNpmValidation[0].Status -eq 'skipped') {
+        throw 'Trusted project validation commands did not run after explicit opt-in.'
     }
 
     Write-Host 'Codex Workspace Doctor smoke test passed.'

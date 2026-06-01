@@ -32,7 +32,7 @@ The report includes:
 ```
 
 Without `-Validate`, efficiency is reported as `not-measured`. With
-`-Validate`, the doctor executes its detected project checks and calculates:
+`-Validate`, the doctor runs static checks and calculates:
 
 ```text
 Efficiency = 50% workspace readiness + 50% successful executable validations
@@ -41,6 +41,16 @@ Efficiency = 50% workspace readiness + 50% successful executable validations
 The JSON report includes each validation status and duration. This measures
 workspace preparation and automated verification, not model quality or token
 usage.
+
+Tests and builds defined by a project can execute arbitrary repository code.
+Run them only for a repository that you trust:
+
+```powershell
+.\scripts\powershell\Optimize-CodexWorkspace.ps1 `
+  -ProjectPath . `
+  -Validate `
+  -AllowProjectCommands
+```
 
 ## Generate Codex Guidance
 

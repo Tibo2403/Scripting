@@ -18,6 +18,9 @@
     Starts Codex CLI in the inspected directory after the audit.
 .PARAMETER Validate
     Runs the detected validation commands and calculates an efficiency metric.
+.PARAMETER AllowProjectCommands
+    Allows -Validate to execute project-defined tests and builds. Use only for
+    repositories that you trust.
 .EXAMPLE
     PS> .\Optimize-CodexWorkspace.ps1 -ProjectPath C:\Projects\HealthApp
 .EXAMPLE
@@ -33,6 +36,7 @@ param(
     [ValidateRange(1, 10240)]
     [int]$MaxFileSizeMB = 1,
     [switch]$Validate,
+    [switch]$AllowProjectCommands,
     [switch]$LaunchCodex
 )
 
@@ -269,17 +273,39 @@ function Invoke-NativeValidation {
 
 function Invoke-ValidationCommands {
     param(
-        [string[]]$Commands
+        [string[]]$Commands,
+        [bool]$AllowProjectCommands
     )
 
     $results = [System.Collections.Generic.List[object]]::new()
+    $projectCommandPatterns = @(
+        '^python -m pytest$',
+        '^npm run (test|lint|build)$',
+        '^go test \./\.\.\.$',
+        '^cargo test$',
+        '^dotnet test$',
+        '^mvn test$',
+        '^\.\\gradlew test$'
+    )
     Push-Location $resolvedProject.Path
     try {
         foreach ($command in $Commands) {
             $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
             $result = $null
             try {
-                switch -Regex ($command) {
+                $isProjectCommand = @(
+                    $projectCommandPatterns |
+                        Where-Object { $command -match $_ }
+                ).Count -gt 0
+                if ($isProjectCommand -and -not $AllowProjectCommands) {
+                    $result = [ordered]@{
+                        Status = 'skipped'
+                        ExitCode = $null
+                        Reason = 'Requires -AllowProjectCommands for a trusted repository.'
+                    }
+                }
+                else {
+                    switch -Regex ($command) {
                     '^python -m pytest$' {
                         $result = Invoke-NativeValidation 'python' @('-m', 'pytest')
                         break
@@ -334,6 +360,7 @@ function Invoke-ValidationCommands {
                             ExitCode = $null
                         }
                     }
+                    }
                 }
             }
             catch {
@@ -350,6 +377,7 @@ function Invoke-ValidationCommands {
                 Status = $result.Status
                 ExitCode = $result.ExitCode
                 DurationSeconds = [math]::Round($stopwatch.Elapsed.TotalSeconds, 3)
+                Reason = if ($result.Contains('Reason')) { $result.Reason } else { $null }
             })
         }
     }
@@ -628,7 +656,7 @@ if ($Fix) {
 }
 $readiness = Get-Readiness $gitAudit $contextAudit $largeFiles $secretFindings $validationCommands
 $validationResults = if ($Validate) {
-    @(Invoke-ValidationCommands $validationCommands)
+    @(Invoke-ValidationCommands $validationCommands $AllowProjectCommands)
 }
 else {
     @()
@@ -641,6 +669,7 @@ $report = [ordered]@{
     Stack = $stacks
     FilesInspected = $allFiles.Count
     ValidationCommands = $validationCommands
+    ValidationPolicy = if ($AllowProjectCommands) { 'project-commands-enabled' } else { 'static-only' }
     ValidationResults = $validationResults
     Efficiency = $efficiency
     Readiness = $readiness
@@ -681,7 +710,8 @@ if ($Validate) {
     Write-Host ''
     Write-Host 'Validation results:'
     foreach ($validationResult in $validationResults) {
-        Write-Host "  $($validationResult.Status): $($validationResult.Command) ($($validationResult.DurationSeconds)s)"
+        $reason = if ($validationResult.Reason) { " - $($validationResult.Reason)" } else { '' }
+        Write-Host "  $($validationResult.Status): $($validationResult.Command) ($($validationResult.DurationSeconds)s)$reason"
     }
 }
 Write-Host ''
