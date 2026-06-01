@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Validate PowerShell syntax
         shell: pwsh
@@ -32,7 +32,18 @@ jobs:
         shell: pwsh
         run: |
           Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-          Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force
+          foreach ($attempt in 1..3) {
+            try {
+              Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force -ErrorAction Stop
+              break
+            } catch {
+              if ($attempt -eq 3) {
+                throw
+              }
+              Write-Warning "PSScriptAnalyzer installation attempt $attempt failed. Retrying..."
+              Start-Sleep -Seconds 10
+            }
+          }
 
       - name: Run PSScriptAnalyzer
         shell: pwsh
@@ -54,7 +65,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Validate shell syntax
         run: |
@@ -81,10 +92,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
