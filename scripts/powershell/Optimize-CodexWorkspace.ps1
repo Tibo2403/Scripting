@@ -3,8 +3,9 @@
     Audits a repository before launching Codex CLI.
 .DESCRIPTION
     Detects the project stack, suggests validation commands, finds large files,
-    scans common secret formats without printing values, and can maintain a
-    generated section in AGENTS.md. No API key or dependency is required.
+    scans common secret formats without printing values, audits Git readiness,
+    and can maintain a generated section in AGENTS.md. No API key or dependency
+    is required.
 .PARAMETER ProjectPath
     Repository or project directory to inspect. Defaults to the current directory.
 .PARAMETER Fix
@@ -241,6 +242,132 @@ function Get-SecretFindings {
     return @($findings)
 }
 
+function Invoke-Git {
+    param(
+        [string[]]$Arguments
+    )
+
+    $output = & git -C $resolvedProject.Path @Arguments 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        return $null
+    }
+    return @($output)
+}
+
+function Get-GitAudit {
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+        return [ordered]@{
+            Available = $false
+            IsRepository = $false
+            Branch = $null
+            DirtyFiles = @()
+            DirtyFileCount = 0
+            UntrackedFileCount = 0
+        }
+    }
+
+    $insideWorkTree = @(Invoke-Git -Arguments @('rev-parse', '--is-inside-work-tree'))
+    if ($insideWorkTree.Count -eq 0 -or $insideWorkTree[0] -ne 'true') {
+        return [ordered]@{
+            Available = $true
+            IsRepository = $false
+            Branch = $null
+            DirtyFiles = @()
+            DirtyFileCount = 0
+            UntrackedFileCount = 0
+        }
+    }
+
+    $branch = @(Invoke-Git -Arguments @('branch', '--show-current'))
+    $dirtyFiles = @(Invoke-Git -Arguments @('status', '--porcelain'))
+    $untrackedFileCount = @($dirtyFiles | Where-Object { $_ -match '^\?\?' }).Count
+    return [ordered]@{
+        Available = $true
+        IsRepository = $true
+        Branch = if ($branch) { $branch[0] } else { '(detached HEAD)' }
+        DirtyFiles = $dirtyFiles
+        DirtyFileCount = $dirtyFiles.Count
+        UntrackedFileCount = $untrackedFileCount
+    }
+}
+
+function Get-ContextAudit {
+    $recommendedFiles = @('README.md', 'AGENTS.md', '.gitignore')
+    $present = [System.Collections.Generic.List[string]]::new()
+    $missing = [System.Collections.Generic.List[string]]::new()
+    foreach ($file in $recommendedFiles) {
+        if (Test-ProjectFile $file) {
+            $present.Add($file)
+        }
+        else {
+            $missing.Add($file)
+        }
+    }
+    return [ordered]@{
+        Present = @($present)
+        Missing = @($missing)
+    }
+}
+
+function Get-Readiness {
+    param(
+        [hashtable]$GitAudit,
+        [hashtable]$ContextAudit,
+        [object[]]$LargeFiles,
+        [object[]]$SecretFindings,
+        [string[]]$Commands
+    )
+
+    $score = 100
+    $recommendations = [System.Collections.Generic.List[string]]::new()
+    if ('AGENTS.md' -in $ContextAudit.Missing) {
+        $score -= 15
+        Add-UniqueValue $recommendations 'Run with -Fix to generate the managed AGENTS.md guidance.'
+    }
+    if ('README.md' -in $ContextAudit.Missing) {
+        $score -= 10
+        Add-UniqueValue $recommendations 'Add a README.md so Codex can understand the project quickly.'
+    }
+    if ('.gitignore' -in $ContextAudit.Missing) {
+        $score -= 5
+        Add-UniqueValue $recommendations 'Add a .gitignore for local and generated files.'
+    }
+    if ($SecretFindings.Count -gt 0) {
+        $score -= 30
+        Add-UniqueValue $recommendations 'Review possible secrets before sharing context or committing changes.'
+    }
+    if ($LargeFiles.Count -gt 0) {
+        $score -= 10
+        Add-UniqueValue $recommendations 'Review large files before adding them to the Codex context.'
+    }
+    if (-not $GitAudit.Available) {
+        $score -= 5
+        Add-UniqueValue $recommendations 'Install Git to include repository readiness checks.'
+    }
+    elseif (-not $GitAudit.IsRepository) {
+        $score -= 10
+        Add-UniqueValue $recommendations 'Initialize Git so changes can be reviewed before and after a Codex session.'
+    }
+    elseif ($GitAudit.DirtyFileCount -gt 0) {
+        $score -= 10
+        Add-UniqueValue $recommendations 'Review existing Git changes before starting a broad Codex task.'
+    }
+    if ('Add the project validation command to AGENTS.md' -in $Commands) {
+        $score -= 10
+        Add-UniqueValue $recommendations 'Document at least one project validation command.'
+    }
+    if ($score -lt 0) {
+        $score = 0
+    }
+    if ($recommendations.Count -eq 0) {
+        $recommendations.Add('Workspace is ready for a focused Codex session.')
+    }
+    return [ordered]@{
+        Score = $score
+        Recommendations = @($recommendations)
+    }
+}
+
 function Get-ManagedAgentsSection {
     param(
         [string[]]$Stacks,
@@ -330,6 +457,8 @@ $largeFiles = @(
 $stacks = @(Get-DetectedStacks $allFiles)
 $validationCommands = @(Get-ValidationCommands $stacks)
 $secretFindings = @(Get-SecretFindings $allFiles)
+$gitAudit = Get-GitAudit
+$contextAudit = Get-ContextAudit
 $agentsPath = Join-Path $resolvedProject.Path 'AGENTS.md'
 $agentsStatus = if (Test-Path -LiteralPath $agentsPath) { 'present' } else { 'missing' }
 
@@ -337,7 +466,9 @@ if ($Fix) {
     $managedSection = Get-ManagedAgentsSection $stacks $validationCommands
     $agentsPath = Update-AgentsFile $managedSection
     $agentsStatus = 'updated'
+    $contextAudit = Get-ContextAudit
 }
+$readiness = Get-Readiness $gitAudit $contextAudit $largeFiles $secretFindings $validationCommands
 
 $report = [ordered]@{
     Timestamp = [DateTime]::UtcNow.ToString('o')
@@ -345,6 +476,9 @@ $report = [ordered]@{
     Stack = $stacks
     FilesInspected = $allFiles.Count
     ValidationCommands = $validationCommands
+    Readiness = $readiness
+    Git = $gitAudit
+    ContextFiles = $contextAudit
     AgentsFile = @{
         Path = $agentsPath
         Status = $agentsStatus
@@ -368,10 +502,17 @@ Write-Host "Files checked : $($allFiles.Count)"
 Write-Host "AGENTS.md     : $agentsStatus"
 Write-Host "Large files   : $($largeFiles.Count)"
 Write-Host "Secrets check : $($report.SecretScan.Status)"
+Write-Host "Git status    : $(if ($gitAudit.IsRepository) { "$($gitAudit.Branch), $($gitAudit.DirtyFileCount) change(s)" } elseif ($gitAudit.Available) { 'not a repository' } else { 'git unavailable' })"
+Write-Host "Readiness     : $($readiness.Score)/100"
 Write-Host ''
 Write-Host 'Recommended validation commands:'
 foreach ($command in $validationCommands) {
     Write-Host "  $command"
+}
+Write-Host ''
+Write-Host 'Recommendations:'
+foreach ($recommendation in $readiness.Recommendations) {
+    Write-Host "  - $recommendation"
 }
 if ($secretFindings.Count -gt 0) {
     Write-Warning "Review $($secretFindings.Count) possible secret finding(s). Values were intentionally hidden."

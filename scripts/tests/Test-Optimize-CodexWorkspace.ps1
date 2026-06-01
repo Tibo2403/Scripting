@@ -15,6 +15,7 @@ try {
     Set-Content -LiteralPath (Join-Path $testRoot 'pyproject.toml') -Value '[tool.pytest.ini_options]'
     Set-Content -LiteralPath (Join-Path $testRoot '.env') -Value "OPENAI_API_KEY=$fakeKey"
     Set-Content -LiteralPath $agentsPath -Value "# Team guidance`n`nKeep this line."
+    git -C $testRoot init | Out-Null
 
     & $doctor -ProjectPath $testRoot -Fix -ReportPath $reportPath
     & $doctor -ProjectPath $testRoot -Fix -ReportPath $reportPath
@@ -37,6 +38,15 @@ try {
     }
     if ($report.SecretScan.Status -ne 'review-required') {
         throw 'The fake API key was not reported.'
+    }
+    if (-not $report.Git.IsRepository -or $report.Git.DirtyFileCount -eq 0) {
+        throw 'Git repository changes were not reported.'
+    }
+    if ($report.Readiness.Score -ge 100) {
+        throw 'Readiness score did not account for findings.'
+    }
+    if ('README.md' -notin $report.ContextFiles.Missing) {
+        throw 'Missing README.md was not reported.'
     }
     if ((Get-Content -LiteralPath $reportPath -Raw) -match [regex]::Escape($fakeKey)) {
         throw 'A secret value leaked into the report.'

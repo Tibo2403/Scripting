@@ -17,7 +17,10 @@ The report includes:
 - large files that deserve review before adding them to context;
 - common generated directories already present in the project;
 - possible secrets, with values intentionally hidden;
-- the status of `AGENTS.md`.
+- the status of `AGENTS.md`;
+- Git branch and uncommitted changes;
+- missing context files such as `README.md` or `.gitignore`;
+- a readiness score and prioritized recommendations.
 
 ## Generate Codex Guidance
 
