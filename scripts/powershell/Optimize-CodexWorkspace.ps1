@@ -682,6 +682,9 @@ $resolvedProject = Resolve-Path -LiteralPath $ProjectPath
 if (-not (Test-Path -LiteralPath $resolvedProject.Path -PathType Container)) {
     throw "ProjectPath must be a directory: $ProjectPath"
 }
+$resolvedProject = [pscustomobject]@{
+    Path = (Get-Item -LiteralPath $resolvedProject.Path).FullName
+}
 if ($Fix -and $Disable) {
     throw 'Use either -Fix or -Disable, not both.'
 }

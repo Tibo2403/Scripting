@@ -56,6 +56,9 @@ try {
     if ($report.SecretScan.Findings.Count -ne 1) {
         throw 'Files in excluded directories were scanned for secrets.'
     }
+    if ($report.SecretScan.Findings[0].Path -ne '.env') {
+        throw 'Secret finding paths were not reported relative to the project root.'
+    }
     if ('frontend\node_modules' -notin $report.ContextReview.ExcludedDirectoriesPresent) {
         throw 'Nested excluded directories were not reported.'
     }
