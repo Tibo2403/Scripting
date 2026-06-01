@@ -18,7 +18,7 @@ try {
     git -C $testRoot init | Out-Null
 
     & $doctor -ProjectPath $testRoot -Fix -ReportPath $reportPath
-    & $doctor -ProjectPath $testRoot -Fix -ReportPath $reportPath
+    & $doctor -ProjectPath $testRoot -Fix -Validate -ReportPath $reportPath
 
     $agents = Get-Content -LiteralPath $agentsPath -Raw
     $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
@@ -44,6 +44,9 @@ try {
     }
     if ($report.Readiness.Score -ge 100) {
         throw 'Readiness score did not account for findings.'
+    }
+    if ($report.Efficiency.Status -eq 'not-measured' -or $report.ValidationResults.Count -eq 0) {
+        throw 'Efficiency metric was not calculated from validation results.'
     }
     if ('README.md' -notin $report.ContextFiles.Missing) {
         throw 'Missing README.md was not reported.'

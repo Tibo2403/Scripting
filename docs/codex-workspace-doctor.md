@@ -22,6 +22,26 @@ The report includes:
 - missing context files such as `README.md` or `.gitignore`;
 - a readiness score and prioritized recommendations.
 
+## Measure Efficiency
+
+```powershell
+.\scripts\powershell\Optimize-CodexWorkspace.ps1 `
+  -ProjectPath . `
+  -Validate `
+  -ReportPath .\codex-workspace-report.json
+```
+
+Without `-Validate`, efficiency is reported as `not-measured`. With
+`-Validate`, the doctor executes its detected project checks and calculates:
+
+```text
+Efficiency = 50% workspace readiness + 50% successful executable validations
+```
+
+The JSON report includes each validation status and duration. This measures
+workspace preparation and automated verification, not model quality or token
+usage.
+
 ## Generate Codex Guidance
 
 ```powershell

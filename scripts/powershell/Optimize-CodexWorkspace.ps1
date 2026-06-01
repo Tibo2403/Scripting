@@ -16,6 +16,8 @@
     Size threshold for files that should be reviewed before adding them to context.
 .PARAMETER LaunchCodex
     Starts Codex CLI in the inspected directory after the audit.
+.PARAMETER Validate
+    Runs the detected validation commands and calculates an efficiency metric.
 .EXAMPLE
     PS> .\Optimize-CodexWorkspace.ps1 -ProjectPath C:\Projects\HealthApp
 .EXAMPLE
@@ -30,6 +32,7 @@ param(
     [string]$ReportPath,
     [ValidateRange(1, 10240)]
     [int]$MaxFileSizeMB = 1,
+    [switch]$Validate,
     [switch]$LaunchCodex
 )
 
@@ -240,6 +243,159 @@ function Get-SecretFindings {
         }
     }
     return @($findings)
+}
+
+function Invoke-NativeValidation {
+    param(
+        [string]$Executable,
+        [string[]]$Arguments
+    )
+
+    if (-not (Get-Command $Executable -ErrorAction SilentlyContinue)) {
+        return [ordered]@{
+            Status = 'unavailable'
+            ExitCode = $null
+        }
+    }
+
+    & $Executable @Arguments *> $null
+    return [ordered]@{
+        Status = if ($LASTEXITCODE -eq 0) { 'passed' } else { 'failed' }
+        ExitCode = $LASTEXITCODE
+    }
+}
+
+function Invoke-ValidationCommands {
+    param(
+        [string[]]$Commands
+    )
+
+    $results = [System.Collections.Generic.List[object]]::new()
+    Push-Location $resolvedProject.Path
+    try {
+        foreach ($command in $Commands) {
+            $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+            $result = $null
+            try {
+                switch -Regex ($command) {
+                    '^python -m pytest$' {
+                        $result = Invoke-NativeValidation 'python' @('-m', 'pytest')
+                        break
+                    }
+                    '^python -m compileall \.$' {
+                        $result = Invoke-NativeValidation 'python' @('-m', 'compileall', '.')
+                        break
+                    }
+                    '^npm run (test|lint|build)$' {
+                        $result = Invoke-NativeValidation 'npm' @('run', $Matches[1])
+                        break
+                    }
+                    '^go test \./\.\.\.$' {
+                        $result = Invoke-NativeValidation 'go' @('test', './...')
+                        break
+                    }
+                    '^cargo test$' {
+                        $result = Invoke-NativeValidation 'cargo' @('test')
+                        break
+                    }
+                    '^dotnet test$' {
+                        $result = Invoke-NativeValidation 'dotnet' @('test')
+                        break
+                    }
+                    '^mvn test$' {
+                        $result = Invoke-NativeValidation 'mvn' @('test')
+                        break
+                    }
+                    '^\.\\gradlew test$' {
+                        $result = Invoke-NativeValidation '.\gradlew' @('test')
+                        break
+                    }
+                    '^Invoke-ScriptAnalyzer -Path \. -Recurse$' {
+                        if (Get-Command Invoke-ScriptAnalyzer -ErrorAction SilentlyContinue) {
+                            $findings = @(Invoke-ScriptAnalyzer -Path . -Recurse)
+                            $result = [ordered]@{
+                                Status = if ($findings.Count -eq 0) { 'passed' } else { 'failed' }
+                                ExitCode = if ($findings.Count -eq 0) { 0 } else { 1 }
+                            }
+                        }
+                        else {
+                            $result = [ordered]@{
+                                Status = 'unavailable'
+                                ExitCode = $null
+                            }
+                        }
+                        break
+                    }
+                    default {
+                        $result = [ordered]@{
+                            Status = 'skipped'
+                            ExitCode = $null
+                        }
+                    }
+                }
+            }
+            catch {
+                $result = [ordered]@{
+                    Status = 'failed'
+                    ExitCode = $null
+                }
+            }
+            finally {
+                $stopwatch.Stop()
+            }
+            $results.Add([pscustomobject]@{
+                Command = $command
+                Status = $result.Status
+                ExitCode = $result.ExitCode
+                DurationSeconds = [math]::Round($stopwatch.Elapsed.TotalSeconds, 3)
+            })
+        }
+    }
+    finally {
+        Pop-Location
+    }
+    return @($results)
+}
+
+function Get-EfficiencyMetric {
+    param(
+        [hashtable]$Readiness,
+        [object[]]$ValidationResults,
+        [bool]$ValidateRequested
+    )
+
+    if (-not $ValidateRequested) {
+        return [ordered]@{
+            Status = 'not-measured'
+            Score = $null
+            ValidationPassRate = $null
+            DurationSeconds = 0
+            Explanation = 'Run with -Validate to measure efficiency using detected project checks.'
+        }
+    }
+
+    $executed = @($ValidationResults | Where-Object { $_.Status -in @('passed', 'failed') })
+    $duration = ($ValidationResults | Measure-Object -Property DurationSeconds -Sum).Sum
+    if ($executed.Count -eq 0) {
+        return [ordered]@{
+            Status = 'unavailable'
+            Score = $null
+            ValidationPassRate = $null
+            DurationSeconds = [math]::Round($duration, 3)
+            Explanation = 'No detected validation command could be executed on this machine.'
+        }
+    }
+
+    $passed = @($executed | Where-Object { $_.Status -eq 'passed' }).Count
+    $passRate = [math]::Round(($passed / $executed.Count) * 100, 2)
+    $score = [math]::Round(($Readiness.Score * 0.5) + ($passRate * 0.5), 2)
+    return [ordered]@{
+        Status = 'measured'
+        Score = $score
+        ValidationPassRate = $passRate
+        DurationSeconds = [math]::Round($duration, 3)
+        Explanation = 'Score = 50% workspace readiness + 50% successful executable validations.'
+    }
 }
 
 function Invoke-Git {
@@ -469,6 +625,13 @@ if ($Fix) {
     $contextAudit = Get-ContextAudit
 }
 $readiness = Get-Readiness $gitAudit $contextAudit $largeFiles $secretFindings $validationCommands
+$validationResults = if ($Validate) {
+    @(Invoke-ValidationCommands $validationCommands)
+}
+else {
+    @()
+}
+$efficiency = Get-EfficiencyMetric $readiness $validationResults $Validate
 
 $report = [ordered]@{
     Timestamp = [DateTime]::UtcNow.ToString('o')
@@ -476,6 +639,8 @@ $report = [ordered]@{
     Stack = $stacks
     FilesInspected = $allFiles.Count
     ValidationCommands = $validationCommands
+    ValidationResults = $validationResults
+    Efficiency = $efficiency
     Readiness = $readiness
     Git = $gitAudit
     ContextFiles = $contextAudit
@@ -504,10 +669,18 @@ Write-Host "Large files   : $($largeFiles.Count)"
 Write-Host "Secrets check : $($report.SecretScan.Status)"
 Write-Host "Git status    : $(if ($gitAudit.IsRepository) { "$($gitAudit.Branch), $($gitAudit.DirtyFileCount) change(s)" } elseif ($gitAudit.Available) { 'not a repository' } else { 'git unavailable' })"
 Write-Host "Readiness     : $($readiness.Score)/100"
+Write-Host "Efficiency    : $(if ($null -ne $efficiency.Score) { "$($efficiency.Score)/100" } else { $efficiency.Status })"
 Write-Host ''
 Write-Host 'Recommended validation commands:'
 foreach ($command in $validationCommands) {
     Write-Host "  $command"
+}
+if ($Validate) {
+    Write-Host ''
+    Write-Host 'Validation results:'
+    foreach ($validationResult in $validationResults) {
+        Write-Host "  $($validationResult.Status): $($validationResult.Command) ($($validationResult.DurationSeconds)s)"
+    }
 }
 Write-Host ''
 Write-Host 'Recommendations:'

@@ -111,7 +111,7 @@ bash scripts/tests/test-linux-safety.sh
 ```powershell
 .\scripts\powershell\Get-SystemInfo.ps1
 .\scripts\powershell\ManageServices.ps1 -Action status -ServiceName spooler
-.\scripts\powershell\Optimize-CodexWorkspace.ps1 -ProjectPath . -Fix
+.\scripts\powershell\Optimize-CodexWorkspace.ps1 -ProjectPath . -Fix -Validate
 .\scripts\powershell\VMManagement.ps1 -Action list
 .\scripts\powershell\TeamsManagement.ps1 -Action list
 .\scripts\powershell\ExchangeOnlineManagement.ps1 -Action list
