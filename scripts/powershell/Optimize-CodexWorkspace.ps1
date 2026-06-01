@@ -238,7 +238,9 @@ function Get-SecretFindings {
                 if ($line -match $pattern.Pattern) {
                     if ($pattern.Name -eq 'Assigned secret') {
                         $assignedValue = $Matches[2]
-                        if ($assignedValue -match '^(\$|os\.environ/|process\.env|Read-Host|<|\$\{)') {
+                        if ($assignedValue -match '^(\$|os\.environ/|process\.env|import\.meta\.env|Deno\.env|env\[|current\[|Read-Host|e\.target\.value|https?://|<|\$\{)' -or
+                            $line -match 'Date\.now\(\)|\bpassword:\s*string\b' -or
+                            $assignedValue -match '^[A-Za-z_][A-Za-z0-9_]*[,;]$') {
                             continue
                         }
                     }
@@ -439,7 +441,7 @@ function Invoke-Git {
         [string[]]$Arguments
     )
 
-    $output = & git -C $resolvedProject.Path @Arguments 2>$null
+    $output = & git -c "safe.directory=$($resolvedProject.Path)" -C $resolvedProject.Path @Arguments 2>$null
     if ($LASTEXITCODE -ne 0) {
         return $null
     }
