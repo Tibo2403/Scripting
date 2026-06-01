@@ -259,9 +259,11 @@ function Invoke-NativeValidation {
     }
 
     & $Executable @Arguments *> $null
+    $exitCode = $LASTEXITCODE
+    $global:LASTEXITCODE = 0
     return [ordered]@{
-        Status = if ($LASTEXITCODE -eq 0) { 'passed' } else { 'failed' }
-        ExitCode = $LASTEXITCODE
+        Status = if ($exitCode -eq 0) { 'passed' } else { 'failed' }
+        ExitCode = $exitCode
     }
 }
 
