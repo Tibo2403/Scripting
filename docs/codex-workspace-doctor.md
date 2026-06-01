@@ -15,7 +15,8 @@ The report includes:
 - detected languages and frameworks;
 - recommended validation commands;
 - large files that deserve review before adding them to context;
-- common generated directories already present in the project;
+- generated directories skipped during the scan, including nested paths;
+- directory links skipped to avoid duplicate traversal or recursive loops;
 - possible secrets, with values intentionally hidden;
 - the status of `AGENTS.md`;
 - Git branch and uncommitted changes;

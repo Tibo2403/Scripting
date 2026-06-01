@@ -11,10 +11,13 @@ if (Test-Path -LiteralPath $testRoot) {
 
 try {
     New-Item -ItemType Directory -Path (Join-Path $testRoot 'tests') -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $testRoot 'frontend\node_modules\sample') -Force | Out-Null
     $fakeKey = 's' + 'k-test-workspace-doctor-not-real'
+    $excludedFakeKey = 's' + 'k-excluded-workspace-doctor-not-real'
     Set-Content -LiteralPath (Join-Path $testRoot 'package.json') -Value '{"scripts":{"test":"node test.js","build":"node build.js"}}'
     Set-Content -LiteralPath (Join-Path $testRoot 'pyproject.toml') -Value '[tool.pytest.ini_options]'
     Set-Content -LiteralPath (Join-Path $testRoot '.env') -Value "OPENAI_API_KEY=$fakeKey"
+    Set-Content -LiteralPath (Join-Path $testRoot 'frontend\node_modules\sample\.env') -Value "OPENAI_API_KEY=$excludedFakeKey"
     Set-Content -LiteralPath $agentsPath -Value "# Team guidance`n`nKeep this line."
     git -C $testRoot init | Out-Null
 
@@ -50,6 +53,15 @@ try {
     if ($report.SecretScan.Status -ne 'review-required') {
         throw 'The fake API key was not reported.'
     }
+    if ($report.SecretScan.Findings.Count -ne 1) {
+        throw 'Files in excluded directories were scanned for secrets.'
+    }
+    if ('frontend\node_modules' -notin $report.ContextReview.ExcludedDirectoriesPresent) {
+        throw 'Nested excluded directories were not reported.'
+    }
+    if ($report.ContextReview.ExcludedDirectoryCount -ne $report.ContextReview.ExcludedDirectoriesPresent.Count) {
+        throw 'The excluded directory count is incorrect.'
+    }
     if (-not $report.Git.IsRepository -or $report.Git.DirtyFileCount -eq 0) {
         throw 'Git repository changes were not reported.'
     }
@@ -68,6 +80,9 @@ try {
     }
     if ((Get-Content -LiteralPath $reportPath -Raw) -match [regex]::Escape($fakeKey)) {
         throw 'A secret value leaked into the report.'
+    }
+    if ((Get-Content -LiteralPath $reportPath -Raw) -match [regex]::Escape($excludedFakeKey)) {
+        throw 'A secret value from an excluded directory leaked into the report.'
     }
 
     & $doctor -ProjectPath $testRoot -Validate -AllowProjectCommands -ReportPath $trustedReportPath

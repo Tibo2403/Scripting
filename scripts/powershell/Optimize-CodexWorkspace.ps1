@@ -88,6 +88,41 @@ function Test-IsExcluded {
     return $false
 }
 
+function Get-ProjectInventory {
+    $files = [System.Collections.Generic.List[System.IO.FileInfo]]::new()
+    $excludedPaths = [System.Collections.Generic.List[string]]::new()
+    $reparsePointPaths = [System.Collections.Generic.List[string]]::new()
+    $pendingDirectories = [System.Collections.Generic.Stack[System.IO.DirectoryInfo]]::new()
+    $pendingDirectories.Push((Get-Item -LiteralPath $resolvedProject.Path))
+
+    while ($pendingDirectories.Count -gt 0) {
+        $directory = $pendingDirectories.Pop()
+        foreach ($item in Get-ChildItem -LiteralPath $directory.FullName -Force -ErrorAction SilentlyContinue) {
+            $relativePath = Get-RelativePath $resolvedProject.Path $item.FullName
+            if (-not $item.PSIsContainer) {
+                $files.Add($item)
+                continue
+            }
+
+            if (Test-IsExcluded $relativePath) {
+                $excludedPaths.Add($relativePath)
+                continue
+            }
+            if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+                $reparsePointPaths.Add($relativePath)
+                continue
+            }
+            $pendingDirectories.Push($item)
+        }
+    }
+
+    return [ordered]@{
+        Files = @($files)
+        ExcludedPaths = @($excludedPaths | Sort-Object)
+        ReparsePointPaths = @($reparsePointPaths | Sort-Object)
+    }
+}
+
 function Add-UniqueValue {
     param(
         [System.Collections.Generic.List[string]]$List,
@@ -651,17 +686,8 @@ if ($Fix -and $Disable) {
     throw 'Use either -Fix or -Disable, not both.'
 }
 
-$allFiles = @(
-    Get-ChildItem -LiteralPath $resolvedProject.Path -Recurse -Force -File -ErrorAction SilentlyContinue |
-        Where-Object {
-            $relativePath = Get-RelativePath $resolvedProject.Path $_.FullName
-            -not (Test-IsExcluded $relativePath)
-        }
-)
-$presentExcludedDirectories = @(
-    $excludedDirectories |
-        Where-Object { Test-Path -LiteralPath (Join-Path $resolvedProject.Path $_) }
-)
+$inventory = Get-ProjectInventory
+$allFiles = @($inventory.Files)
 $largeFiles = @(
     $allFiles |
         Where-Object { $_.Length -gt ($MaxFileSizeMB * 1MB) } |
@@ -718,7 +744,10 @@ $report = [ordered]@{
         Status = $agentsStatus
     }
     ContextReview = @{
-        ExcludedDirectoriesPresent = $presentExcludedDirectories
+        ExcludedDirectoriesPresent = $inventory.ExcludedPaths
+        ExcludedDirectoryCount = $inventory.ExcludedPaths.Count
+        ReparsePointsSkipped = $inventory.ReparsePointPaths
+        ReparsePointCount = $inventory.ReparsePointPaths.Count
         LargeFiles = $largeFiles
         ThresholdMB = $MaxFileSizeMB
     }
@@ -733,6 +762,8 @@ Write-Host '----------------------'
 Write-Host "Project       : $($report.Project)"
 Write-Host "Stack         : $($stacks -join ', ')"
 Write-Host "Files checked : $($allFiles.Count)"
+Write-Host "Dirs excluded : $($inventory.ExcludedPaths.Count)"
+Write-Host "Links skipped : $($inventory.ReparsePointPaths.Count)"
 Write-Host "AGENTS.md     : $agentsStatus"
 Write-Host "Large files   : $($largeFiles.Count)"
 Write-Host "Secrets check : $($report.SecretScan.Status)"
