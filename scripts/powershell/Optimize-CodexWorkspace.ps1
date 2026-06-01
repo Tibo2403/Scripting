@@ -10,8 +10,12 @@
     Repository or project directory to inspect. Defaults to the current directory.
 .PARAMETER Fix
     Creates or refreshes the managed Codex Workspace Doctor section in AGENTS.md.
+.PARAMETER Disable
+    Removes only the managed Codex Workspace Doctor section from AGENTS.md.
 .PARAMETER ReportPath
     Optional path for a JSON report.
+.PARAMETER ForceReportOverwrite
+    Allows an existing JSON report to be replaced.
 .PARAMETER MaxFileSizeMB
     Size threshold for files that should be reviewed before adding them to context.
 .PARAMETER LaunchCodex
@@ -32,7 +36,9 @@ param(
     [Parameter(Position = 0)]
     [string]$ProjectPath = (Get-Location).Path,
     [switch]$Fix,
+    [switch]$Disable,
     [string]$ReportPath,
+    [switch]$ForceReportOverwrite,
     [ValidateRange(1, 10240)]
     [int]$MaxFileSizeMB = 1,
     [switch]$Validate,
@@ -613,9 +619,34 @@ function Update-AgentsFile {
     return $agentsPath
 }
 
+function Disable-AgentsFile {
+    $agentsPath = Join-Path $resolvedProject.Path 'AGENTS.md'
+    if (-not (Test-Path -LiteralPath $agentsPath)) {
+        return $agentsPath
+    }
+
+    $existing = Get-Content -LiteralPath $agentsPath -Raw
+    $pattern = '(?s)\s*' + [regex]::Escape($beginMarker) + '.*?' + [regex]::Escape($endMarker) + '\s*'
+    $updated = [regex]::Replace($existing, $pattern, "`n").Trim()
+    if ($updated -eq '# AGENTS.md') {
+        if ($PSCmdlet.ShouldProcess($agentsPath, 'Remove generated AGENTS.md file')) {
+            Remove-Item -LiteralPath $agentsPath -Force
+        }
+    }
+    elseif ($existing -ne $updated) {
+        if ($PSCmdlet.ShouldProcess($agentsPath, 'Remove managed Codex workspace guidance')) {
+            Set-Content -LiteralPath $agentsPath -Value ($updated + "`n") -Encoding utf8
+        }
+    }
+    return $agentsPath
+}
+
 $resolvedProject = Resolve-Path -LiteralPath $ProjectPath
 if (-not (Test-Path -LiteralPath $resolvedProject.Path -PathType Container)) {
     throw "ProjectPath must be a directory: $ProjectPath"
+}
+if ($Fix -and $Disable) {
+    throw 'Use either -Fix or -Disable, not both.'
 }
 
 $allFiles = @(
@@ -652,6 +683,11 @@ if ($Fix) {
     $managedSection = Get-ManagedAgentsSection $stacks $validationCommands
     $agentsPath = Update-AgentsFile $managedSection
     $agentsStatus = 'updated'
+    $contextAudit = Get-ContextAudit
+}
+elseif ($Disable) {
+    $agentsPath = Disable-AgentsFile
+    $agentsStatus = if (Test-Path -LiteralPath $agentsPath) { 'disabled-managed-section' } else { 'disabled' }
     $contextAudit = Get-ContextAudit
 }
 $readiness = Get-Readiness $gitAudit $contextAudit $largeFiles $secretFindings $validationCommands
@@ -725,12 +761,20 @@ if ($secretFindings.Count -gt 0) {
 }
 
 if ($ReportPath) {
+    if (Test-Path -LiteralPath $ReportPath -PathType Container) {
+        throw "ReportPath must be a file path: $ReportPath"
+    }
+    if ((Test-Path -LiteralPath $ReportPath) -and -not $ForceReportOverwrite) {
+        throw "Report already exists. Use -ForceReportOverwrite to replace it: $ReportPath"
+    }
     $reportDirectory = Split-Path -Parent $ReportPath
     if ($reportDirectory -and -not (Test-Path -LiteralPath $reportDirectory)) {
         New-Item -ItemType Directory -Path $reportDirectory -Force | Out-Null
     }
-    $report | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $ReportPath -Encoding utf8
-    Write-Host "Report saved  : $ReportPath"
+    if ($PSCmdlet.ShouldProcess($ReportPath, 'Write workspace doctor JSON report')) {
+        $report | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $ReportPath -Encoding utf8
+        Write-Host "Report saved  : $ReportPath"
+    }
 }
 
 if ($LaunchCodex) {

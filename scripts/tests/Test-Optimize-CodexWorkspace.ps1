@@ -19,7 +19,17 @@ try {
     git -C $testRoot init | Out-Null
 
     & $doctor -ProjectPath $testRoot -Fix -ReportPath $reportPath
-    & $doctor -ProjectPath $testRoot -Fix -Validate -ReportPath $reportPath
+    $overwriteRefused = $false
+    try {
+        & $doctor -ProjectPath $testRoot -ReportPath $reportPath
+    }
+    catch {
+        $overwriteRefused = $_.Exception.Message -match 'Report already exists'
+    }
+    if (-not $overwriteRefused) {
+        throw 'Existing reports can be overwritten without explicit opt-in.'
+    }
+    & $doctor -ProjectPath $testRoot -Fix -Validate -ReportPath $reportPath -ForceReportOverwrite
 
     $agents = Get-Content -LiteralPath $agentsPath -Raw
     $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
@@ -65,6 +75,23 @@ try {
     $trustedNpmValidation = @($trustedReport.ValidationResults | Where-Object { $_.Command -eq 'npm run test' })
     if ($trustedNpmValidation.Count -ne 1 -or $trustedNpmValidation[0].Status -eq 'skipped') {
         throw 'Trusted project validation commands did not run after explicit opt-in.'
+    }
+
+    & $doctor -ProjectPath $testRoot -Disable
+    $disabledAgents = Get-Content -LiteralPath $agentsPath -Raw
+    if ($disabledAgents -match '<!-- BEGIN CODEX WORKSPACE DOCTOR -->') {
+        throw 'The managed AGENTS.md block was not removed.'
+    }
+    if ($disabledAgents -notmatch 'Keep this line') {
+        throw 'Disabling removed human AGENTS.md guidance.'
+    }
+
+    $generatedOnlyRoot = Join-Path $testRoot 'generated-only'
+    New-Item -ItemType Directory -Path $generatedOnlyRoot -Force | Out-Null
+    & $doctor -ProjectPath $generatedOnlyRoot -Fix
+    & $doctor -ProjectPath $generatedOnlyRoot -Disable
+    if (Test-Path -LiteralPath (Join-Path $generatedOnlyRoot 'AGENTS.md')) {
+        throw 'Generated-only AGENTS.md was not removed when disabled.'
     }
 
     Write-Host 'Codex Workspace Doctor smoke test passed.'

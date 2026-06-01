@@ -63,6 +63,17 @@ Run them only for a repository that you trust:
 `-Fix` creates or updates a marked section in `AGENTS.md`. Existing human
 instructions outside that section are preserved.
 
+## Disable Generated Guidance
+
+```powershell
+.\scripts\powershell\Optimize-CodexWorkspace.ps1 `
+  -ProjectPath . `
+  -Disable
+```
+
+`-Disable` removes only the managed section. Existing human instructions are
+preserved. If `AGENTS.md` contains only generated guidance, the file is removed.
+
 ## Save a JSON Report
 
 ```powershell
@@ -72,6 +83,15 @@ instructions outside that section are preserved.
 ```
 
 The JSON report never contains detected secret values.
+
+Replacing an existing report requires explicit confirmation:
+
+```powershell
+.\scripts\powershell\Optimize-CodexWorkspace.ps1 `
+  -ProjectPath . `
+  -ReportPath .\codex-workspace-report.json `
+  -ForceReportOverwrite
+```
 
 ## Launch Codex
 
