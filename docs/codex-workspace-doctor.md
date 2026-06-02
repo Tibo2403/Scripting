@@ -18,6 +18,7 @@ The report includes:
 - generated directories skipped during the scan, including nested paths;
 - directory links skipped to avoid duplicate traversal or recursive loops;
 - possible secrets, with values intentionally hidden;
+- large text files skipped by the configurable secret scan size limit;
 - the status of `AGENTS.md`;
 - Git branch and uncommitted changes;
 - missing context files such as `README.md` or `.gitignore`;
@@ -39,9 +40,10 @@ Without `-Validate`, efficiency is reported as `not-measured`. With
 Efficiency = 50% workspace readiness + 50% successful executable validations
 ```
 
-The JSON report includes each validation status and duration. This measures
-workspace preparation and automated verification, not model quality or token
-usage.
+The JSON report includes each validation status and duration. Failed or
+timed-out native commands also include a limited, redacted output tail. This
+measures workspace preparation and automated verification, not model quality or
+token usage.
 
 Tests and builds defined by a project can execute arbitrary repository code.
 Run them only for a repository that you trust:
@@ -52,6 +54,35 @@ Run them only for a repository that you trust:
   -Validate `
   -AllowProjectCommands
 ```
+
+Native validation commands stop after five minutes by default. Adjust the
+timeout and retained diagnostic size when needed:
+
+```powershell
+.\scripts\powershell\Optimize-CodexWorkspace.ps1 `
+  -ProjectPath . `
+  -Validate `
+  -AllowProjectCommands `
+  -ValidationTimeoutSeconds 120 `
+  -ValidationLogLineLimit 30
+```
+
+## Enforce a CI Policy
+
+`-FailOn` returns a non-zero exit code when one of the selected conditions is
+found. The JSON report is still written before the script exits.
+
+```powershell
+.\scripts\powershell\Optimize-CodexWorkspace.ps1 `
+  -ProjectPath . `
+  -Validate `
+  -FailOn Secret,ValidationFailure,LowReadiness `
+  -MinimumReadinessScore 80 `
+  -ReportPath .\codex-workspace-report.json
+```
+
+Use `-AllowProjectCommands` as well when CI should run repository-defined tests
+and builds. `-FailOn ValidationFailure` requires `-Validate`.
 
 ## Generate Codex Guidance
 
@@ -84,6 +115,17 @@ preserved. If `AGENTS.md` contains only generated guidance, the file is removed.
 ```
 
 The JSON report never contains detected secret values.
+
+Text files larger than `1 MB` are reported but not scanned for secrets by
+default. A scan with skipped text files reports `partial` instead of `passed`
+when no secret finding requires review. Adjust the limit for trusted
+repositories when needed:
+
+```powershell
+.\scripts\powershell\Optimize-CodexWorkspace.ps1 `
+  -ProjectPath . `
+  -SecretScanMaxFileSizeMB 5
+```
 
 Replacing an existing report requires explicit confirmation:
 

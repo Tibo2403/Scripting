@@ -18,6 +18,8 @@
     Allows an existing JSON report to be replaced.
 .PARAMETER MaxFileSizeMB
     Size threshold for files that should be reviewed before adding them to context.
+.PARAMETER SecretScanMaxFileSizeMB
+    Maximum size of individual text files inspected for possible secrets.
 .PARAMETER LaunchCodex
     Starts Codex CLI in the inspected directory after the audit.
 .PARAMETER Validate
@@ -25,6 +27,16 @@
 .PARAMETER AllowProjectCommands
     Allows -Validate to execute project-defined tests and builds. Use only for
     repositories that you trust.
+.PARAMETER ValidationTimeoutSeconds
+    Maximum duration for each native validation command.
+.PARAMETER ValidationLogLineLimit
+    Maximum number of redacted standard output and error lines kept for failed
+    or timed-out native validations.
+.PARAMETER FailOn
+    Optional CI policy. Returns a non-zero exit code for the selected conditions:
+    Secret, ValidationFailure, or LowReadiness.
+.PARAMETER MinimumReadinessScore
+    Minimum acceptable readiness score when -FailOn LowReadiness is used.
 .EXAMPLE
     PS> .\Optimize-CodexWorkspace.ps1 -ProjectPath C:\Projects\HealthApp
 .EXAMPLE
@@ -41,8 +53,18 @@ param(
     [switch]$ForceReportOverwrite,
     [ValidateRange(1, 10240)]
     [int]$MaxFileSizeMB = 1,
+    [ValidateRange(1, 10240)]
+    [int]$SecretScanMaxFileSizeMB = 1,
     [switch]$Validate,
     [switch]$AllowProjectCommands,
+    [ValidateRange(1, 86400)]
+    [int]$ValidationTimeoutSeconds = 300,
+    [ValidateRange(1, 200)]
+    [int]$ValidationLogLineLimit = 20,
+    [ValidateSet('Secret', 'ValidationFailure', 'LowReadiness')]
+    [string[]]$FailOn = @(),
+    [ValidateRange(0, 100)]
+    [int]$MinimumReadinessScore = 80,
     [switch]$LaunchCodex
 )
 
@@ -241,31 +263,46 @@ function Get-ValidationCommands {
     return @($commands)
 }
 
-function Get-SecretFindings {
+function Get-SecretAudit {
     param(
         [System.IO.FileInfo[]]$Files
     )
 
     $openAiPattern = 's' + 'k-[A-Za-z0-9_-]{20,}'
     $githubPattern = 'gh' + '[pousr]_[A-Za-z0-9]{20,}'
+    $awsPattern = 'AK' + 'IA[0-9A-Z]{16}'
+    $gitlabPattern = 'gl' + 'pat-[A-Za-z0-9_-]{20,}'
+    $slackPattern = 'xo' + 'x[baprs]-[A-Za-z0-9-]{20,}'
+    $jwtPattern = 'ey' + 'J[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'
     $assignedPattern = '(?i)\b(password|passwd|api[_-]?key|token|secret)\b\s*[:=]\s*["'']?([^\s"'']{8,})'
     $privateKeyPattern = '-----BEGIN ([A-Z ]+ )?PRIVATE KEY-----'
     $patterns = @(
         @{ Name = 'OpenAI-style API key'; Pattern = $openAiPattern },
         @{ Name = 'GitHub token'; Pattern = $githubPattern },
+        @{ Name = 'AWS access key'; Pattern = $awsPattern },
+        @{ Name = 'GitLab token'; Pattern = $gitlabPattern },
+        @{ Name = 'Slack token'; Pattern = $slackPattern },
+        @{ Name = 'JWT token'; Pattern = $jwtPattern },
         @{ Name = 'Assigned secret'; Pattern = $assignedPattern },
         @{ Name = 'Private key'; Pattern = $privateKeyPattern }
     )
     $findings = [System.Collections.Generic.List[object]]::new()
+    $skippedLargeFiles = [System.Collections.Generic.List[object]]::new()
+    $scannedFileCount = 0
 
     foreach ($file in $Files) {
-        if ($file.Length -gt 1MB) {
-            continue
-        }
         if ($file.Extension -notin $textExtensions -and $file.Name -notin $textNames) {
             continue
         }
+        if ($file.Length -gt ($SecretScanMaxFileSizeMB * 1MB)) {
+            $skippedLargeFiles.Add([pscustomobject]@{
+                Path = Get-RelativePath $resolvedProject.Path $file.FullName
+                SizeMB = [math]::Round($file.Length / 1MB, 2)
+            })
+            continue
+        }
 
+        $scannedFileCount++
         $lineNumber = 0
         foreach ($line in Get-Content -LiteralPath $file.FullName -ErrorAction SilentlyContinue) {
             $lineNumber++
@@ -273,7 +310,7 @@ function Get-SecretFindings {
                 if ($line -match $pattern.Pattern) {
                     if ($pattern.Name -eq 'Assigned secret') {
                         $assignedValue = $Matches[2]
-                        if ($assignedValue -match '^(\$|os\.environ/|process\.env|import\.meta\.env|Deno\.env|env\[|current\[|Read-Host|e\.target\.value|https?://|<|\$\{)' -or
+                        if ($assignedValue -match '^(\$|os\.environ/|process\.env|import\.meta\.env|Deno\.env|env\[|current\[|Read-Host|e\.target\.value|https?://|<|\$\{|\[REDACTED\])' -or
                             $line -match 'Date\.now\(\)|\bpassword:\s*string\b' -or
                             $assignedValue -match '^[A-Za-z_][A-Za-z0-9_]*[,;]$') {
                             continue
@@ -289,7 +326,84 @@ function Get-SecretFindings {
             }
         }
     }
-    return @($findings)
+    return [ordered]@{
+        Findings = @($findings)
+        ScannedFileCount = $scannedFileCount
+        SkippedLargeFiles = @($skippedLargeFiles | Sort-Object -Property Path)
+    }
+}
+
+function ConvertTo-NativeArgument {
+    param(
+        [string]$Value
+    )
+
+    if ($Value -and $Value -notmatch '[\s"]') {
+        return $Value
+    }
+    return '"' + ($Value -replace '(\\*)"', '$1$1\"' -replace '(\\+)$', '$1$1') + '"'
+}
+
+function Protect-ValidationLogLine {
+    param(
+        [string]$Line
+    )
+
+    $redacted = $Line
+    $redacted = $redacted -replace ('s' + 'k-[A-Za-z0-9_-]{20,}'), '[REDACTED]'
+    $redacted = $redacted -replace ('gh' + '[pousr]_[A-Za-z0-9]{20,}'), '[REDACTED]'
+    $redacted = $redacted -replace ('AK' + 'IA[0-9A-Z]{16}'), '[REDACTED]'
+    $redacted = $redacted -replace ('gl' + 'pat-[A-Za-z0-9_-]{20,}'), '[REDACTED]'
+    $redacted = $redacted -replace ('xo' + 'x[baprs]-[A-Za-z0-9-]{20,}'), '[REDACTED]'
+    $redacted = $redacted -replace ('ey' + 'J[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'), '[REDACTED]'
+    $redacted = $redacted -replace '(?i)\b(password|passwd|api[_-]?key|token|secret)(\s*[:=]\s*["'']?)[^\s"'']{8,}', '$1$2[REDACTED]'
+    $redacted = $redacted -replace '-----BEGIN ([A-Z ]+ )?PRIVATE KEY-----', '[REDACTED PRIVATE KEY HEADER]'
+    return $redacted
+}
+
+function Get-RedactedOutputTail {
+    param(
+        [string]$Output
+    )
+
+    if (-not $Output) {
+        return @()
+    }
+    $lines = @($Output -split '\r?\n' | Where-Object { $_ })
+    if ($lines.Count -gt $ValidationLogLineLimit) {
+        $lines = @($lines | Select-Object -Last $ValidationLogLineLimit)
+    }
+    return @($lines | ForEach-Object { Protect-ValidationLogLine $_ })
+}
+
+function Stop-ValidationProcess {
+    param(
+        [System.Diagnostics.Process]$Process
+    )
+
+    $childProcessIds = @()
+    if ($env:OS -eq 'Windows_NT') {
+        $childProcessIds = @(
+            Get-CimInstance -ClassName Win32_Process -Filter "ParentProcessId = $($Process.Id)" -ErrorAction SilentlyContinue |
+                Select-Object -ExpandProperty ProcessId
+        )
+    }
+    foreach ($childProcessId in $childProcessIds) {
+        try {
+            Stop-ValidationProcess ([System.Diagnostics.Process]::GetProcessById($childProcessId))
+        }
+        catch {
+            # The child may have exited between discovery and termination.
+        }
+    }
+    try {
+        if (-not $Process.HasExited) {
+            $Process.Kill()
+        }
+    }
+    catch {
+        # The process may have exited between the state check and termination.
+    }
 }
 
 function Invoke-NativeValidation {
@@ -302,15 +416,63 @@ function Invoke-NativeValidation {
         return [ordered]@{
             Status = 'unavailable'
             ExitCode = $null
+            StdOutTail = @()
+            StdErrTail = @()
         }
     }
 
-    & $Executable @Arguments *> $null
-    $exitCode = $LASTEXITCODE
-    $global:LASTEXITCODE = 0
+    $resolvedExecutable = Get-Command $Executable -CommandType Application -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if (-not $resolvedExecutable) {
+        $resolvedExecutable = Get-Command $Executable -ErrorAction Stop
+    }
+    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.UseShellExecute = $false
+    $startInfo.WorkingDirectory = $resolvedProject.Path
+    $nativeArguments = @($Arguments | ForEach-Object { ConvertTo-NativeArgument $_ })
+    if ($resolvedExecutable.Source -match '\.(cmd|bat)$') {
+        $startInfo.FileName = $env:ComSpec
+        $invocation = @(
+            ConvertTo-NativeArgument $resolvedExecutable.Source
+            $nativeArguments
+        ) -join ' '
+        $startInfo.Arguments = '/d /s /c "' + $invocation + '"'
+    }
+    else {
+        $startInfo.FileName = $resolvedExecutable.Source
+        $startInfo.Arguments = $nativeArguments -join ' '
+    }
+
+    $process = [System.Diagnostics.Process]::new()
+    $process.StartInfo = $startInfo
+    $null = $process.Start()
+    $stdOutTask = $process.StandardOutput.ReadToEndAsync()
+    $stdErrTask = $process.StandardError.ReadToEndAsync()
+    $completed = $process.WaitForExit($ValidationTimeoutSeconds * 1000)
+    if (-not $completed) {
+        Stop-ValidationProcess $process
+    }
+    $process.WaitForExit()
+    $stdOut = $stdOutTask.Result
+    $stdErr = $stdErrTask.Result
+    $exitCode = if ($completed) { $process.ExitCode } else { $null }
+    $status = if (-not $completed) {
+        'timed-out'
+    }
+    elseif ($exitCode -eq 0) {
+        'passed'
+    }
+    else {
+        'failed'
+    }
     return [ordered]@{
-        Status = if ($exitCode -eq 0) { 'passed' } else { 'failed' }
+        Status = $status
         ExitCode = $exitCode
+        StdOutTail = if ($status -in @('failed', 'timed-out')) { @(Get-RedactedOutputTail $stdOut) } else { @() }
+        StdErrTail = if ($status -in @('failed', 'timed-out')) { @(Get-RedactedOutputTail $stdErr) } else { @() }
     }
 }
 
@@ -410,6 +572,8 @@ function Invoke-ValidationCommands {
                 $result = [ordered]@{
                     Status = 'failed'
                     ExitCode = $null
+                    StdOutTail = @()
+                    StdErrTail = @(Protect-ValidationLogLine $_.Exception.Message)
                 }
             }
             finally {
@@ -421,6 +585,8 @@ function Invoke-ValidationCommands {
                 ExitCode = $result.ExitCode
                 DurationSeconds = [math]::Round($stopwatch.Elapsed.TotalSeconds, 3)
                 Reason = if ($result.Contains('Reason')) { $result.Reason } else { $null }
+                StdOutTail = if ($result.Contains('StdOutTail')) { @($result.StdOutTail) } else { @() }
+                StdErrTail = if ($result.Contains('StdErrTail')) { @($result.StdErrTail) } else { @() }
             })
         }
     }
@@ -447,7 +613,7 @@ function Get-EfficiencyMetric {
         }
     }
 
-    $executed = @($ValidationResults | Where-Object { $_.Status -in @('passed', 'failed') })
+    $executed = @($ValidationResults | Where-Object { $_.Status -in @('passed', 'failed', 'timed-out') })
     $duration = ($ValidationResults | Measure-Object -Property DurationSeconds -Sum).Sum
     if ($executed.Count -eq 0) {
         return [ordered]@{
@@ -468,6 +634,36 @@ function Get-EfficiencyMetric {
         ValidationPassRate = $passRate
         DurationSeconds = [math]::Round($duration, 3)
         Explanation = 'Score = 50% workspace readiness + 50% successful executable validations.'
+    }
+}
+
+function Get-CiPolicy {
+    param(
+        [string[]]$Conditions,
+        [object[]]$SecretFindings,
+        [object[]]$ValidationResults,
+        [hashtable]$Readiness
+    )
+
+    $failures = [System.Collections.Generic.List[string]]::new()
+    if ('Secret' -in $Conditions -and $SecretFindings.Count -gt 0) {
+        $failures.Add("Secret scan requires review: $($SecretFindings.Count) finding(s).")
+    }
+    if ('ValidationFailure' -in $Conditions) {
+        $failedValidations = @($ValidationResults | Where-Object { $_.Status -in @('failed', 'timed-out') })
+        if ($failedValidations.Count -gt 0) {
+            $failures.Add("Validation failed or timed out: $($failedValidations.Count) command(s).")
+        }
+    }
+    if ('LowReadiness' -in $Conditions -and $Readiness.Score -lt $MinimumReadinessScore) {
+        $failures.Add("Readiness score $($Readiness.Score) is below the required $MinimumReadinessScore.")
+    }
+
+    return [ordered]@{
+        Status = if ($Conditions.Count -eq 0) { 'disabled' } elseif ($failures.Count -gt 0) { 'failed' } else { 'passed' }
+        FailOn = @($Conditions)
+        MinimumReadinessScore = $MinimumReadinessScore
+        Failures = @($failures)
     }
 }
 
@@ -544,6 +740,7 @@ function Get-Readiness {
         [hashtable]$ContextAudit,
         [object[]]$LargeFiles,
         [object[]]$SecretFindings,
+        [object[]]$SecretScanSkippedLargeFiles,
         [string[]]$Commands
     )
 
@@ -564,6 +761,10 @@ function Get-Readiness {
     if ($SecretFindings.Count -gt 0) {
         $score -= 30
         Add-UniqueValue $recommendations 'Review possible secrets before sharing context or committing changes.'
+    }
+    if ($SecretScanSkippedLargeFiles.Count -gt 0) {
+        $score -= 5
+        Add-UniqueValue $recommendations 'Review text files skipped by the secret scan size limit.'
     }
     if ($LargeFiles.Count -gt 0) {
         $score -= 10
@@ -688,6 +889,9 @@ $resolvedProject = [pscustomobject]@{
 if ($Fix -and $Disable) {
     throw 'Use either -Fix or -Disable, not both.'
 }
+if ('ValidationFailure' -in $FailOn -and -not $Validate) {
+    throw 'Use -Validate with -FailOn ValidationFailure.'
+}
 
 $inventory = Get-ProjectInventory
 $allFiles = @($inventory.Files)
@@ -704,7 +908,8 @@ $largeFiles = @(
 )
 $stacks = @(Get-DetectedStacks $allFiles)
 $validationCommands = @(Get-ValidationCommands $stacks)
-$secretFindings = @(Get-SecretFindings $allFiles)
+$secretAudit = Get-SecretAudit $allFiles
+$secretFindings = @($secretAudit.Findings)
 $gitAudit = Get-GitAudit
 $contextAudit = Get-ContextAudit
 $agentsPath = Join-Path $resolvedProject.Path 'AGENTS.md'
@@ -721,7 +926,7 @@ elseif ($Disable) {
     $agentsStatus = if (Test-Path -LiteralPath $agentsPath) { 'disabled-managed-section' } else { 'disabled' }
     $contextAudit = Get-ContextAudit
 }
-$readiness = Get-Readiness $gitAudit $contextAudit $largeFiles $secretFindings $validationCommands
+$readiness = Get-Readiness $gitAudit $contextAudit $largeFiles $secretFindings $secretAudit.SkippedLargeFiles $validationCommands
 $validationResults = if ($Validate) {
     @(Invoke-ValidationCommands $validationCommands $AllowProjectCommands)
 }
@@ -729,6 +934,7 @@ else {
     @()
 }
 $efficiency = Get-EfficiencyMetric $readiness $validationResults $Validate
+$ciPolicy = Get-CiPolicy $FailOn $secretFindings $validationResults $readiness
 
 $report = [ordered]@{
     Timestamp = [DateTime]::UtcNow.ToString('o')
@@ -737,8 +943,11 @@ $report = [ordered]@{
     FilesInspected = $allFiles.Count
     ValidationCommands = $validationCommands
     ValidationPolicy = if ($AllowProjectCommands) { 'project-commands-enabled' } else { 'static-only' }
+    ValidationTimeoutSeconds = $ValidationTimeoutSeconds
+    ValidationLogLineLimit = $ValidationLogLineLimit
     ValidationResults = $validationResults
     Efficiency = $efficiency
+    CI = $ciPolicy
     Readiness = $readiness
     Git = $gitAudit
     ContextFiles = $contextAudit
@@ -755,7 +964,19 @@ $report = [ordered]@{
         ThresholdMB = $MaxFileSizeMB
     }
     SecretScan = @{
-        Status = if ($secretFindings.Count -eq 0) { 'passed' } else { 'review-required' }
+        Status = if ($secretFindings.Count -gt 0) {
+            'review-required'
+        }
+        elseif ($secretAudit.SkippedLargeFiles.Count -gt 0) {
+            'partial'
+        }
+        else {
+            'passed'
+        }
+        FilesScanned = $secretAudit.ScannedFileCount
+        MaxFileSizeMB = $SecretScanMaxFileSizeMB
+        SkippedLargeFiles = $secretAudit.SkippedLargeFiles
+        SkippedLargeFileCount = $secretAudit.SkippedLargeFiles.Count
         Findings = $secretFindings
     }
 }
@@ -770,9 +991,11 @@ Write-Host "Links skipped : $($inventory.ReparsePointPaths.Count)"
 Write-Host "AGENTS.md     : $agentsStatus"
 Write-Host "Large files   : $($largeFiles.Count)"
 Write-Host "Secrets check : $($report.SecretScan.Status)"
+Write-Host "Secrets files : $($secretAudit.ScannedFileCount) scanned, $($secretAudit.SkippedLargeFiles.Count) skipped"
 Write-Host "Git status    : $(if ($gitAudit.IsRepository) { "$($gitAudit.Branch), $($gitAudit.DirtyFileCount) change(s)" } elseif ($gitAudit.Available) { 'not a repository' } else { 'git unavailable' })"
 Write-Host "Readiness     : $($readiness.Score)/100"
 Write-Host "Efficiency    : $(if ($null -ne $efficiency.Score) { "$($efficiency.Score)/100" } else { $efficiency.Status })"
+Write-Host "CI policy     : $($ciPolicy.Status)"
 Write-Host ''
 Write-Host 'Recommended validation commands:'
 foreach ($command in $validationCommands) {
@@ -784,6 +1007,9 @@ if ($Validate) {
     foreach ($validationResult in $validationResults) {
         $reason = if ($validationResult.Reason) { " - $($validationResult.Reason)" } else { '' }
         Write-Host "  $($validationResult.Status): $($validationResult.Command) ($($validationResult.DurationSeconds)s)$reason"
+        foreach ($line in @($validationResult.StdOutTail) + @($validationResult.StdErrTail)) {
+            Write-Host "    $line"
+        }
     }
 }
 Write-Host ''
@@ -794,6 +1020,9 @@ foreach ($recommendation in $readiness.Recommendations) {
 if ($secretFindings.Count -gt 0) {
     Write-Warning "Review $($secretFindings.Count) possible secret finding(s). Values were intentionally hidden."
     $secretFindings | Format-Table -AutoSize
+}
+if ($secretAudit.SkippedLargeFiles.Count -gt 0) {
+    Write-Warning "Review $($secretAudit.SkippedLargeFiles.Count) text file(s) skipped by the secret scan size limit."
 }
 
 if ($ReportPath) {
@@ -811,6 +1040,13 @@ if ($ReportPath) {
         $report | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $ReportPath -Encoding utf8
         Write-Host "Report saved  : $ReportPath"
     }
+}
+
+if ($ciPolicy.Status -eq 'failed') {
+    foreach ($failure in $ciPolicy.Failures) {
+        Write-Warning "CI policy failure: $failure"
+    }
+    exit 1
 }
 
 if ($LaunchCodex) {

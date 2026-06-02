@@ -3,6 +3,8 @@ $doctor = Join-Path $PSScriptRoot '..\powershell\Optimize-CodexWorkspace.ps1'
 $testRoot = Join-Path $env:TEMP 'codex-workspace-doctor-test'
 $reportPath = Join-Path $testRoot 'report.json'
 $trustedReportPath = Join-Path $testRoot 'trusted-report.json'
+$ciReportPath = Join-Path $testRoot 'ci-report.json'
+$partialReportPath = Join-Path $testRoot 'partial-report.json'
 $agentsPath = Join-Path $testRoot 'AGENTS.md'
 
 if (Test-Path -LiteralPath $testRoot) {
@@ -14,9 +16,15 @@ try {
     New-Item -ItemType Directory -Path (Join-Path $testRoot 'frontend\node_modules\sample') -Force | Out-Null
     $fakeKey = 's' + 'k-test-workspace-doctor-not-real'
     $excludedFakeKey = 's' + 'k-excluded-workspace-doctor-not-real'
-    Set-Content -LiteralPath (Join-Path $testRoot 'package.json') -Value '{"scripts":{"test":"node test.js","build":"node build.js"}}'
+    $fakeAwsKey = 'AK' + 'IA1234567890ABCDEF'
+    $validationLogSecret = 'validation-log-secret-value'
+    Set-Content -LiteralPath (Join-Path $testRoot 'package.json') -Value '{"scripts":{"test":"node test.js","lint":"node slow.js","build":"node build.js"}}'
+    Set-Content -LiteralPath (Join-Path $testRoot 'test.js') -Value "console.error('to' + 'ken=' + '$validationLogSecret'); process.exit(1);"
+    Set-Content -LiteralPath (Join-Path $testRoot 'slow.js') -Value "setTimeout(() => {}, 10000);"
     Set-Content -LiteralPath (Join-Path $testRoot 'pyproject.toml') -Value '[tool.pytest.ini_options]'
     Set-Content -LiteralPath (Join-Path $testRoot '.env') -Value "OPENAI_API_KEY=$fakeKey"
+    Set-Content -LiteralPath (Join-Path $testRoot 'tokens.txt') -Value $fakeAwsKey
+    Set-Content -LiteralPath (Join-Path $testRoot 'large.env') -Value ('x' * 2MB)
     Set-Content -LiteralPath (Join-Path $testRoot 'frontend\node_modules\sample\.env') -Value "OPENAI_API_KEY=$excludedFakeKey"
     Set-Content -LiteralPath $agentsPath -Value "# Team guidance`n`nKeep this line."
     git -C $testRoot init | Out-Null
@@ -53,11 +61,17 @@ try {
     if ($report.SecretScan.Status -ne 'review-required') {
         throw 'The fake API key was not reported.'
     }
-    if ($report.SecretScan.Findings.Count -ne 1) {
+    if ($report.SecretScan.Findings.Count -ne 2) {
         throw 'Files in excluded directories were scanned for secrets.'
     }
-    if ($report.SecretScan.Findings[0].Path -ne '.env') {
+    if ('.env' -notin $report.SecretScan.Findings.Path) {
         throw 'Secret finding paths were not reported relative to the project root.'
+    }
+    if ('AWS access key' -notin $report.SecretScan.Findings.Type) {
+        throw 'AWS access keys were not detected.'
+    }
+    if ($report.SecretScan.SkippedLargeFileCount -ne 1 -or 'large.env' -notin $report.SecretScan.SkippedLargeFiles.Path) {
+        throw 'Large text files skipped by the secret scan were not reported.'
     }
     if ('frontend\node_modules' -notin $report.ContextReview.ExcludedDirectoriesPresent) {
         throw 'Nested excluded directories were not reported.'
@@ -88,11 +102,37 @@ try {
         throw 'A secret value from an excluded directory leaked into the report.'
     }
 
-    & $doctor -ProjectPath $testRoot -Validate -AllowProjectCommands -ReportPath $trustedReportPath
+    & $doctor -ProjectPath $testRoot -Validate -AllowProjectCommands -ValidationTimeoutSeconds 5 -ValidationLogLineLimit 2 -ReportPath $trustedReportPath
     $trustedReport = Get-Content -LiteralPath $trustedReportPath -Raw | ConvertFrom-Json
     $trustedNpmValidation = @($trustedReport.ValidationResults | Where-Object { $_.Command -eq 'npm run test' })
     if ($trustedNpmValidation.Count -ne 1 -or $trustedNpmValidation[0].Status -eq 'skipped') {
         throw 'Trusted project validation commands did not run after explicit opt-in.'
+    }
+    if ($trustedNpmValidation[0].Status -ne 'failed' -or ($trustedNpmValidation[0].StdErrTail -join "`n") -notmatch '\[REDACTED\]') {
+        throw 'Failed validation diagnostics were not captured and redacted.'
+    }
+    if ((Get-Content -LiteralPath $trustedReportPath -Raw) -match [regex]::Escape($validationLogSecret)) {
+        throw 'A secret value leaked from validation diagnostics into the report.'
+    }
+    $trustedNpmLint = @($trustedReport.ValidationResults | Where-Object { $_.Command -eq 'npm run lint' })
+    if ($trustedNpmLint.Count -ne 1 -or $trustedNpmLint[0].Status -ne 'timed-out') {
+        throw 'Native validation commands did not stop after the configured timeout.'
+    }
+    if ($trustedReport.ValidationTimeoutSeconds -ne 5 -or $trustedReport.ValidationLogLineLimit -ne 2) {
+        throw 'Validation timeout and log limits were not written to the report.'
+    }
+
+    $powerShellPath = (Get-Process -Id $PID).Path
+    & $powerShellPath -NoProfile -File $doctor -ProjectPath $testRoot -FailOn Secret -ReportPath $ciReportPath *> $null
+    if ($LASTEXITCODE -ne 1) {
+        throw 'CI secret policy did not return a non-zero exit code.'
+    }
+    $ciReport = Get-Content -LiteralPath $ciReportPath -Raw | ConvertFrom-Json
+    if ($ciReport.CI.Status -ne 'failed' -or 'Secret' -notin $ciReport.CI.FailOn) {
+        throw 'CI secret policy failure was not written to the report.'
+    }
+    if ($ciReport.SecretScan.Findings.Count -ne 2) {
+        throw 'Redacted validation diagnostics were reported as new secrets.'
     }
 
     & $doctor -ProjectPath $testRoot -Disable
@@ -110,6 +150,15 @@ try {
     & $doctor -ProjectPath $generatedOnlyRoot -Disable
     if (Test-Path -LiteralPath (Join-Path $generatedOnlyRoot 'AGENTS.md')) {
         throw 'Generated-only AGENTS.md was not removed when disabled.'
+    }
+
+    $partialRoot = Join-Path $testRoot 'partial-secret-scan'
+    New-Item -ItemType Directory -Path $partialRoot -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $partialRoot 'large.env') -Value ('x' * 2MB)
+    & $doctor -ProjectPath $partialRoot -ReportPath $partialReportPath
+    $partialReport = Get-Content -LiteralPath $partialReportPath -Raw | ConvertFrom-Json
+    if ($partialReport.SecretScan.Status -ne 'partial' -or $partialReport.SecretScan.SkippedLargeFileCount -ne 1) {
+        throw 'Partial secret scan coverage was not reported.'
     }
 
     Write-Host 'Codex Workspace Doctor smoke test passed.'
