@@ -110,6 +110,20 @@ function Test-IsExcluded {
     return $false
 }
 
+function Get-ExcludedDirectoryRoot {
+    param(
+        [string]$RelativePath
+    )
+
+    $segments = $RelativePath -split '[\\/]'
+    for ($index = 0; $index -lt $segments.Count; $index++) {
+        if ($segments[$index] -in $excludedDirectories) {
+            return ($segments[0..$index] -join '\')
+        }
+    }
+    return $RelativePath
+}
+
 function Get-ProjectInventory {
     $files = [System.Collections.Generic.List[System.IO.FileInfo]]::new()
     $excludedPaths = [System.Collections.Generic.List[string]]::new()
@@ -127,7 +141,7 @@ function Get-ProjectInventory {
             }
 
             if (Test-IsExcluded $relativePath) {
-                $excludedPaths.Add($relativePath)
+                Add-UniqueValue $excludedPaths (Get-ExcludedDirectoryRoot $relativePath)
                 continue
             }
             if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
