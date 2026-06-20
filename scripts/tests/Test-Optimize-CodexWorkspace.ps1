@@ -108,7 +108,8 @@ try {
     if ($trustedNpmValidation.Count -ne 1 -or $trustedNpmValidation[0].Status -eq 'skipped') {
         throw 'Trusted project validation commands did not run after explicit opt-in.'
     }
-    if ($trustedNpmValidation[0].Status -ne 'failed' -or ($trustedNpmValidation[0].StdErrTail -join "`n") -notmatch '\[REDACTED\]') {
+    $trustedNpmOutputTail = @($trustedNpmValidation[0].StdOutTail) + @($trustedNpmValidation[0].StdErrTail)
+    if ($trustedNpmValidation[0].Status -ne 'failed' -or ($trustedNpmOutputTail -join "`n") -notmatch '\[REDACTED\]') {
         throw 'Failed validation diagnostics were not captured and redacted.'
     }
     if ((Get-Content -LiteralPath $trustedReportPath -Raw) -match [regex]::Escape($validationLogSecret)) {
