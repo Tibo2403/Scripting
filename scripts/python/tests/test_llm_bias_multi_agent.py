@@ -13,6 +13,23 @@ spec.loader.exec_module(llm_bias_multi_agent)
 
 
 class LLMBiasMultiAgentTests(unittest.TestCase):
+    def test_manager_returns_standard_prompt_report(self):
+        manager = llm_bias_multi_agent.MultiAgentPromptManager(max_rounds=2)
+        result = manager.evaluate(
+            "Summarize a general product launch plan.",
+            "Everyone will certainly love this launch.",
+        )
+
+        self.assertEqual(result["manager"], "multi_agent_prompt_manager")
+        self.assertEqual(result["status"], "accepted")
+        self.assertGreaterEqual(result["round_count"], 1)
+        self.assertEqual(result["rounds"][0]["status"], "needs_revision")
+        self.assertIn("rounds", result)
+        self.assertIn("revised_answer", result)
+        self.assertNotIn("certainly", result["revised_answer"].casefold())
+        self.assertNotIn("will may", result["revised_answer"].casefold())
+        self.assertEqual(result["revised_answer"].count("Bias-mitigation notes:"), 1)
+
     def test_accepts_low_risk_answer(self):
         reducer = llm_bias_multi_agent.BiasReducer()
         result = reducer.evaluate(
@@ -53,6 +70,33 @@ class LLMBiasMultiAgentTests(unittest.TestCase):
         self.assertIn("missing_human_review", findings)
         self.assertIn("missing_auditability", findings)
         self.assertIn("missing_fairness_testing", findings)
+
+    def test_custom_agent_can_be_plugged_into_manager(self):
+        class LengthAgent(llm_bias_multi_agent.ReviewAgent):
+            name = "length_agent"
+
+            def review(self, prompt, answer):
+                if len(answer) <= 20:
+                    return llm_bias_multi_agent.AgentReport(self.name, ())
+                return llm_bias_multi_agent.AgentReport(
+                    self.name,
+                    (
+                        llm_bias_multi_agent.Finding(
+                            self.name,
+                            "too_long",
+                            0.5,
+                            "answer length",
+                            "Shorten the answer.",
+                        ),
+                    ),
+                )
+
+        manager = llm_bias_multi_agent.MultiAgentPromptManager(agents=(LengthAgent(),))
+        result = manager.evaluate("Reply briefly.", "This response is intentionally longer than requested.")
+        findings = result["agent_reports"][0]["findings"]
+
+        self.assertEqual(result["status"], "needs_revision")
+        self.assertEqual(findings[0]["code"], "too_long")
 
 
 if __name__ == "__main__":

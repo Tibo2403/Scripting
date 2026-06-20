@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Generic multi-agent bias reducer for LLM outputs.
+"""Generic multi-agent prompt-return manager for LLM outputs.
 
 The module is intentionally dependency-free. It can be used as a post-processing
 layer after any LLM provider: pass the original prompt and model answer, then
-receive a revised answer plus a structured audit report.
+receive a managed multi-agent review, a revised answer, and a structured report.
 """
 
 from __future__ import annotations
@@ -35,6 +35,18 @@ class AgentReport:
     findings: tuple[Finding, ...]
 
 
+@dataclass(frozen=True)
+class ManagerRound:
+    """One manager review/revision pass."""
+
+    round_index: int
+    input_answer: str
+    revised_answer: str
+    risk_score: float
+    status: str
+    reports: tuple[AgentReport, ...]
+
+
 class ReviewAgent:
     """Base class for deterministic review agents."""
 
@@ -57,6 +69,12 @@ def snippet(text: str, start: int, end: int, max_len: int = 90) -> str:
     if len(value) <= max_len:
         return value
     return value[: max_len - 3].rstrip() + "..."
+
+
+def strip_manager_notes(text: str) -> str:
+    """Remove notes previously appended by this manager before a new revision."""
+
+    return re.split(r"\n\nBias-mitigation notes:\n", text, maxsplit=1)[0].strip()
 
 
 class ProtectedAttributeAgent(ReviewAgent):
@@ -221,45 +239,103 @@ class SafetyAgent(ReviewAgent):
 
 
 class BiasReducer:
-    """Coordinates review agents and applies conservative text revisions."""
+    """Backward-compatible facade for the generic prompt manager."""
 
     def __init__(self, agents: tuple[ReviewAgent, ...] | None = None) -> None:
-        self.agents = agents or (
-            ProtectedAttributeAgent(),
-            StereotypeAgent(),
-            EvidenceAgent(),
-            InclusionAgent(),
-            SafetyAgent(),
-        )
+        self.manager = MultiAgentPromptManager(agents=agents)
+        self.agents = self.manager.agents
 
     def evaluate(self, prompt: str, answer: str) -> dict[str, object]:
-        """Return a structured multi-agent review."""
+        """Return a structured multi-agent bias review."""
 
-        reports = tuple(agent.review(prompt, answer) for agent in self.agents)
-        findings = tuple(finding for report in reports for finding in report.findings)
-        risk_score = self._risk_score(findings)
-        revised = self.revise(answer, findings)
+        return self.manager.evaluate(prompt, answer)
+
+    def revise(self, answer: str, findings: tuple[Finding, ...]) -> str:
+        """Apply conservative debiasing rewrites without inventing facts."""
+
+        return self.manager.revise(answer, findings)
+
+
+class MultiAgentPromptManager:
+    """Standard manager for generic LLM prompt returns.
+
+    The manager has no dependency on a domain such as finance. Its job is to:
+    collect review-agent feedback, aggregate risk, revise the answer
+    conservatively, and optionally repeat the process for several rounds.
+    """
+
+    def __init__(
+        self,
+        agents: tuple[ReviewAgent, ...] | None = None,
+        max_rounds: int = 1,
+        stop_risk_score: float = 0.0,
+    ) -> None:
+        self.agents = agents or default_review_agents()
+        self.max_rounds = max(1, max_rounds)
+        self.stop_risk_score = max(0.0, min(1.0, stop_risk_score))
+
+    def evaluate(self, prompt: str, answer: str, max_rounds: int | None = None) -> dict[str, object]:
+        """Run managed review/revision rounds for one LLM answer."""
+
+        rounds = self.run_rounds(prompt, answer, max_rounds=max_rounds)
+        final_round = rounds[-1]
+        findings = tuple(finding for report in final_round.reports for finding in report.findings)
         return {
-            "risk_score": risk_score,
-            "status": "needs_revision" if findings else "accepted",
+            "manager": "multi_agent_prompt_manager",
+            "round_count": len(rounds),
+            "risk_score": final_round.risk_score,
+            "status": final_round.status,
             "finding_count": len(findings),
             "agent_reports": [
                 {
                     "agent": report.agent,
                     "findings": [asdict(finding) for finding in report.findings],
                 }
-                for report in reports
+                for report in final_round.reports
             ],
-            "revised_answer": revised,
+            "rounds": [self._round_to_dict(round_result) for round_result in rounds],
+            "revised_answer": final_round.revised_answer,
         }
 
+    def run_rounds(self, prompt: str, answer: str, max_rounds: int | None = None) -> tuple[ManagerRound, ...]:
+        """Return each review/revision pass as structured objects."""
+
+        limit = max(1, max_rounds if max_rounds is not None else self.max_rounds)
+        current_answer = answer.strip()
+        rounds: list[ManagerRound] = []
+        for round_index in range(1, limit + 1):
+            reports = tuple(agent.review(prompt, current_answer) for agent in self.agents)
+            findings = tuple(finding for report in reports for finding in report.findings)
+            risk_score = self._risk_score(findings)
+            revised_answer = self.revise(current_answer, findings)
+            status = "needs_revision" if findings else "accepted"
+            round_result = ManagerRound(
+                round_index=round_index,
+                input_answer=current_answer,
+                revised_answer=revised_answer,
+                risk_score=risk_score,
+                status=status,
+                reports=reports,
+            )
+            rounds.append(round_result)
+            current_answer = revised_answer
+            if risk_score <= self.stop_risk_score or revised_answer == round_result.input_answer:
+                break
+        return tuple(rounds)
+
+    def review_once(self, prompt: str, answer: str) -> tuple[AgentReport, ...]:
+        """Run agents without applying a revision."""
+
+        reports = tuple(agent.review(prompt, answer) for agent in self.agents)
+        return reports
+
     def revise(self, answer: str, findings: tuple[Finding, ...]) -> str:
-        """Apply conservative debiasing rewrites without inventing facts."""
+        """Apply conservative generic rewrites without inventing new facts."""
 
         if not findings:
             return answer.strip()
 
-        revised = answer.strip()
+        revised = strip_manager_notes(answer)
         replacements = (
             (r"\bshould reject them\b", "should route them to documented review", re.IGNORECASE),
             (r"\bshould exclude them\b", "should assess them with documented criteria", re.IGNORECASE),
@@ -268,6 +344,9 @@ class BiasReducer:
             (r"\bnever\b", "may not always", re.IGNORECASE),
             (r"\beveryone\b", "many people", re.IGNORECASE),
             (r"\bnobody\b", "not everyone", re.IGNORECASE),
+            (r"\bwill certainly\b", "may", re.IGNORECASE),
+            (r"\bcertainly\b", "may", re.IGNORECASE),
+            (r"\bwithout doubt\b", "with supporting evidence", re.IGNORECASE),
             (r"\bguarantees?\b", "may support", re.IGNORECASE),
             (r"\bproves?\b", "may suggest", re.IGNORECASE),
             (r"\b100%\b", "highly", re.IGNORECASE),
@@ -306,6 +385,29 @@ class BiasReducer:
             notes.append("Validate remaining claims with task-specific data, subgroup metrics, and human review.")
         return notes
 
+    @staticmethod
+    def _round_to_dict(round_result: ManagerRound) -> dict[str, object]:
+        findings = tuple(finding for report in round_result.reports for finding in report.findings)
+        return {
+            "round_index": round_result.round_index,
+            "risk_score": round_result.risk_score,
+            "status": round_result.status,
+            "finding_count": len(findings),
+            "revised_answer": round_result.revised_answer,
+        }
+
+
+def default_review_agents() -> tuple[ReviewAgent, ...]:
+    """Return the standard generic LLM-output review panel."""
+
+    return (
+        ProtectedAttributeAgent(),
+        StereotypeAgent(),
+        EvidenceAgent(),
+        InclusionAgent(),
+        SafetyAgent(),
+    )
+
 
 def read_text(path: str | None) -> str:
     """Read text from a UTF-8 file or stdin."""
@@ -317,12 +419,19 @@ def read_text(path: str | None) -> str:
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Reduce bias in generic LLM outputs using deterministic multi-agent review."
+        description="Manage generic LLM prompt returns using deterministic multi-agent review."
     )
     parser.add_argument("answer_file", nargs="?", help="UTF-8 file containing the LLM answer. Reads stdin if omitted.")
     parser.add_argument("--prompt-file", help="Optional UTF-8 file containing the original prompt.")
     parser.add_argument("--prompt", default="", help="Optional original prompt text.")
     parser.add_argument("--text", help="LLM answer text. Overrides answer_file/stdin when provided.")
+    parser.add_argument("--max-rounds", type=int, default=1, help="Maximum manager review/revision rounds.")
+    parser.add_argument(
+        "--stop-risk-score",
+        type=float,
+        default=0.0,
+        help="Stop early when the round risk score is at or below this value.",
+    )
     parser.add_argument("--pretty", action="store_true", help="Pretty-print the JSON report.")
     return parser.parse_args(argv)
 
@@ -331,7 +440,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
     prompt = read_text(args.prompt_file) if args.prompt_file else args.prompt
     answer = args.text if args.text is not None else read_text(args.answer_file)
-    result = BiasReducer().evaluate(prompt, answer)
+    result = MultiAgentPromptManager(max_rounds=args.max_rounds, stop_risk_score=args.stop_risk_score).evaluate(
+        prompt,
+        answer,
+    )
     print(json.dumps(result, ensure_ascii=False, indent=2 if args.pretty else None))
     return 0
 
