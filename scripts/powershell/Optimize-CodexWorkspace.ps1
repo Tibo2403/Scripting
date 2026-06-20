@@ -447,8 +447,18 @@ function Invoke-NativeValidation {
     $startInfo.UseShellExecute = $false
     $startInfo.WorkingDirectory = $resolvedProject.Path
     $nativeArguments = @($Arguments | ForEach-Object { ConvertTo-NativeArgument $_ })
-    $startInfo.FileName = $resolvedExecutable.Source
-    $startInfo.Arguments = $nativeArguments -join ' '
+    if ($resolvedExecutable.Source -match '\.(cmd|bat)$') {
+        $startInfo.FileName = if ($env:ComSpec) { $env:ComSpec } else { 'cmd.exe' }
+        $invocation = @(
+            ConvertTo-NativeArgument $resolvedExecutable.Source
+            $nativeArguments
+        ) -join ' '
+        $startInfo.Arguments = '/d /c ' + $invocation
+    }
+    else {
+        $startInfo.FileName = $resolvedExecutable.Source
+        $startInfo.Arguments = $nativeArguments -join ' '
+    }
 
     $process = [System.Diagnostics.Process]::new()
     $process.StartInfo = $startInfo
