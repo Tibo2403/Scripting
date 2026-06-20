@@ -26,7 +26,7 @@ class CodexCostRouterTests(unittest.TestCase):
 
     def test_route_model_uses_expected_aliases(self) -> None:
         self.assertEqual(ROUTER.route_model("Corrige une typo dans le README")[0], "codex-cheap")
-        self.assertEqual(ROUTER.route_model("Refactor this Python API")[0], "codex-auto")
+        self.assertEqual(ROUTER.route_model("Refactor this Python API")[0], "codex-strong")
         self.assertEqual(ROUTER.route_model("Audit sécurité production Supabase RLS")[0], "codex-strong")
 
     def test_build_optimized_prompt_respects_budget(self) -> None:
