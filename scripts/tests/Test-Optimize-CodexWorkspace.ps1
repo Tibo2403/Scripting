@@ -110,7 +110,9 @@ try {
     }
     $trustedNpmOutputTail = @($trustedNpmValidation[0].StdOutTail) + @($trustedNpmValidation[0].StdErrTail)
     if ($trustedNpmValidation[0].Status -ne 'failed' -or ($trustedNpmOutputTail -join "`n") -notmatch '\[REDACTED\]') {
-        throw 'Failed validation diagnostics were not captured and redacted.'
+        $safeStdOut = (@($trustedNpmValidation[0].StdOutTail) -join ' | ') -replace [regex]::Escape($validationLogSecret), '[UNREDACTED-TEST-SECRET]'
+        $safeStdErr = (@($trustedNpmValidation[0].StdErrTail) -join ' | ') -replace [regex]::Escape($validationLogSecret), '[UNREDACTED-TEST-SECRET]'
+        throw "Failed validation diagnostics were not captured and redacted. Status=$($trustedNpmValidation[0].Status); StdOutTail=$safeStdOut; StdErrTail=$safeStdErr"
     }
     if ((Get-Content -LiteralPath $trustedReportPath -Raw) -match [regex]::Escape($validationLogSecret)) {
         throw 'A secret value leaked from validation diagnostics into the report.'
