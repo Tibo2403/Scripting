@@ -163,6 +163,13 @@ try {
 
     Write-Host 'Codex Workspace Doctor smoke test passed.'
 }
+catch {
+    $message = $_.Exception.Message -replace '\r?\n', ' '
+    if ($env:GITHUB_ACTIONS -eq 'true') {
+        Write-Output "::error title=Codex Workspace Doctor smoke test::$message"
+    }
+    throw
+}
 finally {
     if (Test-Path -LiteralPath $testRoot) {
         Remove-Item -LiteralPath $testRoot -Recurse -Force
