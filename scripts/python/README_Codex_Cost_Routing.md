@@ -6,9 +6,12 @@ Optional cost routing for Codex CLI on Windows using the official open-source
 The local Python wrapper cleans prompts, compresses noisy logs, estimates tokens,
 applies budgets, and selects one of these LiteLLM aliases:
 
-- `codex-cheap`
-- `codex-auto`
-- `codex-strong`
+- `codex-cheap` for simple, low-cost tasks
+- `codex-strong` for default, medium, and complex tasks
+
+The previous `codex-auto` middle tier was removed because it pointed to the same
+provider model as `codex-strong`, which made the fallback chain redundant. Add a
+third alias again only when it maps to a genuinely different model or provider.
 
 API keys are never committed or written to a configuration file.
 
@@ -94,7 +97,7 @@ Prompts and API keys are not logged.
 - `Manage-CodexCostRouting.ps1`: automatic run, status, and stop workflow.
 - `codex-cost-routing.cmd`: simple Windows launcher.
 - `codex_cost_router.py`: prompt optimization and one-shot routing.
-- `litellm-cost-routing.yaml`: local LiteLLM OSS model aliases and fallbacks.
+- `litellm-cost-routing.yaml`: local LiteLLM OSS model aliases and fallback.
 
 ## Notes
 
