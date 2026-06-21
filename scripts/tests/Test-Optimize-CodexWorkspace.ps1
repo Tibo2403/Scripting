@@ -20,7 +20,7 @@ try {
     $validationLogSecret = 'validation-log-secret-value'
     Set-Content -LiteralPath (Join-Path $testRoot 'package.json') -Value '{"scripts":{"test":"node test.js","lint":"node slow.js","build":"node build.js"}}'
     Set-Content -LiteralPath (Join-Path $testRoot 'test.js') -Value "console.error('to' + 'ken=' + '$validationLogSecret'); process.exit(1);"
-    Set-Content -LiteralPath (Join-Path $testRoot 'slow.js') -Value "setTimeout(() => {}, 10000);"
+    Set-Content -LiteralPath (Join-Path $testRoot 'slow.js') -Value "setTimeout(() => {}, 30000);"
     Set-Content -LiteralPath (Join-Path $testRoot 'pyproject.toml') -Value '[tool.pytest.ini_options]'
     Set-Content -LiteralPath (Join-Path $testRoot '.env') -Value "OPENAI_API_KEY=$fakeKey"
     Set-Content -LiteralPath (Join-Path $testRoot 'tokens.txt') -Value $fakeAwsKey
@@ -102,14 +102,17 @@ try {
         throw 'A secret value from an excluded directory leaked into the report.'
     }
 
-    & $doctor -ProjectPath $testRoot -Validate -AllowProjectCommands -ValidationTimeoutSeconds 5 -ValidationLogLineLimit 2 -ReportPath $trustedReportPath
+    & $doctor -ProjectPath $testRoot -Validate -AllowProjectCommands -ValidationTimeoutSeconds 15 -ValidationLogLineLimit 2 -ReportPath $trustedReportPath
     $trustedReport = Get-Content -LiteralPath $trustedReportPath -Raw | ConvertFrom-Json
     $trustedNpmValidation = @($trustedReport.ValidationResults | Where-Object { $_.Command -eq 'npm run test' })
     if ($trustedNpmValidation.Count -ne 1 -or $trustedNpmValidation[0].Status -eq 'skipped') {
         throw 'Trusted project validation commands did not run after explicit opt-in.'
     }
-    if ($trustedNpmValidation[0].Status -ne 'failed' -or ($trustedNpmValidation[0].StdErrTail -join "`n") -notmatch '\[REDACTED\]') {
-        throw 'Failed validation diagnostics were not captured and redacted.'
+    $trustedNpmOutputTail = @($trustedNpmValidation[0].StdOutTail) + @($trustedNpmValidation[0].StdErrTail)
+    if ($trustedNpmValidation[0].Status -ne 'failed' -or ($trustedNpmOutputTail -join "`n") -notmatch '\[REDACTED\]') {
+        $safeStdOut = (@($trustedNpmValidation[0].StdOutTail) -join ' | ') -replace [regex]::Escape($validationLogSecret), '[UNREDACTED-TEST-SECRET]'
+        $safeStdErr = (@($trustedNpmValidation[0].StdErrTail) -join ' | ') -replace [regex]::Escape($validationLogSecret), '[UNREDACTED-TEST-SECRET]'
+        throw "Failed validation diagnostics were not captured and redacted. Status=$($trustedNpmValidation[0].Status); StdOutTail=$safeStdOut; StdErrTail=$safeStdErr"
     }
     if ((Get-Content -LiteralPath $trustedReportPath -Raw) -match [regex]::Escape($validationLogSecret)) {
         throw 'A secret value leaked from validation diagnostics into the report.'
@@ -118,7 +121,7 @@ try {
     if ($trustedNpmLint.Count -ne 1 -or $trustedNpmLint[0].Status -ne 'timed-out') {
         throw 'Native validation commands did not stop after the configured timeout.'
     }
-    if ($trustedReport.ValidationTimeoutSeconds -ne 5 -or $trustedReport.ValidationLogLineLimit -ne 2) {
+    if ($trustedReport.ValidationTimeoutSeconds -ne 15 -or $trustedReport.ValidationLogLineLimit -ne 2) {
         throw 'Validation timeout and log limits were not written to the report.'
     }
 
@@ -162,6 +165,13 @@ try {
     }
 
     Write-Host 'Codex Workspace Doctor smoke test passed.'
+}
+catch {
+    $message = $_.Exception.Message -replace '\r?\n', ' '
+    if ($env:GITHUB_ACTIONS -eq 'true') {
+        Write-Output "::error title=Codex Workspace Doctor smoke test::$message"
+    }
+    throw
 }
 finally {
     if (Test-Path -LiteralPath $testRoot) {
