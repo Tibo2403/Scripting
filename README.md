@@ -2,7 +2,7 @@
 
 [![Script Validation](https://github.com/Tibo2403/Scripting/actions/workflows/script-validation.yml/badge.svg)](https://github.com/Tibo2403/Scripting/actions/workflows/script-validation.yml)
 
-Collection of PowerShell, Bash, and Python scripts for system administration, security checks, Microsoft 365 operations, Linux dependency checks, MCP integrations, and authorized lab or pentest workflows.
+Collection of PowerShell, Bash, and Python scripts for system administration, security checks, Microsoft 365 operations, Linux dependency checks, MCP integrations, local AI tooling, and authorized lab or pentest workflows.
 
 ## Legal Notice
 
@@ -14,6 +14,8 @@ The scripts in `scripts/linux/pentest_*.sh`, `scan_wifi.sh`, and `stealth_post.s
 
 ```text
 scripts/
+|-- bash/
+|   `-- install_ia_souveraine.sh
 |-- linux/
 |   |-- check_dependencies.sh
 |   |-- dependencies.conf
@@ -24,18 +26,18 @@ scripts/
 |   |-- setup_api.sh
 |   `-- stealth_post.sh
 |-- powershell/
-    |-- DiskUsageReport.ps1
-    |-- ExchangeOnlineManagement.ps1
-    |-- Get-SystemInfo.ps1
-    |-- LinkCrawler.ps1
-    |-- ManageServices.ps1
-    |-- Optimize-CodexWorkspace.ps1
-    |-- SecurityCheck.ps1
-    |-- SharePointManagement.ps1
-    |-- TeamsManagement.ps1
-    |-- Test-ScriptSyntax.ps1
-    |-- UserManagement.ps1
-    `-- VMManagement.ps1
+|   |-- DiskUsageReport.ps1
+|   |-- ExchangeOnlineManagement.ps1
+|   |-- Get-SystemInfo.ps1
+|   |-- LinkCrawler.ps1
+|   |-- ManageServices.ps1
+|   |-- Optimize-CodexWorkspace.ps1
+|   |-- SecurityCheck.ps1
+|   |-- SharePointManagement.ps1
+|   |-- TeamsManagement.ps1
+|   |-- Test-ScriptSyntax.ps1
+|   |-- UserManagement.ps1
+|   `-- VMManagement.ps1
 `-- python/
     |-- codex-cost-routing.cmd
     |-- codex_cost_router.py
@@ -62,10 +64,12 @@ Portfolio and maintenance docs:
 
 - PowerShell 5.1+ or PowerShell 7+ for Windows scripts.
 - Linux shell tools for Bash scripts.
+- Docker for the local AI installer in `scripts/bash/install_ia_souveraine.sh`.
+- Optional NVIDIA Container Toolkit for GPU-accelerated local AI containers.
 - Python 3.10+ and the optional `mcp[cli]` package for the MCP server.
 - Optional tools depending on the script: `nmap`, `gvm-cli`, `curl`, `gpg`, `pwsh`.
 - Optional PowerShell modules: Hyper-V, ExchangeOnlineManagement, MicrosoftTeams, PnP.PowerShell.
-- Administrator or root privileges for scripts that manage services, users, VMs, network scans, or security settings.
+- Administrator or root privileges for scripts that manage services, users, VMs, network scans, Docker containers, or security settings.
 
 ## Quick Checks
 
@@ -85,13 +89,13 @@ Invoke-ScriptAnalyzer -Path .\scripts\powershell -Recurse -Settings .\PSScriptAn
 Validate Bash syntax from Linux, WSL, Git Bash, or CI:
 
 ```bash
-find scripts/linux -name "*.sh" -print0 | xargs -0 -n1 bash -n
+find scripts/linux scripts/bash -name "*.sh" -print0 | xargs -0 -n1 bash -n
 ```
 
 Run Bash static analysis:
 
 ```bash
-find scripts/linux -name "*.sh" -print0 | xargs -0 shellcheck --severity=error
+find scripts/linux scripts/bash -name "*.sh" -print0 | xargs -0 shellcheck --severity=error
 ```
 
 Check Linux dependencies:
@@ -123,6 +127,26 @@ bash scripts/tests/test-linux-safety.sh
 `Optimize-CodexWorkspace.ps1` audits a project before a Codex CLI session and
 can maintain a generated section in `AGENTS.md`. See
 [`docs/codex-workspace-doctor.md`](docs/codex-workspace-doctor.md).
+
+## Bash Examples
+
+Local AI installer with Open WebUI + Ollama:
+
+```bash
+bash scripts/bash/install_ia_souveraine.sh
+```
+
+Force CPU mode when no GPU is available or when you want a portable deployment:
+
+```bash
+GPU_MODE=off bash scripts/bash/install_ia_souveraine.sh
+```
+
+Use a custom host port:
+
+```bash
+HOST_PORT=8080 bash scripts/bash/install_ia_souveraine.sh
+```
 
 ## Linux Examples
 
@@ -173,7 +197,7 @@ The `script-validation.yml` workflow checks:
 
 - PowerShell syntax for every `.ps1`, `.psm1`, and `.psd1` file.
 - PSScriptAnalyzer error-level findings using `PSScriptAnalyzerSettings.psd1`.
-- Bash syntax for every Linux shell script.
+- Bash syntax for shell scripts.
 - ShellCheck error-level findings.
 - Linux `--help` and `--dry-run` safety smoke tests.
 
