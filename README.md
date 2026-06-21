@@ -13,38 +13,59 @@ The scripts in `scripts/linux/pentest_*.sh`, `scan_wifi.sh`, and `stealth_post.s
 ## Repository Structure
 
 ```text
-scripts/
-|-- linux/
-|   |-- check_dependencies.sh
-|   |-- dependencies.conf
-|   |-- pentest_discovery.sh
-|   |-- pentest_verification.sh
-|   |-- pentest_exploitation.sh
-|   |-- scan_wifi.sh
-|   |-- setup_api.sh
-|   `-- stealth_post.sh
-|-- powershell/
-    |-- DiskUsageReport.ps1
-    |-- ExchangeOnlineManagement.ps1
-    |-- Get-SystemInfo.ps1
-    |-- LinkCrawler.ps1
-    |-- ManageServices.ps1
-    |-- Optimize-CodexWorkspace.ps1
-    |-- SecurityCheck.ps1
-    |-- SharePointManagement.ps1
-    |-- TeamsManagement.ps1
-    |-- Test-ScriptSyntax.ps1
-    |-- UserManagement.ps1
-    `-- VMManagement.ps1
-`-- python/
-    |-- codex-cost-routing.cmd
-    |-- codex_cost_router.py
-    |-- litellm-cost-routing.yaml
-    |-- Manage-CodexCostRouting.ps1
-    |-- mcp_server.py
-    |-- README.md
-    |-- README_Codex_Cost_Routing.md
-    `-- requirements.txt
+.
+|-- .github/
+|   `-- workflows/
+|       |-- ai-refactor.yml
+|       `-- script-validation.yml
+|-- docs/
+|   |-- codex-workspace-doctor.md
+|   |-- compatibility-matrix.md
+|   |-- demo-media.md
+|   |-- issue-backlog.md
+|   `-- portfolio.md
+|-- examples/
+|-- scripts/
+|   |-- linux/
+|   |   |-- check_dependencies.sh
+|   |   |-- dependencies.conf
+|   |   |-- pentest_discovery.sh
+|   |   |-- pentest_exploitation.sh
+|   |   |-- pentest_verification.sh
+|   |   |-- scan_wifi.sh
+|   |   |-- setup_api.sh
+|   |   `-- stealth_post.sh
+|   |-- powershell/
+|   |   |-- DiskUsageReport.ps1
+|   |   |-- ExchangeOnlineManagement.ps1
+|   |   |-- Get-SystemInfo.ps1
+|   |   |-- LinkCrawler.ps1
+|   |   |-- ManageServices.ps1
+|   |   |-- Optimize-CodexWorkspace.ps1
+|   |   |-- SecurityCheck.ps1
+|   |   |-- SharePointManagement.ps1
+|   |   |-- TeamsManagement.ps1
+|   |   |-- Test-ScriptSyntax.ps1
+|   |   |-- UserManagement.ps1
+|   |   `-- VMManagement.ps1
+|   |-- python/
+|   |   |-- Manage-CodexCostRouting.ps1
+|   |   |-- README.md
+|   |   |-- README_Codex_Cost_Routing.md
+|   |   |-- codex-cost-routing.cmd
+|   |   |-- codex_cost_router.py
+|   |   |-- litellm-cost-routing.yaml
+|   |   |-- mcp_server.py
+|   |   `-- requirements.txt
+|   `-- tests/
+|       |-- Test-Optimize-CodexWorkspace.ps1
+|       `-- test-linux-safety.sh
+|-- AGENTS.md
+|-- CHANGELOG.md
+|-- LICENSE
+|-- PSScriptAnalyzerSettings.psd1
+|-- README.md
+`-- targets.txt
 ```
 
 `targets.txt` contains example targets used by the pentest scripts. Keep it limited to systems that you are allowed to test.
@@ -56,6 +77,7 @@ Portfolio and maintenance docs:
 - `docs/portfolio.md` explains the repository in recruiter/client terms.
 - `docs/demo-media.md` lists screenshots and GIFs to capture.
 - `docs/issue-backlog.md` contains ready-to-create GitHub issues.
+- `docs/codex-workspace-doctor.md` documents `Optimize-CodexWorkspace.ps1`.
 - `CHANGELOG.md` tracks release notes.
 
 ## Prerequisites
@@ -106,6 +128,12 @@ Run the Linux safety smoke tests:
 bash scripts/tests/test-linux-safety.sh
 ```
 
+Run the Codex Workspace Doctor smoke test:
+
+```powershell
+.\scripts\tests\Test-Optimize-CodexWorkspace.ps1
+```
+
 ## PowerShell Examples
 
 ```powershell
@@ -120,9 +148,7 @@ bash scripts/tests/test-linux-safety.sh
 
 `ManageServices.ps1` and `UserManagement.ps1` require an elevated PowerShell session for privileged actions.
 
-`Optimize-CodexWorkspace.ps1` audits a project before a Codex CLI session and
-can maintain a generated section in `AGENTS.md`. See
-[`docs/codex-workspace-doctor.md`](docs/codex-workspace-doctor.md).
+`Optimize-CodexWorkspace.ps1` audits a project before a Codex CLI session and can maintain a generated section in `AGENTS.md`. See [`docs/codex-workspace-doctor.md`](docs/codex-workspace-doctor.md).
 
 ## Linux Examples
 
@@ -150,22 +176,16 @@ Use the safe placeholders in `examples/` for lab demos and documentation. Do not
 
 ## MCP Server
 
-The read-only Python MCP server exposes tools to list, search, inspect, and
-validate scripts without executing them. It can also browse documentation and
-return a repository summary:
+The read-only Python MCP server exposes tools to list, search, inspect, and validate scripts without executing them. It can also browse documentation and return a repository summary:
 
 ```powershell
 pip install -r .\scripts\python\requirements.txt
 python .\scripts\python\mcp_server.py
 ```
 
-Connect an MCP client to `http://localhost:8000/mcp`. See
-[`scripts/python/README.md`](scripts/python/README.md) for setup and inspector
-instructions.
+Connect an MCP client to `http://localhost:8000/mcp`. See [`scripts/python/README.md`](scripts/python/README.md) for setup and inspector instructions.
 
-The optional Codex cost router in `scripts/python/codex_cost_router.py` can
-compress one-shot prompts and route them through a self-hosted LiteLLM OSS proxy.
-See [`scripts/python/README_Codex_Cost_Routing.md`](scripts/python/README_Codex_Cost_Routing.md).
+The optional Codex cost router in `scripts/python/codex_cost_router.py` can compress one-shot prompts and route them through a self-hosted LiteLLM OSS proxy. See [`scripts/python/README_Codex_Cost_Routing.md`](scripts/python/README_Codex_Cost_Routing.md).
 
 ## CI
 
@@ -176,6 +196,7 @@ The `script-validation.yml` workflow checks:
 - Bash syntax for every Linux shell script.
 - ShellCheck error-level findings.
 - Linux `--help` and `--dry-run` safety smoke tests.
+- Dedicated script smoke tests in `scripts/tests/`.
 
 The AI refactor workflow is manual-only to avoid surprise API usage and automatic hourly write attempts.
 
