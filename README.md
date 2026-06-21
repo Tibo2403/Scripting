@@ -2,7 +2,7 @@
 
 [![Script Validation](https://github.com/Tibo2403/Scripting/actions/workflows/script-validation.yml/badge.svg)](https://github.com/Tibo2403/Scripting/actions/workflows/script-validation.yml)
 
-Collection of PowerShell, Bash, and Python scripts for system administration, security checks, Microsoft 365 operations, Linux dependency checks, MCP integrations, and authorized lab or pentest workflows.
+Collection of PowerShell, Bash, and Python scripts for system administration, security checks, Microsoft 365 operations, Linux dependency checks, MCP integrations, finance bias/security review helpers, and authorized lab or pentest workflows.
 
 ## Legal Notice
 
@@ -24,26 +24,28 @@ scripts/
 |   |-- setup_api.sh
 |   `-- stealth_post.sh
 |-- powershell/
-    |-- DiskUsageReport.ps1
-    |-- ExchangeOnlineManagement.ps1
-    |-- Get-SystemInfo.ps1
-    |-- LinkCrawler.ps1
-    |-- ManageServices.ps1
-    |-- Optimize-CodexWorkspace.ps1
-    |-- SecurityCheck.ps1
-    |-- SharePointManagement.ps1
-    |-- TeamsManagement.ps1
-    |-- Test-ScriptSyntax.ps1
-    |-- UserManagement.ps1
-    `-- VMManagement.ps1
+|   |-- DiskUsageReport.ps1
+|   |-- ExchangeOnlineManagement.ps1
+|   |-- Get-SystemInfo.ps1
+|   |-- LinkCrawler.ps1
+|   |-- ManageServices.ps1
+|   |-- Optimize-CodexWorkspace.ps1
+|   |-- SecurityCheck.ps1
+|   |-- SharePointManagement.ps1
+|   |-- TeamsManagement.ps1
+|   |-- Test-ScriptSyntax.ps1
+|   |-- UserManagement.ps1
+|   `-- VMManagement.ps1
 `-- python/
     |-- codex-cost-routing.cmd
     |-- codex_cost_router.py
+    |-- finance_bias_evaluator.py
     |-- litellm-cost-routing.yaml
     |-- Manage-CodexCostRouting.ps1
     |-- mcp_server.py
     |-- README.md
     |-- README_Codex_Cost_Routing.md
+    |-- README_Finance_Bias_Evaluator.md
     `-- requirements.txt
 ```
 
@@ -92,6 +94,12 @@ Run Bash static analysis:
 
 ```bash
 find scripts/linux -name "*.sh" -print0 | xargs -0 shellcheck --severity=error
+```
+
+Validate Python syntax:
+
+```bash
+python -m py_compile scripts/python/mcp_server.py scripts/python/codex_cost_router.py scripts/python/finance_bias_evaluator.py
 ```
 
 Check Linux dependencies:
@@ -148,7 +156,7 @@ Sensitive Linux scripts require either an interactive `AUTHORIZED` confirmation 
 
 Use the safe placeholders in `examples/` for lab demos and documentation. Do not commit real targets, credentials, tenant identifiers, scan output, packet captures, or customer data.
 
-## MCP Server
+## Python Tools
 
 The read-only Python MCP server exposes tools to list, search, inspect, and
 validate scripts without executing them. It can also browse documentation and
@@ -166,6 +174,18 @@ instructions.
 The optional Codex cost router in `scripts/python/codex_cost_router.py` can
 compress one-shot prompts and route them through a self-hosted LiteLLM OSS proxy.
 See [`scripts/python/README_Codex_Cost_Routing.md`](scripts/python/README_Codex_Cost_Routing.md).
+
+The finance bias evaluator in `scripts/python/finance_bias_evaluator.py` checks
+technical proposals for finance-oriented security, fairness, auditability, and
+hallucinated-interface risks. It always returns the strict JSON shape
+`statut`, `confiance`, and `justification_technique`:
+
+```bash
+echo "We use fairness metrics, human review, audit logs, data governance and encryption." | \
+  python scripts/python/finance_bias_evaluator.py
+```
+
+See [`scripts/python/README_Finance_Bias_Evaluator.md`](scripts/python/README_Finance_Bias_Evaluator.md).
 
 ## CI
 
