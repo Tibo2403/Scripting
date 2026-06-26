@@ -167,6 +167,32 @@ Compatibility wrappers are also available at `scripts/pentest_discovery.sh`,
 `scripts/pentest_verification.sh`, and `scripts/pentest_exploitation.sh`. They
 forward arguments to the guarded implementations in `scripts/linux/`.
 
+Authorized pentest discovery can be run with explicit target, output, pacing,
+and parallelism controls:
+
+```bash
+bash scripts/linux/pentest_discovery.sh \
+  --targets targets.txt \
+  --outdir pentest_results/lab-run \
+  --jobs 2 \
+  --rate-limit 1 \
+  --yes-i-am-authorized
+```
+
+The discovery script writes `discovery_summary.tsv` in the run directory and
+updates `pentest_results/latest` when the platform allows symlinks. Verification
+can target a subset of hosts and skip heavier integrations when the lab does not
+have OpenVAS or Metasploit installed:
+
+```bash
+bash scripts/linux/pentest_verification.sh \
+  --results pentest_results/lab-run \
+  --host 192.0.2.10 \
+  --skip-openvas \
+  --skip-metasploit \
+  --yes-i-am-authorized
+```
+
 For `stealth_post.sh`, pass credentials through environment variables or a local config file that is never committed:
 
 ```bash
