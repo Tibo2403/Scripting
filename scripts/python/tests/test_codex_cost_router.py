@@ -29,6 +29,10 @@ class CodexCostRouterTests(unittest.TestCase):
         self.assertEqual(ROUTER.route_model("Refactor this Python API")[0], "codex-auto")
         self.assertEqual(ROUTER.route_model("Audit sécurité production Supabase RLS")[0], "codex-strong")
 
+    def test_route_model_matches_accented_french_keywords(self) -> None:
+        self.assertEqual(ROUTER.route_model("Prépare un résumé du README")[0], "codex-cheap")
+        self.assertEqual(ROUTER.route_model("Question de fiscalité pour Odoo")[0], "codex-strong")
+
     def test_build_optimized_prompt_respects_budget(self) -> None:
         context = "<div>" + ("Architecture production Odoo migration security. " * 1000) + "</div>"
         optimized = ROUTER.build_optimized_prompt(context, 120)

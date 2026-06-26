@@ -10,6 +10,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -204,6 +205,12 @@ def estimate_tokens(text: str) -> int:
     return max(1, (len(text) + 3) // 4)
 
 
+def normalize_for_matching(text: str) -> str:
+    """Lowercase text and strip accents for stable keyword matching."""
+    normalized = unicodedata.normalize("NFKD", text.casefold())
+    return "".join(character for character in normalized if not unicodedata.combining(character))
+
+
 def smart_truncate(text: str, max_tokens: int) -> str:
     """Keep the beginning and end of oversized context with a clear marker."""
     max_chars = max_tokens * 4
@@ -218,7 +225,7 @@ def smart_truncate(text: str, max_tokens: int) -> str:
 
 def classify_complexity(prompt: str) -> tuple[str, str]:
     """Classify a task using explicit, explainable keyword rules."""
-    normalized = prompt.casefold()
+    normalized = normalize_for_matching(prompt)
     complex_matches = [term for term in COMPLEX_TERMS if term in normalized]
     medium_matches = [term for term in MEDIUM_TERMS if term in normalized]
     simple_matches = [term for term in SIMPLE_TERMS if term in normalized]
