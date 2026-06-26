@@ -25,18 +25,38 @@ CONFIG_BACKUP = LOG_DIR / "config.toml.cost_router_backup"
 BEGIN_MARKER = "# BEGIN CODEX COST ROUTER"
 END_MARKER = "# END CODEX COST ROUTER"
 DEFAULT_MODEL = "codex-strong"
+HF_FAST_MODEL = "codex-hf-fast"
+HF_CHEAP_MODEL = "codex-hf-cheap"
+HF_DIRECT_MODEL = "openai/gpt-oss-120b:fastest"
 DEFAULT_MAX_INPUT_TOKENS = 12_000
 DEFAULT_MAX_OUTPUT_TOKENS = 2_000
-MODELS = ("codex-cheap", DEFAULT_MODEL)
+PROVIDERS = ("auto", "openai", "huggingface")
+CODEX_PROVIDERS = ("litellm", "huggingface")
+MODELS = ("codex-cheap", DEFAULT_MODEL, HF_FAST_MODEL, HF_CHEAP_MODEL)
 LITELLM_HOST = "localhost"
 LITELLM_PORT = 4000
 WINDOWS_LITELLM_FALLBACK = Path(r"C:\tmp\litellm-oss\Scripts\litellm.exe")
+POLICY_FILE = Path(__file__).with_name("codex-routing-policy.yaml")
+DEFAULT_POLICY = {
+    "default_provider": "auto",
+    "default_codex_provider": "litellm",
+    "open_models_only": False,
+    "max_cost_usd": 0.0,
+    "task_provider_rules": {
+        "simple": "huggingface",
+        "medium": "auto",
+        "complex": "openai",
+    },
+    "fallback_order": ["litellm", "huggingface"],
+}
 
 # Approximate placeholders in USD per million tokens. Adjust these estimates to
 # match the deployments configured in your local LiteLLM OSS proxy.
 ESTIMATED_RATES = {
     "codex-cheap": {"input": 0.15, "output": 0.60},
     DEFAULT_MODEL: {"input": 2.00, "output": 8.00},
+    HF_CHEAP_MODEL: {"input": 0.10, "output": 0.30},
+    HF_FAST_MODEL: {"input": 0.25, "output": 0.75},
 }
 
 SIMPLE_TERMS = (
@@ -72,6 +92,18 @@ COMPLEX_TERMS = (
     "bug critique",
     "critical bug",
 )
+HF_TERMS = (
+    "hugging face",
+    "huggingface",
+    "hf_token",
+    "open model",
+    "open-weight",
+    "open weights",
+    "multi-provider",
+    "multi provider",
+    "provider benchmark",
+    "benchmark providers",
+)
 
 PROFILE_BLOCK = f"""\
 # BEGIN CODEX COST ROUTER
@@ -81,9 +113,20 @@ base_url = "http://localhost:4000/v1"
 env_key = "LITELLM_API_KEY"
 wire_api = "responses"
 
+[model_providers.huggingface]
+name = "Hugging Face Inference Providers"
+base_url = "https://router.huggingface.co/v1"
+env_key = "HF_TOKEN"
+wire_api = "chat"
+
 [profiles.cost-routing]
 model = "{DEFAULT_MODEL}"
 model_provider = "litellm"
+model_reasoning_effort = "low"
+
+[profiles.cost-routing-hf]
+model = "{HF_DIRECT_MODEL}"
+model_provider = "huggingface"
 model_reasoning_effort = "low"
 # END CODEX COST ROUTER
 """
@@ -241,16 +284,184 @@ def classify_complexity(prompt: str) -> tuple[str, str]:
     return "medium", "default routing for an unclassified task"
 
 
-def route_model(prompt: str, force_model: str | None = None) -> tuple[str, str]:
+def _parse_scalar(value: str) -> Any:
+    """Parse a tiny YAML scalar subset without requiring PyYAML."""
+    value = value.strip().strip("'\"")
+    lowered = value.casefold()
+    if lowered in {"true", "false"}:
+        return lowered == "true"
+    try:
+        return float(value) if "." in value else int(value)
+    except ValueError:
+        return value
+
+
+def parse_simple_policy(text: str) -> dict[str, Any]:
+    """Parse the small policy YAML shape used by this router."""
+    policy: dict[str, Any] = {}
+    current_key: str | None = None
+    for raw_line in text.splitlines():
+        if not raw_line.strip() or raw_line.lstrip().startswith("#"):
+            continue
+        line = raw_line.split("#", 1)[0].rstrip()
+        if line.startswith("  - ") and current_key:
+            policy.setdefault(current_key, []).append(_parse_scalar(line[4:]))
+            continue
+        if line.startswith("  ") and current_key:
+            key, _, value = line.strip().partition(":")
+            if key and value:
+                policy.setdefault(current_key, {})[key.strip()] = _parse_scalar(value)
+            continue
+        key, _, value = line.partition(":")
+        current_key = key.strip()
+        policy[current_key] = _parse_scalar(value) if value.strip() else ([] if current_key.endswith("_order") else {})
+    return policy
+
+
+def load_policy(path: Path = POLICY_FILE) -> dict[str, Any]:
+    """Load routing policy with defaults and no hard PyYAML dependency."""
+    policy = json.loads(json.dumps(DEFAULT_POLICY))
+    if not path.exists():
+        return policy
+    text = read_text(path)
+    try:
+        import yaml  # type: ignore[import-untyped]
+
+        loaded = yaml.safe_load(text) or {}
+    except Exception:
+        loaded = parse_simple_policy(text)
+    if not isinstance(loaded, dict):
+        return policy
+    for key, value in loaded.items():
+        if key == "task_provider_rules" and isinstance(value, dict):
+            policy[key].update(value)
+        elif key in policy:
+            policy[key] = value
+    return policy
+
+
+def hf_available() -> bool:
+    """Return whether Hugging Face routing can be used in this shell."""
+    return bool(os.environ.get("HF_TOKEN"))
+
+
+def default_provider() -> str:
+    """Read the provider preference from the environment with a safe fallback."""
+    provider = os.environ.get("CODEX_ROUTER_PROVIDER", "auto").casefold()
+    return provider if provider in PROVIDERS else "auto"
+
+
+def default_codex_provider() -> str:
+    """Read the Codex-facing provider preference with a safe fallback."""
+    provider = os.environ.get("CODEX_ROUTER_CODEX_PROVIDER", "litellm").casefold()
+    return provider if provider in CODEX_PROVIDERS else "litellm"
+
+
+def normalize_provider(provider: Any, fallback: str = "auto") -> str:
+    """Normalize a LiteLLM-side provider preference."""
+    value = str(provider or fallback).casefold()
+    return value if value in PROVIDERS else fallback
+
+
+def normalize_codex_provider(provider: Any, fallback: str = "litellm") -> str:
+    """Normalize a Codex-facing provider preference."""
+    value = str(provider or fallback).casefold()
+    return value if value in CODEX_PROVIDERS else fallback
+
+
+def provider_from_policy(
+    prompt: str,
+    requested_provider: str | None,
+    policy: dict[str, Any],
+) -> tuple[str, str]:
+    """Resolve the LiteLLM-side provider from CLI, policy, and task class."""
+    if requested_provider:
+        return normalize_provider(requested_provider), "provider forced by CLI option"
+    if os.environ.get("CODEX_ROUTER_PROVIDER"):
+        return default_provider(), "provider forced by CODEX_ROUTER_PROVIDER"
+    if bool(policy.get("open_models_only")):
+        return "huggingface", "policy open_models_only"
+    complexity, _ = classify_complexity(prompt)
+    rules = policy.get("task_provider_rules", {})
+    if isinstance(rules, dict) and complexity in rules:
+        return normalize_provider(rules[complexity]), f"policy task rule: {complexity}"
+    return normalize_provider(policy.get("default_provider")), "policy default_provider"
+
+
+def codex_provider_from_policy(
+    requested_provider: str | None,
+    policy: dict[str, Any],
+) -> tuple[str, str]:
+    """Resolve the Codex-facing provider from CLI and policy."""
+    if requested_provider:
+        return normalize_codex_provider(requested_provider), "codex provider forced by CLI option"
+    if os.environ.get("CODEX_ROUTER_CODEX_PROVIDER"):
+        return default_codex_provider(), "codex provider forced by CODEX_ROUTER_CODEX_PROVIDER"
+    if bool(policy.get("open_models_only")):
+        return "huggingface", "policy open_models_only"
+    return normalize_codex_provider(policy.get("default_codex_provider")), "policy default_codex_provider"
+
+
+def fallback_order_from_policy(
+    selected_provider: str,
+    policy: dict[str, Any],
+) -> list[str]:
+    """Return a de-duplicated Codex provider fallback order."""
+    raw_order = policy.get("fallback_order", [])
+    order = [normalize_codex_provider(item) for item in raw_order if item]
+    result: list[str] = []
+    for item in [selected_provider, *order]:
+        if item not in result:
+            result.append(item)
+    return result or [selected_provider]
+
+
+def codex_profile(provider: str) -> str:
+    """Map a Codex-facing provider to the managed profile name."""
+    return "cost-routing-hf" if provider == "huggingface" else "cost-routing"
+
+
+def codex_model(model: str, provider: str) -> str:
+    """Map router aliases to the model name expected by the selected profile."""
+    if provider == "huggingface":
+        return HF_DIRECT_MODEL
+    return model
+
+
+def codex_provider_ready(provider: str) -> tuple[bool, str]:
+    """Check local prerequisites for a Codex-facing provider."""
+    if provider == "huggingface":
+        return hf_available(), "HF_TOKEN is required for the cost-routing-hf Codex profile."
+    return proxy_available(), "LiteLLM OSS proxy is not listening on http://localhost:4000."
+
+
+def route_model(
+    prompt: str,
+    force_model: str | None = None,
+    provider: str = "auto",
+) -> tuple[str, str]:
     """Choose a LiteLLM model alias."""
     if force_model:
         return force_model, "model forced by CLI option"
     complexity, reason = classify_complexity(prompt)
-    model = {
-        "simple": "codex-cheap",
-        "medium": DEFAULT_MODEL,
-        "complex": DEFAULT_MODEL,
-    }[complexity]
+    normalized = normalize_for_matching(prompt)
+    wants_hf = any(term in normalized for term in HF_TERMS)
+
+    if provider == "huggingface":
+        if hf_available():
+            model = HF_CHEAP_MODEL if complexity == "simple" else HF_FAST_MODEL
+            return model, f"huggingface provider requested; {reason}"
+        return DEFAULT_MODEL, "huggingface requested but HF_TOKEN is missing; using OpenAI tier"
+
+    if provider == "openai":
+        model = "codex-cheap" if complexity == "simple" else DEFAULT_MODEL
+        return model, f"openai provider requested; {reason}"
+
+    if wants_hf and hf_available():
+        model = HF_CHEAP_MODEL if complexity == "simple" else HF_FAST_MODEL
+        return model, f"huggingface-related task; {reason}"
+
+    model = "codex-cheap" if complexity == "simple" else DEFAULT_MODEL
     return model, reason
 
 
@@ -281,8 +492,10 @@ def enable_router() -> int:
     save_state(enabled=True, enabled_at=utc_now(), current_model=DEFAULT_MODEL)
     print("Cost routing enabled.")
     print("LiteLLM OSS profile installed: cost-routing")
+    print("Optional Hugging Face profile installed: cost-routing-hf")
     print("Start the profile with:")
     print("  codex --profile cost-routing")
+    print("  codex --profile cost-routing-hf")
     print("Use optimized one-shot routing with:")
     print('  python codex_cost_router.py run "your task"')
     return 0
@@ -316,6 +529,7 @@ def print_status() -> int:
     print("-----------------")
     print(f"Profile active     : {'yes' if router_enabled() else 'no'}")
     print(f"Current model      : {latest.get('model', state.get('current_model', DEFAULT_MODEL))}")
+    print(f"Codex profile      : {latest.get('codex_profile', 'none')}")
     print(f"Last estimated cost: ${latest.get('estimated_cost_usd', 0):.8f}")
     print(f"Last routing       : {latest.get('routing_reason', 'none')}")
     print(f"Execution mode     : {latest.get('execution_mode', 'none')}")
@@ -396,6 +610,7 @@ def print_doctor() -> int:
         ("LiteLLM proxy localhost:4000", proxy_available(), "listening" if proxy_available() else "not listening"),
         ("LITELLM_API_KEY", bool(os.environ.get("LITELLM_API_KEY")), "set" if os.environ.get("LITELLM_API_KEY") else "missing"),
         ("OPENAI_API_KEY", bool(os.environ.get("OPENAI_API_KEY")), "set" if os.environ.get("OPENAI_API_KEY") else "missing"),
+        ("HF_TOKEN optional", True, "set" if hf_available() else "missing; Hugging Face aliases disabled"),
         ("PYTHONUTF8", os.environ.get("PYTHONUTF8") == "1", "1" if os.environ.get("PYTHONUTF8") == "1" else "missing or not 1"),
         ("Cost-routing profile", router_enabled(), "enabled" if router_enabled() else "disabled"),
     ]
@@ -414,18 +629,37 @@ def run_router(args: argparse.Namespace) -> int:
     """Optimize, log, and optionally execute a one-shot Codex CLI request."""
     prompt = " ".join(args.prompt).strip()
     optimized = build_optimized_prompt(prompt, args.max_input_tokens)
-    model, reason = route_model(prompt, args.force_model)
+    policy = load_policy(args.policy)
+    selected_codex_provider, codex_provider_reason = codex_provider_from_policy(args.codex_provider, policy)
+    selected_provider, provider_reason = provider_from_policy(prompt, args.provider, policy)
+    effective_provider = (
+        "huggingface"
+        if selected_codex_provider == "huggingface" and selected_provider == "auto"
+        else selected_provider
+    )
+    model, reason = route_model(prompt, args.force_model, effective_provider)
+    fallback_order = fallback_order_from_policy(selected_codex_provider, policy)
+    selected_codex_profile = codex_profile(selected_codex_provider)
+    selected_codex_model = codex_model(model, selected_codex_provider)
     original_tokens = estimate_tokens(prompt)
     input_tokens = estimate_tokens(optimized)
     output_tokens = args.max_output_tokens
     compression_ratio = round(input_tokens / max(1, original_tokens), 4)
     cost = estimate_cost(model, input_tokens, output_tokens)
+    max_cost = float(policy.get("max_cost_usd") or 0)
     strong_cost = estimate_cost(DEFAULT_MODEL, input_tokens, output_tokens)
     execution_mode = "dry-run" if args.dry_run else "codex-exec"
 
     record = {
         "timestamp": utc_now(),
         "model": model,
+        "provider": effective_provider,
+        "provider_reason": provider_reason,
+        "codex_provider": selected_codex_provider,
+        "codex_provider_reason": codex_provider_reason,
+        "codex_profile": selected_codex_profile,
+        "codex_model": selected_codex_model,
+        "fallback_order": fallback_order,
         "original_input_tokens": original_tokens,
         "estimated_input_tokens": input_tokens,
         "estimated_output_tokens": output_tokens,
@@ -433,17 +667,24 @@ def run_router(args: argparse.Namespace) -> int:
         "routing_reason": reason,
         "execution_mode": execution_mode,
         "estimated_cost_usd": cost,
+        "policy_max_cost_usd": max_cost,
         "estimated_savings_usd": round(max(0.0, strong_cost - cost), 8),
     }
     append_log(record)
     save_state(current_model=model, last_routing=record)
 
     print(f"Model             : {model}")
+    print(f"Provider          : {effective_provider}")
+    print(f"Codex profile     : {selected_codex_profile}")
+    print(f"Codex model       : {selected_codex_model}")
+    print(f"Fallback order    : {', '.join(fallback_order)}")
     print(f"Routing reason    : {reason}")
     print(f"Input tokens      : {original_tokens} -> {input_tokens}")
     print(f"Compression ratio : {compression_ratio:.2f}")
     print(f"Output budget     : {output_tokens}")
     print(f"Estimated cost    : ${cost:.8f}")
+    if max_cost > 0 and cost > max_cost:
+        print(f"Policy cost limit : ${max_cost:.8f} exceeded")
 
     if args.dry_run:
         print("\nOptimized prompt:")
@@ -453,26 +694,36 @@ def run_router(args: argparse.Namespace) -> int:
     if not router_enabled():
         print("Cost routing is disabled. Run: python codex_cost_router.py enable", file=sys.stderr)
         return 2
-    if not proxy_available():
-        print("LiteLLM OSS proxy is not listening on http://localhost:4000.", file=sys.stderr)
-        print("Run: python codex_cost_router.py doctor", file=sys.stderr)
-        return 4
     codex = find_codex()
     if not codex:
         print("Codex CLI was not found in PATH or CODEX_CLI_PATH.", file=sys.stderr)
         return 3
 
-    command = [
-        codex,
-        "exec",
-        "--profile",
-        "cost-routing",
-        "--model",
-        model,
-        *args.codex_arg,
-        optimized,
-    ]
-    return subprocess.run(command, check=False).returncode
+    last_returncode = 0
+    for attempt_provider in fallback_order:
+        ready, message = codex_provider_ready(attempt_provider)
+        if not ready:
+            print(f"Skipping {attempt_provider}: {message}", file=sys.stderr)
+            last_returncode = 5 if attempt_provider == "huggingface" else 4
+            continue
+        attempt_profile = codex_profile(attempt_provider)
+        attempt_model = codex_model(model, attempt_provider)
+        print(f"Executing through {attempt_profile} ({attempt_model})")
+        command = [
+            codex,
+            "exec",
+            "--profile",
+            attempt_profile,
+            "--model",
+            attempt_model,
+            *args.codex_arg,
+            optimized,
+        ]
+        last_returncode = subprocess.run(command, check=False).returncode
+        if last_returncode == 0:
+            return 0
+        print(f"Provider {attempt_provider} failed with exit code {last_returncode}.", file=sys.stderr)
+    return last_returncode or 6
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -492,6 +743,27 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("prompt", nargs="+", help="Prompt sent to Codex after optimization.")
     run.add_argument("--dry-run", action="store_true", help="Show routing without calling Codex.")
     run.add_argument("--force-model", choices=MODELS)
+    run.add_argument(
+        "--policy",
+        type=Path,
+        default=POLICY_FILE,
+        help="Routing policy YAML file.",
+    )
+    run.add_argument(
+        "--provider",
+        choices=PROVIDERS,
+        default=None,
+        help="Provider preference behind LiteLLM. Can also be set with CODEX_ROUTER_PROVIDER.",
+    )
+    run.add_argument(
+        "--codex-provider",
+        choices=CODEX_PROVIDERS,
+        default=None,
+        help=(
+            "Codex-facing provider profile: litellm for local proxy routing or "
+            "huggingface for the optional direct HF layer."
+        ),
+    )
     run.add_argument("--max-input-tokens", type=int, default=DEFAULT_MAX_INPUT_TOKENS)
     run.add_argument("--max-output-tokens", type=int, default=DEFAULT_MAX_OUTPUT_TOKENS)
     run.add_argument(

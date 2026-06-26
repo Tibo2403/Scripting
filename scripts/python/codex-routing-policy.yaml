@@ -1,0 +1,16 @@
+# Codex cost-routing policy.
+# CLI options still have priority, then environment variables, then this file.
+
+default_provider: auto
+default_codex_provider: litellm
+open_models_only: false
+max_cost_usd: 0.0
+
+task_provider_rules:
+  simple: huggingface
+  medium: auto
+  complex: openai
+
+fallback_order:
+  - litellm
+  - huggingface

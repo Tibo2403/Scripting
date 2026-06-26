@@ -53,7 +53,11 @@ Connect the inspector to `http://localhost:8000/mcp`.
 `codex_cost_router.py` is an optional Windows-friendly wrapper for Codex CLI and
 a local LiteLLM OSS proxy. It can clean prompts, compress logs, estimate tokens,
 apply budgets, and route one-shot Codex tasks to `codex-cheap` or
-`codex-strong`.
+`codex-strong`. When `HF_TOKEN` is available, it can also route Hugging Face and
+multi-provider tasks through the `codex-hf-cheap` and `codex-hf-fast` LiteLLM
+aliases, or launch an optional `cost-routing-hf` Codex profile that points
+directly at the Hugging Face router. `codex-routing-policy.yaml` keeps the
+default provider rules and fallback order editable without changing Python code.
 
 See [`README_Codex_Cost_Routing.md`](README_Codex_Cost_Routing.md) for setup,
 activation, LiteLLM configuration, and usage instructions.

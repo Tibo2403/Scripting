@@ -3,7 +3,9 @@ param(
     [ValidateSet('Run', 'Status', 'Stop')]
     [string]$Action = 'Run',
     [string]$CodexPath = 'codex',
-    [int]$Port = 4000
+    [int]$Port = 4000,
+    [ValidateSet('LiteLLM', 'HuggingFace')]
+    [string]$CodexProvider = 'LiteLLM'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -62,6 +64,7 @@ function Get-ProxyProcess {
 
 function Remove-SessionSecrets {
     Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue
+    Remove-Item Env:HF_TOKEN -ErrorAction SilentlyContinue
     Remove-Item Env:LITELLM_API_KEY -ErrorAction SilentlyContinue
     Remove-Item Env:PYTHONUTF8 -ErrorAction SilentlyContinue
 }
@@ -104,6 +107,24 @@ function Set-SessionSecrets {
     if (-not $env:LITELLM_API_KEY) {
         $env:LITELLM_API_KEY = 'sk-local-' + [Guid]::NewGuid().ToString('N')
     }
+    $env:PYTHONUTF8 = '1'
+}
+
+function Set-HuggingFaceSessionSecrets {
+    if (-not $env:HF_TOKEN) {
+        $secureKey = Read-Host 'HF_TOKEN (saisie masquee, conservee uniquement en memoire)' -AsSecureString
+        $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureKey)
+        try {
+            $env:HF_TOKEN = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+        }
+        finally {
+            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+        }
+    }
+    if (-not $env:HF_TOKEN) {
+        throw 'HF_TOKEN est obligatoire pour le profil Hugging Face.'
+    }
+
     $env:PYTHONUTF8 = '1'
 }
 
@@ -178,13 +199,27 @@ function Show-Status {
 
 switch ($Action) {
     'Run' {
-        Start-Router
-        try {
-            Write-Host 'Lancement de Codex avec le profil cost-routing...'
-            & $CodexPath --profile cost-routing
+        if ($CodexProvider -eq 'HuggingFace') {
+            Set-HuggingFaceSessionSecrets
+            & (Get-PythonPath) $routerPath enable | Out-Host
+            try {
+                Write-Host 'Lancement de Codex avec le profil cost-routing-hf...'
+                & $CodexPath --profile cost-routing-hf
+            }
+            finally {
+                & (Get-PythonPath) $routerPath disable | Out-Host
+                Remove-SessionSecrets
+            }
         }
-        finally {
-            Stop-Router
+        else {
+            Start-Router
+            try {
+                Write-Host 'Lancement de Codex avec le profil cost-routing...'
+                & $CodexPath --profile cost-routing
+            }
+            finally {
+                Stop-Router
+            }
         }
     }
     'Status' {

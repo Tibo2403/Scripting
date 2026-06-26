@@ -33,6 +33,87 @@ class CodexCostRouterTests(unittest.TestCase):
         self.assertEqual(ROUTER.route_model("Prépare un résumé du README")[0], "codex-cheap")
         self.assertEqual(ROUTER.route_model("Question de fiscalité pour Odoo")[0], "codex-strong")
 
+    def test_route_model_can_prefer_hugging_face_when_token_exists(self) -> None:
+        with patch.dict(ROUTER.os.environ, {"HF_TOKEN": "hf_test"}):
+            self.assertEqual(
+                ROUTER.route_model("Benchmark Hugging Face multi-provider routing")[0],
+                "codex-hf-fast",
+            )
+            self.assertEqual(
+                ROUTER.route_model("Corrige une typo dans le README", provider="huggingface")[0],
+                "codex-hf-cheap",
+            )
+
+    def test_route_model_falls_back_when_hugging_face_token_is_missing(self) -> None:
+        with patch.dict(ROUTER.os.environ, {}, clear=True):
+            model, reason = ROUTER.route_model("Use Hugging Face providers", provider="huggingface")
+            self.assertEqual(model, "codex-strong")
+            self.assertIn("HF_TOKEN is missing", reason)
+
+    def test_codex_provider_helpers_select_expected_profiles(self) -> None:
+        self.assertEqual(ROUTER.codex_profile("litellm"), "cost-routing")
+        self.assertEqual(ROUTER.codex_profile("huggingface"), "cost-routing-hf")
+        self.assertEqual(ROUTER.codex_model("codex-hf-fast", "litellm"), "codex-hf-fast")
+        self.assertEqual(
+            ROUTER.codex_model("codex-hf-fast", "huggingface"),
+            ROUTER.HF_DIRECT_MODEL,
+        )
+
+    def test_default_codex_provider_rejects_unknown_environment_value(self) -> None:
+        with patch.dict(ROUTER.os.environ, {"CODEX_ROUTER_CODEX_PROVIDER": "unknown"}):
+            self.assertEqual(ROUTER.default_codex_provider(), "litellm")
+
+    def test_profile_block_includes_optional_hugging_face_profile(self) -> None:
+        self.assertIn("[model_providers.huggingface]", ROUTER.PROFILE_BLOCK)
+        self.assertIn("[profiles.cost-routing-hf]", ROUTER.PROFILE_BLOCK)
+
+    def test_policy_file_can_override_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            policy = Path(directory) / "policy.yaml"
+            policy.write_text(
+                "\n".join(
+                    [
+                        "default_provider: openai",
+                        "default_codex_provider: huggingface",
+                        "open_models_only: false",
+                        "task_provider_rules:",
+                        "  simple: huggingface",
+                        "  medium: openai",
+                        "fallback_order:",
+                        "  - huggingface",
+                        "  - litellm",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            loaded = ROUTER.load_policy(policy)
+        self.assertEqual(loaded["default_provider"], "openai")
+        self.assertEqual(loaded["default_codex_provider"], "huggingface")
+        self.assertEqual(loaded["task_provider_rules"]["medium"], "openai")
+        self.assertEqual(loaded["fallback_order"], ["huggingface", "litellm"])
+
+    def test_policy_resolves_provider_and_fallback_order(self) -> None:
+        policy = {
+            **ROUTER.DEFAULT_POLICY,
+            "task_provider_rules": {"simple": "huggingface", "medium": "openai"},
+            "fallback_order": ["huggingface", "litellm"],
+        }
+        provider, reason = ROUTER.provider_from_policy("Document this README", None, policy)
+        self.assertEqual(provider, "huggingface")
+        self.assertIn("policy task rule", reason)
+        codex_provider, codex_reason = ROUTER.codex_provider_from_policy(None, policy)
+        self.assertEqual(codex_provider, "litellm")
+        self.assertIn("policy default", codex_reason)
+        self.assertEqual(
+            ROUTER.fallback_order_from_policy(codex_provider, policy),
+            ["litellm", "huggingface"],
+        )
+
+    def test_policy_open_models_only_prefers_hugging_face(self) -> None:
+        policy = {**ROUTER.DEFAULT_POLICY, "open_models_only": True}
+        self.assertEqual(ROUTER.provider_from_policy("Security review", None, policy)[0], "huggingface")
+        self.assertEqual(ROUTER.codex_provider_from_policy(None, policy)[0], "huggingface")
+
     def test_build_optimized_prompt_respects_budget(self) -> None:
         context = "<div>" + ("Architecture production Odoo migration security. " * 1000) + "</div>"
         optimized = ROUTER.build_optimized_prompt(context, 120)

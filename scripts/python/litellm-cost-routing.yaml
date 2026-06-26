@@ -2,6 +2,8 @@
 # Two explicit tiers keep the local setup simple:
 # - codex-cheap for low-cost/simple work
 # - codex-strong for default, medium, and complex work
+# Optional Hugging Face tiers use HF_TOKEN and let Hugging Face route across
+# inference providers behind a single token.
 # API keys are read from environment variables and must never be committed.
 
 model_list:
@@ -15,9 +17,24 @@ model_list:
       model: openai/gpt-5
       api_key: os.environ/OPENAI_API_KEY
 
+  - model_name: codex-hf-cheap
+    litellm_params:
+      model: huggingface/groq/openai/gpt-oss-120b
+      api_key: os.environ/HF_TOKEN
+
+  - model_name: codex-hf-fast
+    litellm_params:
+      model: huggingface/together/deepseek-ai/DeepSeek-R1
+      api_key: os.environ/HF_TOKEN
+
 router_settings:
   fallbacks:
     - codex-cheap:
+        - codex-strong
+    - codex-hf-cheap:
+        - codex-cheap
+        - codex-strong
+    - codex-hf-fast:
         - codex-strong
 
 litellm_settings:
