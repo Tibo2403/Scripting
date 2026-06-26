@@ -20,7 +20,7 @@ try {
     $validationLogSecret = 'validation-log-secret-value'
     Set-Content -LiteralPath (Join-Path $testRoot 'package.json') -Value '{"scripts":{"test":"node test.js","lint":"node slow.js","build":"node build.js"}}'
     Set-Content -LiteralPath (Join-Path $testRoot 'test.js') -Value "console.error('to' + 'ken=' + '$validationLogSecret'); process.exit(1);"
-    Set-Content -LiteralPath (Join-Path $testRoot 'slow.js') -Value "setTimeout(() => {}, 30000);"
+    Set-Content -LiteralPath (Join-Path $testRoot 'slow.js') -Value "setTimeout(() => {}, 120000);"
     Set-Content -LiteralPath (Join-Path $testRoot 'pyproject.toml') -Value '[tool.pytest.ini_options]'
     Set-Content -LiteralPath (Join-Path $testRoot '.env') -Value "OPENAI_API_KEY=$fakeKey"
     Set-Content -LiteralPath (Join-Path $testRoot 'tokens.txt') -Value $fakeAwsKey
@@ -102,7 +102,7 @@ try {
         throw 'A secret value from an excluded directory leaked into the report.'
     }
 
-    & $doctor -ProjectPath $testRoot -Validate -AllowProjectCommands -ValidationTimeoutSeconds 15 -ValidationLogLineLimit 2 -ReportPath $trustedReportPath
+    & $doctor -ProjectPath $testRoot -Validate -AllowProjectCommands -ValidationTimeoutSeconds 45 -ValidationLogLineLimit 2 -ReportPath $trustedReportPath
     $trustedReport = Get-Content -LiteralPath $trustedReportPath -Raw | ConvertFrom-Json
     $trustedNpmValidation = @($trustedReport.ValidationResults | Where-Object { $_.Command -eq 'npm run test' })
     if ($trustedNpmValidation.Count -ne 1 -or $trustedNpmValidation[0].Status -eq 'skipped') {
@@ -121,7 +121,7 @@ try {
     if ($trustedNpmLint.Count -ne 1 -or $trustedNpmLint[0].Status -ne 'timed-out') {
         throw 'Native validation commands did not stop after the configured timeout.'
     }
-    if ($trustedReport.ValidationTimeoutSeconds -ne 15 -or $trustedReport.ValidationLogLineLimit -ne 2) {
+    if ($trustedReport.ValidationTimeoutSeconds -ne 45 -or $trustedReport.ValidationLogLineLimit -ne 2) {
         throw 'Validation timeout and log limits were not written to the report.'
     }
 
