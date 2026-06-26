@@ -52,8 +52,11 @@ The scripts in `scripts/linux/pentest_*.sh`, `scan_wifi.sh`, and `stealth_post.s
 |   |   |-- Manage-CodexCostRouting.ps1
 |   |   |-- README.md
 |   |   |-- README_Codex_Cost_Routing.md
+|   |   |-- README_Finance_Bias_Evaluator.md
+|   |   |-- README_LLM_Bias_Multi_Agent.md
 |   |   |-- codex-cost-routing.cmd
 |   |   |-- codex_cost_router.py
+|   |   |-- finance_bias_evaluator.py
 |   |   |-- litellm-cost-routing.yaml
 |   |   |-- mcp_server.py
 |   |   `-- requirements.txt
@@ -153,6 +156,7 @@ Run the Codex Workspace Doctor smoke test:
 ## Linux Examples
 
 ```bash
+bash scripts/bash/install_ia_souveraine.sh --dry-run --skip-model
 bash scripts/linux/check_dependencies.sh
 bash scripts/linux/pentest_discovery.sh --dry-run --yes-i-am-authorized
 bash scripts/linux/pentest_verification.sh --dry-run --yes-i-am-authorized
@@ -190,6 +194,13 @@ python .\scripts\python\mcp_server.py
 Connect an MCP client to `http://localhost:8000/mcp`. See [`scripts/python/README.md`](scripts/python/README.md) for setup and inspector instructions.
 
 The optional Codex cost router in `scripts/python/codex_cost_router.py` can compress one-shot prompts and route them through a self-hosted LiteLLM OSS proxy. See [`scripts/python/README_Codex_Cost_Routing.md`](scripts/python/README_Codex_Cost_Routing.md).
+
+The optional LLM review tools in `scripts/python/finance_bias_evaluator.py` and
+`scripts/python/llm_bias_multi_agent.py` provide deterministic first-pass bias,
+fairness, and safeguard checks. See
+[`scripts/python/README_Finance_Bias_Evaluator.md`](scripts/python/README_Finance_Bias_Evaluator.md)
+and
+[`scripts/python/README_LLM_Bias_Multi_Agent.md`](scripts/python/README_LLM_Bias_Multi_Agent.md).
 
 ## CI
 

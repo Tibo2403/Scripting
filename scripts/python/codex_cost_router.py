@@ -24,9 +24,10 @@ STATE_FILE = LOG_DIR / "cost_router_state.json"
 CONFIG_BACKUP = LOG_DIR / "config.toml.cost_router_backup"
 BEGIN_MARKER = "# BEGIN CODEX COST ROUTER"
 END_MARKER = "# END CODEX COST ROUTER"
+DEFAULT_MODEL = "codex-strong"
 DEFAULT_MAX_INPUT_TOKENS = 12_000
 DEFAULT_MAX_OUTPUT_TOKENS = 2_000
-MODELS = ("codex-cheap", "codex-auto", "codex-strong")
+MODELS = ("codex-cheap", DEFAULT_MODEL)
 LITELLM_HOST = "localhost"
 LITELLM_PORT = 4000
 WINDOWS_LITELLM_FALLBACK = Path(r"C:\tmp\litellm-oss\Scripts\litellm.exe")
@@ -35,8 +36,7 @@ WINDOWS_LITELLM_FALLBACK = Path(r"C:\tmp\litellm-oss\Scripts\litellm.exe")
 # match the deployments configured in your local LiteLLM OSS proxy.
 ESTIMATED_RATES = {
     "codex-cheap": {"input": 0.15, "output": 0.60},
-    "codex-auto": {"input": 0.50, "output": 2.00},
-    "codex-strong": {"input": 2.00, "output": 8.00},
+    DEFAULT_MODEL: {"input": 2.00, "output": 8.00},
 }
 
 SIMPLE_TERMS = (
@@ -44,6 +44,7 @@ SIMPLE_TERMS = (
     "résumé",
     "resume",
     "documentation",
+    "document",
     "petite modification",
     "typo",
     "readme",
@@ -72,7 +73,7 @@ COMPLEX_TERMS = (
     "critical bug",
 )
 
-PROFILE_BLOCK = """\
+PROFILE_BLOCK = f"""\
 # BEGIN CODEX COST ROUTER
 [model_providers.litellm]
 name = "LiteLLM OSS Cost Router"
@@ -81,7 +82,7 @@ env_key = "LITELLM_API_KEY"
 wire_api = "responses"
 
 [profiles.cost-routing]
-model = "codex-auto"
+model = "{DEFAULT_MODEL}"
 model_provider = "litellm"
 model_reasoning_effort = "low"
 # END CODEX COST ROUTER
@@ -247,8 +248,8 @@ def route_model(prompt: str, force_model: str | None = None) -> tuple[str, str]:
     complexity, reason = classify_complexity(prompt)
     model = {
         "simple": "codex-cheap",
-        "medium": "codex-auto",
-        "complex": "codex-strong",
+        "medium": DEFAULT_MODEL,
+        "complex": DEFAULT_MODEL,
     }[complexity]
     return model, reason
 
@@ -277,7 +278,7 @@ def enable_router() -> int:
     config = remove_profile_block(config)
     updated = config.rstrip() + ("\n\n" if config.strip() else "") + PROFILE_BLOCK
     write_text(CODEX_CONFIG, updated)
-    save_state(enabled=True, enabled_at=utc_now(), current_model="codex-auto")
+    save_state(enabled=True, enabled_at=utc_now(), current_model=DEFAULT_MODEL)
     print("Cost routing enabled.")
     print("LiteLLM OSS profile installed: cost-routing")
     print("Start the profile with:")
@@ -314,7 +315,7 @@ def print_status() -> int:
     print("Codex Cost Router")
     print("-----------------")
     print(f"Profile active     : {'yes' if router_enabled() else 'no'}")
-    print(f"Current model      : {latest.get('model', state.get('current_model', 'codex-auto'))}")
+    print(f"Current model      : {latest.get('model', state.get('current_model', DEFAULT_MODEL))}")
     print(f"Last estimated cost: ${latest.get('estimated_cost_usd', 0):.8f}")
     print(f"Last routing       : {latest.get('routing_reason', 'none')}")
     print(f"Execution mode     : {latest.get('execution_mode', 'none')}")
@@ -419,7 +420,7 @@ def run_router(args: argparse.Namespace) -> int:
     output_tokens = args.max_output_tokens
     compression_ratio = round(input_tokens / max(1, original_tokens), 4)
     cost = estimate_cost(model, input_tokens, output_tokens)
-    strong_cost = estimate_cost("codex-strong", input_tokens, output_tokens)
+    strong_cost = estimate_cost(DEFAULT_MODEL, input_tokens, output_tokens)
     execution_mode = "dry-run" if args.dry_run else "codex-exec"
 
     record = {

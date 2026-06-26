@@ -52,8 +52,18 @@ Connect the inspector to `http://localhost:8000/mcp`.
 
 `codex_cost_router.py` is an optional Windows-friendly wrapper for Codex CLI and
 a local LiteLLM OSS proxy. It can clean prompts, compress logs, estimate tokens,
-apply budgets, and route one-shot Codex tasks to `codex-cheap`, `codex-auto`, or
+apply budgets, and route one-shot Codex tasks to `codex-cheap` or
 `codex-strong`.
 
 See [`README_Codex_Cost_Routing.md`](README_Codex_Cost_Routing.md) for setup,
 activation, LiteLLM configuration, and usage instructions.
+
+## LLM Review Tools
+
+`finance_bias_evaluator.py` is a deterministic first-pass checker for finance
+security, fairness, auditability, and governance controls. See
+[`README_Finance_Bias_Evaluator.md`](README_Finance_Bias_Evaluator.md).
+
+`llm_bias_multi_agent.py` is a provider-agnostic multi-agent manager for
+reviewing and revising LLM answers without calling an LLM provider. See
+[`README_LLM_Bias_Multi_Agent.md`](README_LLM_Bias_Multi_Agent.md).
