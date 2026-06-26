@@ -126,8 +126,16 @@ try {
     }
 
     $powerShellPath = (Get-Process -Id $PID).Path
-    & $powerShellPath -NoProfile -File $doctor -ProjectPath $testRoot -FailOn Secret -ReportPath $ciReportPath *> $null
-    if ($LASTEXITCODE -ne 1) {
+    $ciStdOutPath = Join-Path $testRoot 'ci-policy.stdout.log'
+    $ciStdErrPath = Join-Path $testRoot 'ci-policy.stderr.log'
+    $ciProcess = Start-Process -FilePath $powerShellPath -ArgumentList @(
+        '-NoProfile',
+        '-File', $doctor,
+        '-ProjectPath', $testRoot,
+        '-FailOn', 'Secret',
+        '-ReportPath', $ciReportPath
+    ) -NoNewWindow -Wait -PassThru -RedirectStandardOutput $ciStdOutPath -RedirectStandardError $ciStdErrPath
+    if ($ciProcess.ExitCode -ne 1) {
         throw 'CI secret policy did not return a non-zero exit code.'
     }
     $ciReport = Get-Content -LiteralPath $ciReportPath -Raw | ConvertFrom-Json
