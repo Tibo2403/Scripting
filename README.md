@@ -181,8 +181,9 @@ bash scripts/linux/pentest_discovery.sh \
 
 The discovery script writes `discovery_summary.tsv` in the run directory and
 updates `pentest_results/latest` when the platform allows symlinks. Verification
-can target a subset of hosts and skip heavier integrations when the lab does not
-have OpenVAS or Metasploit installed:
+uses that latest run by default, preserves the original target values from the
+summary, can target a subset of hosts, and can skip heavier integrations when the
+lab does not have OpenVAS or Metasploit installed:
 
 ```bash
 bash scripts/linux/pentest_verification.sh \
