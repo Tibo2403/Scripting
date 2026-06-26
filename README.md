@@ -159,6 +159,10 @@ bash scripts/linux/pentest_verification.sh --dry-run --yes-i-am-authorized
 bash scripts/linux/pentest_exploitation.sh --dry-run --yes-i-am-authorized
 ```
 
+Compatibility wrappers are also available at `scripts/pentest_discovery.sh`,
+`scripts/pentest_verification.sh`, and `scripts/pentest_exploitation.sh`. They
+forward arguments to the guarded implementations in `scripts/linux/`.
+
 For `stealth_post.sh`, pass credentials through environment variables or a local config file that is never committed:
 
 ```bash

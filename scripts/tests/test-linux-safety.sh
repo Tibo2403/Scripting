@@ -19,6 +19,9 @@ assert_no_artifacts() {
 }
 
 SENSITIVE_SCRIPTS=(
+    scripts/pentest_discovery.sh
+    scripts/pentest_verification.sh
+    scripts/pentest_exploitation.sh
     scripts/linux/pentest_discovery.sh
     scripts/linux/pentest_verification.sh
     scripts/linux/pentest_exploitation.sh
@@ -38,6 +41,15 @@ assert_ok "verification dry-run" \
 
 assert_ok "exploitation dry-run" \
     bash scripts/linux/pentest_exploitation.sh --dry-run --yes-i-am-authorized >/dev/null 2>&1
+
+assert_ok "discovery wrapper dry-run" \
+    bash scripts/pentest_discovery.sh --dry-run --yes-i-am-authorized >/dev/null 2>&1
+
+assert_ok "verification wrapper dry-run" \
+    bash scripts/pentest_verification.sh --dry-run --yes-i-am-authorized >/dev/null 2>&1
+
+assert_ok "exploitation wrapper dry-run" \
+    bash scripts/pentest_exploitation.sh --dry-run --yes-i-am-authorized >/dev/null 2>&1
 
 assert_ok "wifi dry-run" \
     bash scripts/linux/scan_wifi.sh --dry-run --yes-i-am-authorized --non-interactive \
