@@ -66,19 +66,24 @@ $env:HF_TOKEN = 'hf_...'
 $env:HUGGINGFACE_API_KEY = $env:HF_TOKEN
 ```
 
-## Self-Hosted Qwen Fallback
+## Local Ollama Qwen Fallback
 
 The local LiteLLM config includes `codex-qwen-local` as a final fallback for
-the main Codex aliases. It expects an OpenAI-compatible local endpoint:
+the main Codex aliases. It uses Ollama's OpenAI-compatible endpoint with the
+lighter Qwen2.5 Coder 7B GGUF model:
 
 ```powershell
-$env:QWEN_API_BASE = 'http://127.0.0.1:8000/v1'
-$env:QWEN_API_KEY = 'sk-local-qwen'
+.\scripts\python\Start-CodexQwenOllama.ps1
 ```
 
-`QWEN_API_KEY` can be any dummy value when your local server does not require
-authentication. The local web key page also accepts these two fields and passes
-them only to the LiteLLM subprocess environment.
+The script starts Ollama if needed and pulls:
+
+```text
+hf.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:latest
+```
+
+LiteLLM then reaches it through `http://127.0.0.1:11434/v1`. No provider API key
+is required for this local fallback.
 
 Second, Hugging Face can be added as an optional Codex-facing layer. Running
 `enable` now installs two managed profiles:
@@ -179,10 +184,12 @@ If you prefer entering keys in a local page for one work session, start:
 ```
 
 Then open `http://127.0.0.1:8787/`, paste `OPENAI_API_KEY`,
-`GEMINI_API_KEY`, `HF_TOKEN`, or the optional Qwen endpoint fields, and submit
-the form. The page starts the LiteLLM proxy on `http://127.0.0.1:4000/v1` with
-those values only in the proxy process environment. The keys are not written to
-disk and the web server suppresses request logging.
+`GEMINI_API_KEY`, `HF_TOKEN`, or optional custom Qwen endpoint fields, and
+submit the form. For the default local Qwen/Ollama fallback, run
+`Start-CodexQwenOllama.ps1`; no Qwen API key is needed. The page starts the
+LiteLLM proxy on `http://127.0.0.1:4000/v1` with submitted values only in the
+proxy process environment. The keys are not written to disk and the web server
+suppresses request logging.
 
 To launch the optional Hugging Face-facing profile instead of the local LiteLLM
 proxy:

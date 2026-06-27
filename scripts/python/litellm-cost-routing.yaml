@@ -5,11 +5,10 @@
 # - codex-default: normal coding work, OpenAI biased with Gemini relief
 # - codex-long: long-context reads and synthesis, Gemini Pro biased
 # - codex-deep: high-stakes debugging/security/architecture, OpenAI biased
-# - codex-qwen-local: self-hosted OpenAI-compatible Qwen fallback
+# - codex-qwen-local: local Ollama Qwen fallback
 # API keys are read from environment variables and must never be committed.
-# Qwen fallback expects QWEN_API_BASE, for example http://127.0.0.1:8000/v1.
-# QWEN_API_KEY is optional for many local servers; use any dummy value when the
-# server does not require authentication.
+# Qwen fallback expects Ollama on http://127.0.0.1:11434/v1 with:
+#   hf.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:latest
 
 model_list:
   # Backward-compatible aliases used by older wrapper calls.
@@ -92,15 +91,14 @@ model_list:
       api_key: os.environ/GEMINI_API_KEY
       weight: 1
 
-  # Local OpenAI-compatible fallback for a self-hosted Qwen endpoint.
-  # Start a server with a /v1-compatible API and set:
-  #   QWEN_API_BASE=http://127.0.0.1:8000/v1
-  #   QWEN_API_KEY=sk-local-qwen
+  # Local Ollama fallback for Qwen2.5 Coder 7B GGUF.
+  # Prepare with:
+  #   ollama pull hf.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:latest
   - model_name: codex-qwen-local
     litellm_params:
-      model: openai/qwen-auto-hosted
-      api_base: os.environ/QWEN_API_BASE
-      api_key: os.environ/QWEN_API_KEY
+      model: openai/hf.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:latest
+      api_base: http://127.0.0.1:11434/v1
+      api_key: sk-ollama-local
       weight: 1
 
   - model_name: codex-hf-cheap
@@ -124,7 +122,7 @@ router_settings:
     gpt-5.4-mini: codex-light
     gemini-3.5-pro: codex-long
     gemini-3.5-flash: codex-light
-    qwen-auto-hosted: codex-qwen-local
+    hf.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:latest: codex-qwen-local
   fallbacks:
     - codex-light:
         - codex-default

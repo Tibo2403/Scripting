@@ -59,7 +59,7 @@ environment variables. When `HF_TOKEN` is available, it can also route Hugging
 Face and multi-provider tasks through the `codex-hf-cheap` and `codex-hf-fast`
 LiteLLM aliases, or launch an optional `cost-routing-hf` Codex profile that
 points directly at the Hugging Face router. `codex-qwen-local` is available as
-a self-hosted OpenAI-compatible Qwen fallback when `QWEN_API_BASE` is set.
+a local Ollama fallback through `Qwen/Qwen2.5-Coder-7B-Instruct-GGUF`.
 `codex-routing-policy.yaml` keeps the default provider rules and fallback order
 editable without changing Python code.
 

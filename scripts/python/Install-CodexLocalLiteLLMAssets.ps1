@@ -9,6 +9,7 @@ $files = @(
     'litellm-cost-routing.yaml',
     'codex_key_session_web.py',
     'Start-CodexKeySessionWeb.ps1',
+    'Start-CodexQwenOllama.ps1',
     'Test-CodexLiteLLMDispatch.ps1'
 )
 

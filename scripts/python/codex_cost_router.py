@@ -51,6 +51,8 @@ MODELS = (
 )
 LITELLM_HOST = "localhost"
 LITELLM_PORT = 4000
+OLLAMA_HOST = "127.0.0.1"
+OLLAMA_PORT = 11434
 WINDOWS_LITELLM_FALLBACK = Path(r"C:\tmp\litellm-oss\Scripts\litellm.exe")
 POLICY_FILE = Path(__file__).with_name("codex-routing-policy.yaml")
 DEFAULT_POLICY = {
@@ -392,8 +394,15 @@ def hf_available() -> bool:
 
 
 def qwen_available() -> bool:
-    """Return whether a self-hosted Qwen endpoint is configured."""
-    return bool(os.environ.get("QWEN_API_BASE"))
+    """Return whether the local Ollama Qwen endpoint is reachable."""
+    configured_base = os.environ.get("QWEN_API_BASE")
+    if configured_base:
+        return True
+    try:
+        with socket.create_connection((OLLAMA_HOST, OLLAMA_PORT), timeout=1):
+            return True
+    except OSError:
+        return False
 
 
 def default_provider() -> str:
@@ -508,7 +517,7 @@ def route_model(
     if provider == "qwen":
         if qwen_available():
             return QWEN_LOCAL_MODEL, f"qwen provider requested; {reason}"
-        return DEFAULT_MODEL, "qwen requested but QWEN_API_BASE is missing; using default OpenAI/Gemini tier"
+        return DEFAULT_MODEL, "qwen requested but Ollama is not listening on 127.0.0.1:11434; using default OpenAI/Gemini tier"
 
     if provider == "openai":
         model = LIGHT_MODEL if complexity == "simple" else DEEP_MODEL
@@ -682,8 +691,7 @@ def print_doctor() -> int:
         ("LiteLLM proxy localhost:4000", proxy_available(), "listening" if proxy_available() else "not listening"),
         ("LITELLM_API_KEY", bool(os.environ.get("LITELLM_API_KEY")), "set" if os.environ.get("LITELLM_API_KEY") else "missing"),
         ("OPENAI_API_KEY", bool(os.environ.get("OPENAI_API_KEY")), "set" if os.environ.get("OPENAI_API_KEY") else "missing"),
-        ("QWEN_API_BASE optional", True, os.environ.get("QWEN_API_BASE") or "missing; self-hosted Qwen fallback disabled"),
-        ("QWEN_API_KEY optional", True, "set" if os.environ.get("QWEN_API_KEY") else "missing; use dummy value for no-auth local servers"),
+        ("Ollama Qwen optional", True, "listening on 127.0.0.1:11434" if qwen_available() else "missing; run Start-CodexQwenOllama.ps1"),
         ("HF_TOKEN optional", True, "set" if hf_available() else "missing; Hugging Face aliases disabled"),
         ("PYTHONUTF8", os.environ.get("PYTHONUTF8") == "1", "1" if os.environ.get("PYTHONUTF8") == "1" else "missing or not 1"),
         ("Cost-routing profile", router_enabled(), "enabled" if router_enabled() else "disabled"),
