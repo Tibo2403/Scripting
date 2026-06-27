@@ -65,6 +65,11 @@ code.
 See [`README_Codex_Cost_Routing.md`](README_Codex_Cost_Routing.md) for setup,
 activation, LiteLLM configuration, and usage instructions.
 
+To enter OpenAI, Gemini, or Hugging Face keys through a local page for one
+session, run `Start-CodexKeySessionWeb.ps1` and open
+`http://127.0.0.1:8787/`. Keys are kept in memory for the LiteLLM subprocess
+and are not written to disk.
+
 ## LLM Review Tools
 
 `finance_bias_evaluator.py` is a deterministic first-pass checker for finance

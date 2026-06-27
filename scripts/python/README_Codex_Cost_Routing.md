@@ -146,6 +146,20 @@ for this command only. The script:
 
 There is no key to copy and no second terminal is required.
 
+### Optional local web key session
+
+If you prefer entering keys in a local page for one work session, start:
+
+```powershell
+.\scripts\python\Start-CodexKeySessionWeb.ps1
+```
+
+Then open `http://127.0.0.1:8787/`, paste `OPENAI_API_KEY`,
+`GEMINI_API_KEY`, or `HF_TOKEN`, and submit the form. The page starts the
+LiteLLM proxy on `http://127.0.0.1:4000/v1` with those keys only in the proxy
+process environment. The keys are not written to disk and the web server
+suppresses request logging.
+
 To launch the optional Hugging Face-facing profile instead of the local LiteLLM
 proxy:
 
@@ -209,6 +223,8 @@ Prompts and API keys are not logged.
 - `Manage-CodexCostRouting.ps1`: automatic run, status, and stop workflow.
 - `codex-cost-routing.cmd`: simple Windows launcher.
 - `codex_cost_router.py`: prompt optimization and one-shot routing.
+- `codex_key_session_web.py`: local-only web form for session keys.
+- `Start-CodexKeySessionWeb.ps1`: PowerShell launcher for the local key page.
 - `codex-routing-policy.yaml`: editable routing policy and fallback order.
 - `litellm-cost-routing.yaml`: local LiteLLM OSS OpenAI/Gemini model groups,
   context-window fallbacks, cooldowns, and compatibility aliases.
