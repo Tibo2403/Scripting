@@ -64,6 +64,7 @@ function Get-ProxyProcess {
 
 function Remove-SessionSecrets {
     Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue
+    Remove-Item Env:GEMINI_API_KEY -ErrorAction SilentlyContinue
     Remove-Item Env:HF_TOKEN -ErrorAction SilentlyContinue
     Remove-Item Env:LITELLM_API_KEY -ErrorAction SilentlyContinue
     Remove-Item Env:PYTHONUTF8 -ErrorAction SilentlyContinue
@@ -102,6 +103,19 @@ function Set-SessionSecrets {
     }
     if (-not $env:OPENAI_API_KEY) {
         throw 'OPENAI_API_KEY est obligatoire.'
+    }
+
+    if (-not $env:GEMINI_API_KEY) {
+        $secureKey = Read-Host 'GEMINI_API_KEY (optionnel, entree pour activer le dispatching Gemini)' -AsSecureString
+        if ($secureKey.Length -gt 0) {
+            $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureKey)
+            try {
+                $env:GEMINI_API_KEY = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+            }
+            finally {
+                [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+            }
+        }
     }
 
     if (-not $env:LITELLM_API_KEY) {

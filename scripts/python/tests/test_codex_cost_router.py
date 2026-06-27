@@ -1,4 +1,4 @@
-"""Tests for the optional Codex cost-routing wrapper."""
+﻿"""Tests for the optional Codex cost-routing wrapper."""
 
 import importlib.util
 import tempfile
@@ -25,13 +25,23 @@ class CodexCostRouterTests(unittest.TestCase):
         self.assertEqual(ROUTER.compress_logs(text), "ERROR request failed")
 
     def test_route_model_uses_expected_aliases(self) -> None:
-        self.assertEqual(ROUTER.route_model("Corrige une typo dans le README")[0], "codex-cheap")
-        self.assertEqual(ROUTER.route_model("Refactor this Python API")[0], "codex-strong")
-        self.assertEqual(ROUTER.route_model("Audit sécurité production Supabase RLS")[0], "codex-strong")
+        self.assertEqual(ROUTER.route_model("Corrige une typo dans le README")[0], "codex-light")
+        self.assertEqual(ROUTER.route_model("Refactor this Python API")[0], "codex-default")
+        self.assertEqual(ROUTER.route_model("Audit sÃ©curitÃ© production Supabase RLS")[0], "codex-deep")
 
     def test_route_model_matches_accented_french_keywords(self) -> None:
-        self.assertEqual(ROUTER.route_model("Prépare un résumé du README")[0], "codex-cheap")
-        self.assertEqual(ROUTER.route_model("Question de fiscalité pour Odoo")[0], "codex-strong")
+        self.assertEqual(ROUTER.route_model("PrÃ©pare un rÃ©sumÃ© du README")[0], "codex-light")
+        self.assertEqual(ROUTER.route_model("Question de fiscalitÃ© pour Odoo")[0], "codex-deep")
+
+    def test_route_model_sends_long_context_to_gemini_biased_alias(self) -> None:
+        self.assertEqual(
+            ROUTER.route_model("Analyse ces logs et fais une synthese long context")[0],
+            "codex-long",
+        )
+        self.assertEqual(
+            ROUTER.route_model("Summarize this large file", provider="gemini")[0],
+            "codex-long",
+        )
 
     def test_route_model_can_prefer_hugging_face_when_token_exists(self) -> None:
         with patch.dict(ROUTER.os.environ, {"HF_TOKEN": "hf_test"}):
@@ -47,7 +57,7 @@ class CodexCostRouterTests(unittest.TestCase):
     def test_route_model_falls_back_when_hugging_face_token_is_missing(self) -> None:
         with patch.dict(ROUTER.os.environ, {}, clear=True):
             model, reason = ROUTER.route_model("Use Hugging Face providers", provider="huggingface")
-            self.assertEqual(model, "codex-strong")
+            self.assertEqual(model, "codex-default")
             self.assertIn("HF_TOKEN is missing", reason)
 
     def test_codex_provider_helpers_select_expected_profiles(self) -> None:
@@ -158,3 +168,4 @@ class CodexCostRouterTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
