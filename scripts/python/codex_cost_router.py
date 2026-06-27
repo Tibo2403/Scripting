@@ -33,9 +33,11 @@ LEGACY_STRONG_MODEL = "codex-strong"
 HF_FAST_MODEL = "codex-hf-fast"
 HF_CHEAP_MODEL = "codex-hf-cheap"
 HF_DIRECT_MODEL = "openai/gpt-oss-120b:fastest"
+QWEN_LOCAL_MODEL = "codex-qwen-local"
+NO_OPENAI_MODEL = "codex-no-openai"
 DEFAULT_MAX_INPUT_TOKENS = 12_000
 DEFAULT_MAX_OUTPUT_TOKENS = 2_000
-PROVIDERS = ("auto", "openai", "gemini", "huggingface")
+PROVIDERS = ("auto", "openai", "gemini", "huggingface", "qwen", "no-openai")
 CODEX_PROVIDERS = ("litellm", "huggingface")
 MODELS = (
     LIGHT_MODEL,
@@ -46,15 +48,20 @@ MODELS = (
     LEGACY_STRONG_MODEL,
     HF_FAST_MODEL,
     HF_CHEAP_MODEL,
+    QWEN_LOCAL_MODEL,
+    NO_OPENAI_MODEL,
 )
 LITELLM_HOST = "localhost"
 LITELLM_PORT = 4000
+OLLAMA_HOST = "127.0.0.1"
+OLLAMA_PORT = 11434
 WINDOWS_LITELLM_FALLBACK = Path(r"C:\tmp\litellm-oss\Scripts\litellm.exe")
 POLICY_FILE = Path(__file__).with_name("codex-routing-policy.yaml")
 DEFAULT_POLICY = {
     "default_provider": "auto",
     "default_codex_provider": "litellm",
     "open_models_only": False,
+    "avoid_openai": False,
     "max_cost_usd": 0.0,
     "task_provider_rules": {
         "simple": "auto",
@@ -75,6 +82,8 @@ ESTIMATED_RATES = {
     LEGACY_STRONG_MODEL: {"input": 2.00, "output": 8.00},
     HF_CHEAP_MODEL: {"input": 0.10, "output": 0.30},
     HF_FAST_MODEL: {"input": 0.25, "output": 0.75},
+    QWEN_LOCAL_MODEL: {"input": 0.0, "output": 0.0},
+    NO_OPENAI_MODEL: {"input": 0.40, "output": 1.50},
 }
 
 SIMPLE_TERMS = (
@@ -121,6 +130,16 @@ HF_TERMS = (
     "multi provider",
     "provider benchmark",
     "benchmark providers",
+)
+QWEN_TERMS = (
+    "qwen",
+    "auto-heberge",
+    "auto heberge",
+    "auto-hebergee",
+    "self-hosted",
+    "self hosted",
+    "local llm",
+    "openai-compatible local",
 )
 LONG_CONTEXT_TERMS = (
     "gros contexte",
@@ -378,10 +397,32 @@ def hf_available() -> bool:
     return bool(os.environ.get("HF_TOKEN"))
 
 
+def qwen_available() -> bool:
+    """Return whether the local Ollama Qwen endpoint is reachable."""
+    configured_base = os.environ.get("QWEN_API_BASE")
+    if configured_base:
+        return True
+    try:
+        with socket.create_connection((OLLAMA_HOST, OLLAMA_PORT), timeout=1):
+            return True
+    except OSError:
+        return False
+
+
 def default_provider() -> str:
     """Read the provider preference from the environment with a safe fallback."""
     provider = os.environ.get("CODEX_ROUTER_PROVIDER", "auto").casefold()
     return provider if provider in PROVIDERS else "auto"
+
+
+def openai_avoidance_enabled(policy: dict[str, Any] | None = None) -> bool:
+    """Return whether OpenAI should be avoided to preserve or bypass quota."""
+    value = os.environ.get("CODEX_ROUTER_OPENAI_MODE", "").casefold()
+    if value in {"avoid", "off", "depleted", "quota", "no-openai", "no_openai"}:
+        return True
+    if value in {"", "auto", "normal", "on"}:
+        return bool(policy and policy.get("avoid_openai"))
+    return False
 
 
 def default_codex_provider() -> str:
@@ -414,6 +455,8 @@ def provider_from_policy(
         return default_provider(), "provider forced by CODEX_ROUTER_PROVIDER"
     if bool(policy.get("open_models_only")):
         return "huggingface", "policy open_models_only"
+    if openai_avoidance_enabled(policy):
+        return "no-openai", "OpenAI avoidance enabled"
     complexity, _ = classify_complexity(prompt)
     rules = policy.get("task_provider_rules", {})
     if isinstance(rules, dict) and complexity in rules:
@@ -487,6 +530,16 @@ def route_model(
             return model, f"huggingface provider requested; {reason}"
         return DEFAULT_MODEL, "huggingface requested but HF_TOKEN is missing; using default OpenAI/Gemini tier"
 
+    if provider == "qwen":
+        if qwen_available():
+            return QWEN_LOCAL_MODEL, f"qwen provider requested; {reason}"
+        return DEFAULT_MODEL, "qwen requested but Ollama is not listening on 127.0.0.1:11434; using default OpenAI/Gemini tier"
+
+    if provider == "no-openai":
+        if qwen_available():
+            return NO_OPENAI_MODEL, f"OpenAI avoided; Gemini/Qwen alias selected; {reason}"
+        return LONG_MODEL, f"OpenAI avoided; Qwen unavailable so Gemini long-context alias selected; {reason}"
+
     if provider == "openai":
         model = LIGHT_MODEL if complexity == "simple" else DEEP_MODEL
         return model, f"openai provider requested; {reason}"
@@ -498,6 +551,9 @@ def route_model(
     if wants_hf and hf_available():
         model = HF_CHEAP_MODEL if complexity == "simple" else HF_FAST_MODEL
         return model, f"huggingface-related task; {reason}"
+
+    if any(term in normalized for term in QWEN_TERMS) and qwen_available():
+        return QWEN_LOCAL_MODEL, f"qwen local task; {reason}"
 
     if wants_long_context:
         return LONG_MODEL, f"long-context task; {reason}"
@@ -656,6 +712,7 @@ def print_doctor() -> int:
         ("LiteLLM proxy localhost:4000", proxy_available(), "listening" if proxy_available() else "not listening"),
         ("LITELLM_API_KEY", bool(os.environ.get("LITELLM_API_KEY")), "set" if os.environ.get("LITELLM_API_KEY") else "missing"),
         ("OPENAI_API_KEY", bool(os.environ.get("OPENAI_API_KEY")), "set" if os.environ.get("OPENAI_API_KEY") else "missing"),
+        ("Ollama Qwen optional", True, "listening on 127.0.0.1:11434" if qwen_available() else "missing; run Start-CodexQwenOllama.ps1"),
         ("HF_TOKEN optional", True, "set" if hf_available() else "missing; Hugging Face aliases disabled"),
         ("PYTHONUTF8", os.environ.get("PYTHONUTF8") == "1", "1" if os.environ.get("PYTHONUTF8") == "1" else "missing or not 1"),
         ("Cost-routing profile", router_enabled(), "enabled" if router_enabled() else "disabled"),

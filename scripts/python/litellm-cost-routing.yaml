@@ -1,11 +1,15 @@
 # LiteLLM OSS self-hosted proxy example for Codex.
 # Task-oriented aliases let Codex route by workload instead of hard-coding a
 # single provider:
-# - codex-light: cheap/frequent work, Gemini Flash biased
-# - codex-default: normal coding work, OpenAI biased with Gemini relief
+# - codex-light: cheap/frequent work, Gemini Flash biased with local Qwen relief
+# - codex-default: normal coding work, balanced OpenAI/Gemini with local Qwen relief
 # - codex-long: long-context reads and synthesis, Gemini Pro biased
-# - codex-deep: high-stakes debugging/security/architecture, OpenAI biased
+# - codex-deep: high-stakes debugging/security/architecture, OpenAI biased with fast fallback
+# - codex-no-openai: Gemini/Qwen routing when OpenAI quota is exhausted
+# - codex-qwen-local: local Ollama Qwen fallback
 # API keys are read from environment variables and must never be committed.
+# Qwen fallback expects Ollama on http://127.0.0.1:11434/v1 with:
+#   hf.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:latest
 
 model_list:
   # Backward-compatible aliases used by older wrapper calls.
@@ -44,19 +48,33 @@ model_list:
     litellm_params:
       model: openai/gpt-5.4-mini
       api_key: os.environ/OPENAI_API_KEY
-      weight: 3
+      weight: 2
+
+  - model_name: codex-light
+    litellm_params:
+      model: openai/hf.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:latest
+      api_base: http://127.0.0.1:11434/v1
+      api_key: sk-ollama-local
+      weight: 1
 
   - model_name: codex-default
     litellm_params:
       model: openai/gpt-5.5
       api_key: os.environ/OPENAI_API_KEY
-      weight: 8
+      weight: 5
 
   - model_name: codex-default
     litellm_params:
       model: gemini/gemini-3.5-pro
       api_key: os.environ/GEMINI_API_KEY
-      weight: 2
+      weight: 4
+
+  - model_name: codex-default
+    litellm_params:
+      model: openai/hf.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:latest
+      api_base: http://127.0.0.1:11434/v1
+      api_key: sk-ollama-local
+      weight: 1
 
   - model_name: codex-long
     litellm_params:
@@ -76,16 +94,61 @@ model_list:
       api_key: os.environ/OPENAI_API_KEY
       weight: 1
 
+  - model_name: codex-long
+    litellm_params:
+      model: openai/hf.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:latest
+      api_base: http://127.0.0.1:11434/v1
+      api_key: sk-ollama-local
+      weight: 1
+
   - model_name: codex-deep
     litellm_params:
       model: openai/gpt-5.5
       api_key: os.environ/OPENAI_API_KEY
-      weight: 10
+      weight: 7
 
   - model_name: codex-deep
     litellm_params:
       model: gemini/gemini-3.5-pro
       api_key: os.environ/GEMINI_API_KEY
+      weight: 2
+
+  - model_name: codex-deep
+    litellm_params:
+      model: openai/hf.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:latest
+      api_base: http://127.0.0.1:11434/v1
+      api_key: sk-ollama-local
+      weight: 1
+
+  # OpenAI quota saver. Use this alias directly, or set
+  # CODEX_ROUTER_OPENAI_MODE=avoid with codex_cost_router.py.
+  - model_name: codex-no-openai
+    litellm_params:
+      model: gemini/gemini-3.5-pro
+      api_key: os.environ/GEMINI_API_KEY
+      weight: 6
+
+  - model_name: codex-no-openai
+    litellm_params:
+      model: gemini/gemini-3.5-flash
+      api_key: os.environ/GEMINI_API_KEY
+      weight: 2
+
+  - model_name: codex-no-openai
+    litellm_params:
+      model: openai/hf.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:latest
+      api_base: http://127.0.0.1:11434/v1
+      api_key: sk-ollama-local
+      weight: 2
+
+  # Local Ollama fallback for Qwen2.5 Coder 7B GGUF.
+  # Prepare with:
+  #   ollama pull hf.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:latest
+  - model_name: codex-qwen-local
+    litellm_params:
+      model: openai/hf.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:latest
+      api_base: http://127.0.0.1:11434/v1
+      api_key: sk-ollama-local
       weight: 1
 
   - model_name: codex-hf-cheap
@@ -95,7 +158,7 @@ model_list:
 
   - model_name: codex-hf-fast
     litellm_params:
-      model: huggingface/together/deepseek-ai/DeepSeek-R1
+      model: huggingface/together/openai/gpt-oss-120b
       api_key: os.environ/HF_TOKEN
 
 router_settings:
@@ -109,29 +172,49 @@ router_settings:
     gpt-5.4-mini: codex-light
     gemini-3.5-pro: codex-long
     gemini-3.5-flash: codex-light
+    hf.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:latest: codex-qwen-local
   fallbacks:
     - codex-light:
+        - codex-no-openai
         - codex-default
+        - codex-qwen-local
     - codex-default:
+        - codex-no-openai
         - codex-long
         - codex-light
+        - codex-qwen-local
     - codex-long:
+        - codex-no-openai
         - codex-default
+        - codex-qwen-local
     - codex-deep:
+        - codex-no-openai
         - codex-default
         - codex-long
+        - codex-qwen-local
+    - codex-no-openai:
+        - codex-long
+        - codex-qwen-local
     - codex-cheap:
+        - codex-no-openai
         - codex-strong
         - codex-default
+        - codex-qwen-local
     - codex-strong:
+        - codex-no-openai
         - codex-default
         - codex-long
+        - codex-qwen-local
     - codex-hf-cheap:
         - codex-light
         - codex-cheap
+        - codex-qwen-local
     - codex-hf-fast:
         - codex-default
         - codex-deep
+        - codex-qwen-local
+    - codex-qwen-local:
+        - codex-light
   context_window_fallbacks:
     - codex-light:
         - codex-long
@@ -142,7 +225,7 @@ router_settings:
   allowed_fails_policy:
     AuthenticationErrorAllowedFails: 0
     TimeoutErrorAllowedFails: 2
-    RateLimitErrorAllowedFails: 4
+    RateLimitErrorAllowedFails: 1
 
 litellm_settings:
   drop_params: true

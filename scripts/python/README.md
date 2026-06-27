@@ -58,9 +58,10 @@ dispatches those aliases across OpenAI and Gemini while keeping API keys in
 environment variables. When `HF_TOKEN` is available, it can also route Hugging
 Face and multi-provider tasks through the `codex-hf-cheap` and `codex-hf-fast`
 LiteLLM aliases, or launch an optional `cost-routing-hf` Codex profile that
-points directly at the Hugging Face router. `codex-routing-policy.yaml` keeps
-the default provider rules and fallback order editable without changing Python
-code.
+points directly at the Hugging Face router. `codex-qwen-local` is available as
+a local Ollama fallback through `Qwen/Qwen2.5-Coder-7B-Instruct-GGUF`.
+`codex-routing-policy.yaml` keeps the default provider rules and fallback order
+editable without changing Python code.
 
 See [`README_Codex_Cost_Routing.md`](README_Codex_Cost_Routing.md) for setup,
 activation, LiteLLM configuration, and usage instructions.
@@ -68,7 +69,9 @@ activation, LiteLLM configuration, and usage instructions.
 To enter OpenAI, Gemini, or Hugging Face keys through a local page for one
 session, run `Start-CodexKeySessionWeb.ps1` and open
 `http://127.0.0.1:8787/`. Keys are kept in memory for the LiteLLM subprocess
-and are not written to disk.
+and are not written to disk. Use `Test-CodexLiteLLMDispatch.ps1` to verify the
+local proxy aliases, or add `-Call -Model codex-hf-cheap` after entering a
+provider key to make one minimal dispatch request.
 
 ## LLM Review Tools
 

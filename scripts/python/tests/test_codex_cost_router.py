@@ -60,6 +60,31 @@ class CodexCostRouterTests(unittest.TestCase):
             self.assertEqual(model, "codex-default")
             self.assertIn("HF_TOKEN is missing", reason)
 
+    def test_route_model_can_use_self_hosted_qwen_when_endpoint_exists(self) -> None:
+        with patch.dict(ROUTER.os.environ, {"QWEN_API_BASE": "http://127.0.0.1:11434/v1"}):
+            self.assertEqual(
+                ROUTER.route_model("Use qwen auto heberge as backup", provider="qwen")[0],
+                "codex-qwen-local",
+            )
+            self.assertEqual(
+                ROUTER.route_model("Prefer self-hosted local llm fallback")[0],
+                "codex-qwen-local",
+            )
+
+    def test_route_model_can_avoid_openai_with_gemini_qwen_alias(self) -> None:
+        with patch.dict(ROUTER.os.environ, {"QWEN_API_BASE": "http://127.0.0.1:11434/v1"}):
+            model, reason = ROUTER.route_model("Refactor this Python API", provider="no-openai")
+        self.assertEqual(model, "codex-no-openai")
+        self.assertIn("OpenAI avoided", reason)
+
+    def test_route_model_falls_back_when_qwen_endpoint_is_missing(self) -> None:
+        with patch.dict(ROUTER.os.environ, {}, clear=True), patch.object(
+            ROUTER.socket, "create_connection", side_effect=OSError
+        ):
+            model, reason = ROUTER.route_model("Use Qwen local", provider="qwen")
+            self.assertEqual(model, "codex-default")
+            self.assertIn("Ollama is not listening", reason)
+
     def test_codex_provider_helpers_select_expected_profiles(self) -> None:
         self.assertEqual(ROUTER.codex_profile("litellm"), "cost-routing")
         self.assertEqual(ROUTER.codex_profile("huggingface"), "cost-routing-hf")
@@ -123,6 +148,16 @@ class CodexCostRouterTests(unittest.TestCase):
         policy = {**ROUTER.DEFAULT_POLICY, "open_models_only": True}
         self.assertEqual(ROUTER.provider_from_policy("Security review", None, policy)[0], "huggingface")
         self.assertEqual(ROUTER.codex_provider_from_policy(None, policy)[0], "huggingface")
+
+    def test_policy_or_environment_can_avoid_openai(self) -> None:
+        policy = {**ROUTER.DEFAULT_POLICY, "avoid_openai": True}
+        provider, reason = ROUTER.provider_from_policy("Refactor this Python API", None, policy)
+        self.assertEqual(provider, "no-openai")
+        self.assertIn("OpenAI avoidance", reason)
+        with patch.dict(ROUTER.os.environ, {"CODEX_ROUTER_OPENAI_MODE": "avoid"}):
+            provider, reason = ROUTER.provider_from_policy("Refactor this Python API", None, ROUTER.DEFAULT_POLICY)
+        self.assertEqual(provider, "no-openai")
+        self.assertIn("OpenAI avoidance", reason)
 
     def test_build_optimized_prompt_respects_budget(self) -> None:
         context = "<div>" + ("Architecture production Odoo migration security. " * 1000) + "</div>"
