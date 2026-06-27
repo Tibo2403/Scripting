@@ -6,25 +6,31 @@ Optional cost routing for Codex CLI on Windows using the official open-source
 The local Python wrapper cleans prompts, compresses noisy logs, estimates tokens,
 applies budgets, and selects one of these LiteLLM aliases:
 
-- `codex-cheap` for simple, low-cost tasks
-- `codex-strong` for default, medium, and complex tasks
+- `codex-light` for simple, low-cost and frequent tasks
+- `codex-default` for normal coding work
+- `codex-long` for long-context reads, log review, and synthesis
+- `codex-deep` for difficult debugging, security, and architecture decisions
+- `codex-cheap` and `codex-strong` as backward-compatible aliases
 - `codex-hf-cheap` for simple Hugging Face / open-model tasks when `HF_TOKEN`
   is set
 - `codex-hf-fast` for larger Hugging Face / multi-provider tasks when
   `HF_TOKEN` is set
 
-The previous `codex-auto` middle tier was removed because it pointed to the same
-provider model as `codex-strong`, which made the fallback chain redundant. Add a
-third alias again only when it maps to a genuinely different model or provider.
+OpenAI and Gemini are both configured through LiteLLM model groups. The normal
+default keeps most code-generation traffic on OpenAI while letting Gemini absorb
+long-context and lower-risk work. This reduces token saturation without sending
+high-stakes changes blindly to the cheapest model.
 
-API keys are never committed or written to a configuration file.
+API keys are never committed or written to a configuration file. `OPENAI_API_KEY`
+is required for the default profile; `GEMINI_API_KEY` is optional but recommended
+to activate the OpenAI/Gemini dispatching path.
 
 ## Hugging Face Integration
 
 Hugging Face can be used in two optional places.
 
 First, Hugging Face Inference Providers can sit behind LiteLLM as another
-provider pool. The local config includes two optional aliases:
+provider pool. The local config still includes two optional aliases:
 
 ```yaml
 codex-hf-cheap -> huggingface/groq/openai/gpt-oss-120b
@@ -97,7 +103,7 @@ open_models_only: false
 max_cost_usd: 0.0
 
 task_provider_rules:
-  simple: huggingface
+  simple: auto
   medium: auto
   complex: openai
 
@@ -130,11 +136,13 @@ for this command only. The script:
 
 1. installs the official LiteLLM OSS proxy in `C:\tmp\litellm-oss` when needed;
 2. asks for the OpenAI key with masked input when it is missing;
-3. creates a random local `LITELLM_API_KEY` in memory;
-4. starts the LiteLLM proxy in the background;
-5. enables the optional Codex `cost-routing` profile.
-6. opens Codex with that profile;
-7. stops LiteLLM and restores the previous configuration when Codex closes.
+3. asks for the Gemini key with masked input when it is missing; this is optional
+   but enables the Gemini model groups;
+4. creates a random local `LITELLM_API_KEY` in memory;
+5. starts the LiteLLM proxy in the background;
+6. enables the optional Codex `cost-routing` profile.
+7. opens Codex with that profile;
+8. stops LiteLLM and restores the previous configuration when Codex closes.
 
 There is no key to copy and no second terminal is required.
 
@@ -174,7 +182,7 @@ Optional budgets and forced routing:
 
 ```powershell
 python .\scripts\python\codex_cost_router.py run `
-  --force-model codex-strong `
+  --force-model codex-deep `
   --provider openai `
   --max-input-tokens 8000 `
   --max-output-tokens 3000 `
@@ -202,7 +210,8 @@ Prompts and API keys are not logged.
 - `codex-cost-routing.cmd`: simple Windows launcher.
 - `codex_cost_router.py`: prompt optimization and one-shot routing.
 - `codex-routing-policy.yaml`: editable routing policy and fallback order.
-- `litellm-cost-routing.yaml`: local LiteLLM OSS model aliases and fallback.
+- `litellm-cost-routing.yaml`: local LiteLLM OSS OpenAI/Gemini model groups,
+  context-window fallbacks, cooldowns, and compatibility aliases.
 
 ## Notes
 

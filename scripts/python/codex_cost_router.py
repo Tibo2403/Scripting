@@ -24,15 +24,29 @@ STATE_FILE = LOG_DIR / "cost_router_state.json"
 CONFIG_BACKUP = LOG_DIR / "config.toml.cost_router_backup"
 BEGIN_MARKER = "# BEGIN CODEX COST ROUTER"
 END_MARKER = "# END CODEX COST ROUTER"
-DEFAULT_MODEL = "codex-strong"
+LIGHT_MODEL = "codex-light"
+DEFAULT_MODEL = "codex-default"
+LONG_MODEL = "codex-long"
+DEEP_MODEL = "codex-deep"
+LEGACY_CHEAP_MODEL = "codex-cheap"
+LEGACY_STRONG_MODEL = "codex-strong"
 HF_FAST_MODEL = "codex-hf-fast"
 HF_CHEAP_MODEL = "codex-hf-cheap"
 HF_DIRECT_MODEL = "openai/gpt-oss-120b:fastest"
 DEFAULT_MAX_INPUT_TOKENS = 12_000
 DEFAULT_MAX_OUTPUT_TOKENS = 2_000
-PROVIDERS = ("auto", "openai", "huggingface")
+PROVIDERS = ("auto", "openai", "gemini", "huggingface")
 CODEX_PROVIDERS = ("litellm", "huggingface")
-MODELS = ("codex-cheap", DEFAULT_MODEL, HF_FAST_MODEL, HF_CHEAP_MODEL)
+MODELS = (
+    LIGHT_MODEL,
+    DEFAULT_MODEL,
+    LONG_MODEL,
+    DEEP_MODEL,
+    LEGACY_CHEAP_MODEL,
+    LEGACY_STRONG_MODEL,
+    HF_FAST_MODEL,
+    HF_CHEAP_MODEL,
+)
 LITELLM_HOST = "localhost"
 LITELLM_PORT = 4000
 WINDOWS_LITELLM_FALLBACK = Path(r"C:\tmp\litellm-oss\Scripts\litellm.exe")
@@ -43,7 +57,7 @@ DEFAULT_POLICY = {
     "open_models_only": False,
     "max_cost_usd": 0.0,
     "task_provider_rules": {
-        "simple": "huggingface",
+        "simple": "auto",
         "medium": "auto",
         "complex": "openai",
     },
@@ -53,8 +67,12 @@ DEFAULT_POLICY = {
 # Approximate placeholders in USD per million tokens. Adjust these estimates to
 # match the deployments configured in your local LiteLLM OSS proxy.
 ESTIMATED_RATES = {
-    "codex-cheap": {"input": 0.15, "output": 0.60},
+    LIGHT_MODEL: {"input": 0.20, "output": 0.80},
     DEFAULT_MODEL: {"input": 2.00, "output": 8.00},
+    LONG_MODEL: {"input": 0.80, "output": 3.00},
+    DEEP_MODEL: {"input": 2.50, "output": 10.00},
+    LEGACY_CHEAP_MODEL: {"input": 0.20, "output": 0.80},
+    LEGACY_STRONG_MODEL: {"input": 2.00, "output": 8.00},
     HF_CHEAP_MODEL: {"input": 0.10, "output": 0.30},
     HF_FAST_MODEL: {"input": 0.25, "output": 0.75},
 }
@@ -104,6 +122,19 @@ HF_TERMS = (
     "provider benchmark",
     "benchmark providers",
 )
+LONG_CONTEXT_TERMS = (
+    "gros contexte",
+    "long contexte",
+    "long context",
+    "large context",
+    "logs",
+    "fichier volumineux",
+    "large file",
+    "synthese",
+    "synthèse",
+    "summarize",
+    "compare documents",
+)
 
 PROFILE_BLOCK = f"""\
 # BEGIN CODEX COST ROUTER
@@ -111,7 +142,6 @@ PROFILE_BLOCK = f"""\
 name = "LiteLLM OSS Cost Router"
 base_url = "http://localhost:4000/v1"
 env_key = "LITELLM_API_KEY"
-wire_api = "responses"
 
 [model_providers.huggingface]
 name = "Hugging Face Inference Providers"
@@ -122,7 +152,10 @@ wire_api = "chat"
 [profiles.cost-routing]
 model = "{DEFAULT_MODEL}"
 model_provider = "litellm"
-model_reasoning_effort = "low"
+model_reasoning_effort = "medium"
+model_verbosity = "low"
+model_auto_compact_token_limit = 64000
+tool_output_token_limit = 8000
 
 [profiles.cost-routing-hf]
 model = "{HF_DIRECT_MODEL}"
@@ -446,22 +479,35 @@ def route_model(
     complexity, reason = classify_complexity(prompt)
     normalized = normalize_for_matching(prompt)
     wants_hf = any(term in normalized for term in HF_TERMS)
+    wants_long_context = any(term in normalized for term in LONG_CONTEXT_TERMS)
 
     if provider == "huggingface":
         if hf_available():
             model = HF_CHEAP_MODEL if complexity == "simple" else HF_FAST_MODEL
             return model, f"huggingface provider requested; {reason}"
-        return DEFAULT_MODEL, "huggingface requested but HF_TOKEN is missing; using OpenAI tier"
+        return DEFAULT_MODEL, "huggingface requested but HF_TOKEN is missing; using default OpenAI/Gemini tier"
 
     if provider == "openai":
-        model = "codex-cheap" if complexity == "simple" else DEFAULT_MODEL
+        model = LIGHT_MODEL if complexity == "simple" else DEEP_MODEL
         return model, f"openai provider requested; {reason}"
+
+    if provider == "gemini":
+        model = LIGHT_MODEL if complexity == "simple" and not wants_long_context else LONG_MODEL
+        return model, f"gemini provider requested; {reason}"
 
     if wants_hf and hf_available():
         model = HF_CHEAP_MODEL if complexity == "simple" else HF_FAST_MODEL
         return model, f"huggingface-related task; {reason}"
 
-    model = "codex-cheap" if complexity == "simple" else DEFAULT_MODEL
+    if wants_long_context:
+        return LONG_MODEL, f"long-context task; {reason}"
+
+    if complexity == "simple":
+        model = LIGHT_MODEL
+    elif complexity == "complex":
+        model = DEEP_MODEL
+    else:
+        model = DEFAULT_MODEL
     return model, reason
 
 

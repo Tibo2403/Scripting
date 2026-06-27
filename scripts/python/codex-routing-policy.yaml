@@ -7,7 +7,7 @@ open_models_only: false
 max_cost_usd: 0.0
 
 task_provider_rules:
-  simple: huggingface
+  simple: auto
   medium: auto
   complex: openai
 

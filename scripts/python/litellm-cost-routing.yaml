@@ -1,21 +1,92 @@
-# LiteLLM OSS self-hosted proxy example.
-# Two explicit tiers keep the local setup simple:
-# - codex-cheap for low-cost/simple work
-# - codex-strong for default, medium, and complex work
-# Optional Hugging Face tiers use HF_TOKEN and let Hugging Face route across
-# inference providers behind a single token.
+# LiteLLM OSS self-hosted proxy example for Codex.
+# Task-oriented aliases let Codex route by workload instead of hard-coding a
+# single provider:
+# - codex-light: cheap/frequent work, Gemini Flash biased
+# - codex-default: normal coding work, OpenAI biased with Gemini relief
+# - codex-long: long-context reads and synthesis, Gemini Pro biased
+# - codex-deep: high-stakes debugging/security/architecture, OpenAI biased
 # API keys are read from environment variables and must never be committed.
 
 model_list:
+  # Backward-compatible aliases used by older wrapper calls.
   - model_name: codex-cheap
     litellm_params:
-      model: openai/gpt-5-mini
+      model: gemini/gemini-3.5-flash
+      api_key: os.environ/GEMINI_API_KEY
+      weight: 6
+
+  - model_name: codex-cheap
+    litellm_params:
+      model: openai/gpt-5.4-mini
       api_key: os.environ/OPENAI_API_KEY
+      weight: 4
 
   - model_name: codex-strong
     litellm_params:
-      model: openai/gpt-5
+      model: openai/gpt-5.5
       api_key: os.environ/OPENAI_API_KEY
+      weight: 8
+
+  - model_name: codex-strong
+    litellm_params:
+      model: gemini/gemini-3.5-pro
+      api_key: os.environ/GEMINI_API_KEY
+      weight: 2
+
+  # Preferred Codex-facing aliases.
+  - model_name: codex-light
+    litellm_params:
+      model: gemini/gemini-3.5-flash
+      api_key: os.environ/GEMINI_API_KEY
+      weight: 7
+
+  - model_name: codex-light
+    litellm_params:
+      model: openai/gpt-5.4-mini
+      api_key: os.environ/OPENAI_API_KEY
+      weight: 3
+
+  - model_name: codex-default
+    litellm_params:
+      model: openai/gpt-5.5
+      api_key: os.environ/OPENAI_API_KEY
+      weight: 8
+
+  - model_name: codex-default
+    litellm_params:
+      model: gemini/gemini-3.5-pro
+      api_key: os.environ/GEMINI_API_KEY
+      weight: 2
+
+  - model_name: codex-long
+    litellm_params:
+      model: gemini/gemini-3.5-pro
+      api_key: os.environ/GEMINI_API_KEY
+      weight: 7
+
+  - model_name: codex-long
+    litellm_params:
+      model: gemini/gemini-2.5-pro
+      api_key: os.environ/GEMINI_API_KEY
+      weight: 2
+
+  - model_name: codex-long
+    litellm_params:
+      model: openai/gpt-5.5
+      api_key: os.environ/OPENAI_API_KEY
+      weight: 1
+
+  - model_name: codex-deep
+    litellm_params:
+      model: openai/gpt-5.5
+      api_key: os.environ/OPENAI_API_KEY
+      weight: 10
+
+  - model_name: codex-deep
+    litellm_params:
+      model: gemini/gemini-3.5-pro
+      api_key: os.environ/GEMINI_API_KEY
+      weight: 1
 
   - model_name: codex-hf-cheap
     litellm_params:
@@ -28,17 +99,61 @@ model_list:
       api_key: os.environ/HF_TOKEN
 
 router_settings:
+  routing_strategy: simple-shuffle
+  num_retries: 2
+  timeout: 180
+  cooldown_time: 90
+  enable_pre_call_checks: true
+  model_group_alias:
+    gpt-5.5: codex-default
+    gpt-5.4-mini: codex-light
+    gemini-3.5-pro: codex-long
+    gemini-3.5-flash: codex-light
   fallbacks:
+    - codex-light:
+        - codex-default
+    - codex-default:
+        - codex-long
+        - codex-light
+    - codex-long:
+        - codex-default
+    - codex-deep:
+        - codex-default
+        - codex-long
     - codex-cheap:
         - codex-strong
+        - codex-default
+    - codex-strong:
+        - codex-default
+        - codex-long
     - codex-hf-cheap:
+        - codex-light
         - codex-cheap
-        - codex-strong
     - codex-hf-fast:
-        - codex-strong
+        - codex-default
+        - codex-deep
+  context_window_fallbacks:
+    - codex-light:
+        - codex-long
+    - codex-default:
+        - codex-long
+    - codex-deep:
+        - codex-long
+  allowed_fails_policy:
+    AuthenticationErrorAllowedFails: 0
+    TimeoutErrorAllowedFails: 2
+    RateLimitErrorAllowedFails: 4
 
 litellm_settings:
+  drop_params: true
   set_verbose: false
+  request_timeout: 180
+  num_retries: 2
 
 general_settings:
   master_key: os.environ/LITELLM_API_KEY
+  disable_spend_logs: true
+  background_health_checks: true
+  health_check_interval: 60
+  enable_health_check_routing: true
+  health_check_ignore_transient_errors: true
