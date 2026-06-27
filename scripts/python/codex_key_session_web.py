@@ -102,6 +102,10 @@ PAGE = """<!doctype html>
       <input id="gemini" name="GEMINI_API_KEY" type="password" placeholder="AI..." autocomplete="off">
       <label for="hf">HF_TOKEN optional</label>
       <input id="hf" name="HF_TOKEN" type="password" placeholder="hf_..." autocomplete="off">
+      <label for="qwen_base">QWEN_API_BASE optional</label>
+      <input id="qwen_base" name="QWEN_API_BASE" type="url" placeholder="http://127.0.0.1:8000/v1" autocomplete="off">
+      <label for="qwen_key">QWEN_API_KEY optional</label>
+      <input id="qwen_key" name="QWEN_API_KEY" type="password" placeholder="sk-local-qwen" autocomplete="off">
       <button type="submit">Start session proxy</button>
     </form>
     <form method="post" action="/stop">
@@ -199,7 +203,9 @@ class KeySessionHandler(BaseHTTPRequestHandler):
         openai_key = form.get("OPENAI_API_KEY", "")
         gemini_key = form.get("GEMINI_API_KEY", "")
         hf_token = form.get("HF_TOKEN", "")
-        if not any((openai_key, gemini_key, hf_token)):
+        qwen_base = form.get("QWEN_API_BASE", "")
+        qwen_key = form.get("QWEN_API_KEY", "")
+        if not any((openai_key, gemini_key, hf_token, qwen_base)):
             self.state.message = "Provide at least one provider key."
             self._send_page()
             return
@@ -215,6 +221,9 @@ class KeySessionHandler(BaseHTTPRequestHandler):
             env["GEMINI_API_KEY"] = gemini_key
         if hf_token:
             env["HF_TOKEN"] = hf_token
+        if qwen_base:
+            env["QWEN_API_BASE"] = qwen_base.rstrip("/")
+            env["QWEN_API_KEY"] = qwen_key or "sk-local-qwen"
 
         try:
             self.state.process = subprocess.Popen(
@@ -246,6 +255,8 @@ class KeySessionHandler(BaseHTTPRequestHandler):
                 providers.append("Gemini")
             if hf_token:
                 providers.append("Hugging Face")
+            if qwen_base:
+                providers.append("Qwen local")
             self.state.message = "Session proxy started with: " + ", ".join(providers)
         else:
             self.state.message = "LiteLLM process started, but the proxy port did not become ready yet."

@@ -33,9 +33,10 @@ LEGACY_STRONG_MODEL = "codex-strong"
 HF_FAST_MODEL = "codex-hf-fast"
 HF_CHEAP_MODEL = "codex-hf-cheap"
 HF_DIRECT_MODEL = "openai/gpt-oss-120b:fastest"
+QWEN_LOCAL_MODEL = "codex-qwen-local"
 DEFAULT_MAX_INPUT_TOKENS = 12_000
 DEFAULT_MAX_OUTPUT_TOKENS = 2_000
-PROVIDERS = ("auto", "openai", "gemini", "huggingface")
+PROVIDERS = ("auto", "openai", "gemini", "huggingface", "qwen")
 CODEX_PROVIDERS = ("litellm", "huggingface")
 MODELS = (
     LIGHT_MODEL,
@@ -46,6 +47,7 @@ MODELS = (
     LEGACY_STRONG_MODEL,
     HF_FAST_MODEL,
     HF_CHEAP_MODEL,
+    QWEN_LOCAL_MODEL,
 )
 LITELLM_HOST = "localhost"
 LITELLM_PORT = 4000
@@ -75,6 +77,7 @@ ESTIMATED_RATES = {
     LEGACY_STRONG_MODEL: {"input": 2.00, "output": 8.00},
     HF_CHEAP_MODEL: {"input": 0.10, "output": 0.30},
     HF_FAST_MODEL: {"input": 0.25, "output": 0.75},
+    QWEN_LOCAL_MODEL: {"input": 0.0, "output": 0.0},
 }
 
 SIMPLE_TERMS = (
@@ -121,6 +124,16 @@ HF_TERMS = (
     "multi provider",
     "provider benchmark",
     "benchmark providers",
+)
+QWEN_TERMS = (
+    "qwen",
+    "auto-heberge",
+    "auto heberge",
+    "auto-hebergee",
+    "self-hosted",
+    "self hosted",
+    "local llm",
+    "openai-compatible local",
 )
 LONG_CONTEXT_TERMS = (
     "gros contexte",
@@ -378,6 +391,11 @@ def hf_available() -> bool:
     return bool(os.environ.get("HF_TOKEN"))
 
 
+def qwen_available() -> bool:
+    """Return whether a self-hosted Qwen endpoint is configured."""
+    return bool(os.environ.get("QWEN_API_BASE"))
+
+
 def default_provider() -> str:
     """Read the provider preference from the environment with a safe fallback."""
     provider = os.environ.get("CODEX_ROUTER_PROVIDER", "auto").casefold()
@@ -487,6 +505,11 @@ def route_model(
             return model, f"huggingface provider requested; {reason}"
         return DEFAULT_MODEL, "huggingface requested but HF_TOKEN is missing; using default OpenAI/Gemini tier"
 
+    if provider == "qwen":
+        if qwen_available():
+            return QWEN_LOCAL_MODEL, f"qwen provider requested; {reason}"
+        return DEFAULT_MODEL, "qwen requested but QWEN_API_BASE is missing; using default OpenAI/Gemini tier"
+
     if provider == "openai":
         model = LIGHT_MODEL if complexity == "simple" else DEEP_MODEL
         return model, f"openai provider requested; {reason}"
@@ -498,6 +521,9 @@ def route_model(
     if wants_hf and hf_available():
         model = HF_CHEAP_MODEL if complexity == "simple" else HF_FAST_MODEL
         return model, f"huggingface-related task; {reason}"
+
+    if any(term in normalized for term in QWEN_TERMS) and qwen_available():
+        return QWEN_LOCAL_MODEL, f"qwen local task; {reason}"
 
     if wants_long_context:
         return LONG_MODEL, f"long-context task; {reason}"
@@ -656,6 +682,8 @@ def print_doctor() -> int:
         ("LiteLLM proxy localhost:4000", proxy_available(), "listening" if proxy_available() else "not listening"),
         ("LITELLM_API_KEY", bool(os.environ.get("LITELLM_API_KEY")), "set" if os.environ.get("LITELLM_API_KEY") else "missing"),
         ("OPENAI_API_KEY", bool(os.environ.get("OPENAI_API_KEY")), "set" if os.environ.get("OPENAI_API_KEY") else "missing"),
+        ("QWEN_API_BASE optional", True, os.environ.get("QWEN_API_BASE") or "missing; self-hosted Qwen fallback disabled"),
+        ("QWEN_API_KEY optional", True, "set" if os.environ.get("QWEN_API_KEY") else "missing; use dummy value for no-auth local servers"),
         ("HF_TOKEN optional", True, "set" if hf_available() else "missing; Hugging Face aliases disabled"),
         ("PYTHONUTF8", os.environ.get("PYTHONUTF8") == "1", "1" if os.environ.get("PYTHONUTF8") == "1" else "missing or not 1"),
         ("Cost-routing profile", router_enabled(), "enabled" if router_enabled() else "disabled"),

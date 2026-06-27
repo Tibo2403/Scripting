@@ -1,5 +1,7 @@
 # Codex cost-routing policy.
 # CLI options still have priority, then environment variables, then this file.
+# Provider choices: auto, openai, gemini, huggingface, qwen.
+# qwen uses a self-hosted OpenAI-compatible endpoint via QWEN_API_BASE.
 
 default_provider: auto
 default_codex_provider: litellm

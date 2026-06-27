@@ -60,6 +60,23 @@ class CodexCostRouterTests(unittest.TestCase):
             self.assertEqual(model, "codex-default")
             self.assertIn("HF_TOKEN is missing", reason)
 
+    def test_route_model_can_use_self_hosted_qwen_when_endpoint_exists(self) -> None:
+        with patch.dict(ROUTER.os.environ, {"QWEN_API_BASE": "http://127.0.0.1:8000/v1"}):
+            self.assertEqual(
+                ROUTER.route_model("Use qwen auto heberge as backup", provider="qwen")[0],
+                "codex-qwen-local",
+            )
+            self.assertEqual(
+                ROUTER.route_model("Prefer self-hosted local llm fallback")[0],
+                "codex-qwen-local",
+            )
+
+    def test_route_model_falls_back_when_qwen_endpoint_is_missing(self) -> None:
+        with patch.dict(ROUTER.os.environ, {}, clear=True):
+            model, reason = ROUTER.route_model("Use Qwen local", provider="qwen")
+            self.assertEqual(model, "codex-default")
+            self.assertIn("QWEN_API_BASE is missing", reason)
+
     def test_codex_provider_helpers_select_expected_profiles(self) -> None:
         self.assertEqual(ROUTER.codex_profile("litellm"), "cost-routing")
         self.assertEqual(ROUTER.codex_profile("huggingface"), "cost-routing-hf")

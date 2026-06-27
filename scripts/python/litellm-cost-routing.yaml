@@ -5,7 +5,11 @@
 # - codex-default: normal coding work, OpenAI biased with Gemini relief
 # - codex-long: long-context reads and synthesis, Gemini Pro biased
 # - codex-deep: high-stakes debugging/security/architecture, OpenAI biased
+# - codex-qwen-local: self-hosted OpenAI-compatible Qwen fallback
 # API keys are read from environment variables and must never be committed.
+# Qwen fallback expects QWEN_API_BASE, for example http://127.0.0.1:8000/v1.
+# QWEN_API_KEY is optional for many local servers; use any dummy value when the
+# server does not require authentication.
 
 model_list:
   # Backward-compatible aliases used by older wrapper calls.
@@ -88,6 +92,17 @@ model_list:
       api_key: os.environ/GEMINI_API_KEY
       weight: 1
 
+  # Local OpenAI-compatible fallback for a self-hosted Qwen endpoint.
+  # Start a server with a /v1-compatible API and set:
+  #   QWEN_API_BASE=http://127.0.0.1:8000/v1
+  #   QWEN_API_KEY=sk-local-qwen
+  - model_name: codex-qwen-local
+    litellm_params:
+      model: openai/qwen-auto-hosted
+      api_base: os.environ/QWEN_API_BASE
+      api_key: os.environ/QWEN_API_KEY
+      weight: 1
+
   - model_name: codex-hf-cheap
     litellm_params:
       model: huggingface/groq/openai/gpt-oss-120b
@@ -109,29 +124,40 @@ router_settings:
     gpt-5.4-mini: codex-light
     gemini-3.5-pro: codex-long
     gemini-3.5-flash: codex-light
+    qwen-auto-hosted: codex-qwen-local
   fallbacks:
     - codex-light:
         - codex-default
+        - codex-qwen-local
     - codex-default:
         - codex-long
         - codex-light
+        - codex-qwen-local
     - codex-long:
         - codex-default
+        - codex-qwen-local
     - codex-deep:
         - codex-default
         - codex-long
+        - codex-qwen-local
     - codex-cheap:
         - codex-strong
         - codex-default
+        - codex-qwen-local
     - codex-strong:
         - codex-default
         - codex-long
+        - codex-qwen-local
     - codex-hf-cheap:
         - codex-light
         - codex-cheap
+        - codex-qwen-local
     - codex-hf-fast:
         - codex-default
         - codex-deep
+        - codex-qwen-local
+    - codex-qwen-local:
+        - codex-light
   context_window_fallbacks:
     - codex-light:
         - codex-long
