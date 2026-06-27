@@ -34,7 +34,7 @@ provider pool. The local config still includes two optional aliases:
 
 ```yaml
 codex-hf-cheap -> huggingface/groq/openai/gpt-oss-120b
-codex-hf-fast  -> huggingface/together/deepseek-ai/DeepSeek-R1
+codex-hf-fast  -> huggingface/together/openai/gpt-oss-120b
 ```
 
 Set `HF_TOKEN` in the shell before starting the router. A fine-grained token
@@ -55,6 +55,30 @@ python .\scripts\python\codex_cost_router.py run --dry-run `
 
 `--provider auto` routes Hugging Face or multi-provider prompts to the HF aliases
 only when `HF_TOKEN` is present. Otherwise it keeps the OpenAI-backed aliases.
+
+LiteLLM also uses `HUGGINGFACE_API_KEY` while resolving some Inference Provider
+mappings. The local web session exports the submitted `HF_TOKEN` under both
+names for the LiteLLM subprocess. If you start LiteLLM manually, set both names
+to the same token:
+
+```powershell
+$env:HF_TOKEN = 'hf_...'
+$env:HUGGINGFACE_API_KEY = $env:HF_TOKEN
+```
+
+## Self-Hosted Qwen Fallback
+
+The local LiteLLM config includes `codex-qwen-local` as a final fallback for
+the main Codex aliases. It expects an OpenAI-compatible local endpoint:
+
+```powershell
+$env:QWEN_API_BASE = 'http://127.0.0.1:8000/v1'
+$env:QWEN_API_KEY = 'sk-local-qwen'
+```
+
+`QWEN_API_KEY` can be any dummy value when your local server does not require
+authentication. The local web key page also accepts these two fields and passes
+them only to the LiteLLM subprocess environment.
 
 Second, Hugging Face can be added as an optional Codex-facing layer. Running
 `enable` now installs two managed profiles:
@@ -155,10 +179,10 @@ If you prefer entering keys in a local page for one work session, start:
 ```
 
 Then open `http://127.0.0.1:8787/`, paste `OPENAI_API_KEY`,
-`GEMINI_API_KEY`, or `HF_TOKEN`, and submit the form. The page starts the
-LiteLLM proxy on `http://127.0.0.1:4000/v1` with those keys only in the proxy
-process environment. The keys are not written to disk and the web server
-suppresses request logging.
+`GEMINI_API_KEY`, `HF_TOKEN`, or the optional Qwen endpoint fields, and submit
+the form. The page starts the LiteLLM proxy on `http://127.0.0.1:4000/v1` with
+those values only in the proxy process environment. The keys are not written to
+disk and the web server suppresses request logging.
 
 To launch the optional Hugging Face-facing profile instead of the local LiteLLM
 proxy:
@@ -182,6 +206,23 @@ python .\scripts\python\codex_cost_router.py doctor
 
 If a browser opened on `http://localhost:4000/health` shows `Unauthorized`,
 that is expected: the local proxy is protected by `LITELLM_API_KEY`.
+
+Validate the local proxy aliases without making a paid/model call:
+
+```powershell
+.\scripts\python\Test-CodexLiteLLMDispatch.ps1
+```
+
+Run a real minimal provider call after entering the relevant key in the local
+web page:
+
+```powershell
+.\scripts\python\Test-CodexLiteLLMDispatch.ps1 -Model codex-hf-cheap -Call
+.\scripts\python\Test-CodexLiteLLMDispatch.ps1 -Model codex-qwen-local -Call
+.\scripts\python\Test-CodexLiteLLMDispatch.ps1 -Model codex-default -Call
+```
+
+The test prints a compact JSON result and never prints provider tokens.
 
 ## Optimized One-Shot Requests
 
@@ -225,6 +266,7 @@ Prompts and API keys are not logged.
 - `codex_cost_router.py`: prompt optimization and one-shot routing.
 - `codex_key_session_web.py`: local-only web form for session keys.
 - `Start-CodexKeySessionWeb.ps1`: PowerShell launcher for the local key page.
+- `Test-CodexLiteLLMDispatch.ps1`: local proxy alias and optional call test.
 - `codex-routing-policy.yaml`: editable routing policy and fallback order.
 - `litellm-cost-routing.yaml`: local LiteLLM OSS OpenAI/Gemini model groups,
   context-window fallbacks, cooldowns, and compatibility aliases.

@@ -8,7 +8,8 @@ New-Item -ItemType Directory -Force -Path $target | Out-Null
 $files = @(
     'litellm-cost-routing.yaml',
     'codex_key_session_web.py',
-    'Start-CodexKeySessionWeb.ps1'
+    'Start-CodexKeySessionWeb.ps1',
+    'Test-CodexLiteLLMDispatch.ps1'
 )
 
 foreach ($file in $files) {
