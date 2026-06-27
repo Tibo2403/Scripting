@@ -110,7 +110,7 @@ model_list:
 
   - model_name: codex-hf-fast
     litellm_params:
-      model: huggingface/together/deepseek-ai/DeepSeek-R1
+      model: huggingface/together/openai/gpt-oss-120b
       api_key: os.environ/HF_TOKEN
 
 router_settings:

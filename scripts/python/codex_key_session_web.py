@@ -221,6 +221,7 @@ class KeySessionHandler(BaseHTTPRequestHandler):
             env["GEMINI_API_KEY"] = gemini_key
         if hf_token:
             env["HF_TOKEN"] = hf_token
+            env["HUGGINGFACE_API_KEY"] = hf_token
         if qwen_base:
             env["QWEN_API_BASE"] = qwen_base.rstrip("/")
             env["QWEN_API_KEY"] = qwen_key or "sk-local-qwen"
