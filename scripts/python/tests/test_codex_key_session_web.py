@@ -53,6 +53,7 @@ class KeySessionWebTests(unittest.TestCase):
                 "OPENAI_API_KEY": "",
                 "GEMINI_API_KEY": "",
                 "HF_TOKEN": "hf_test",
+                "USE_LOCAL_QWEN": "",
                 "QWEN_API_BASE": "",
                 "QWEN_API_KEY": "",
             }
@@ -78,6 +79,38 @@ class KeySessionWebTests(unittest.TestCase):
         self.assertEqual(captured_env["HF_TOKEN"], "hf_test")
         self.assertEqual(captured_env["HUGGINGFACE_API_KEY"], "hf_test")
         self.assertIn("Hugging Face", handler.state.message)
+
+    def test_start_proxy_allows_qwen_local_without_cloud_keys(self) -> None:
+        handler = object.__new__(WEB.KeySessionHandler)
+        handler.state = WEB.SessionState()
+        handler.config_path = Path("config.yaml")
+        handler.litellm_path = Path("litellm.exe")
+        handler.proxy_host = "127.0.0.1"
+        handler.proxy_port = 4000
+        handler._read_form = MagicMock(  # type: ignore[method-assign]
+            return_value={
+                "OPENAI_API_KEY": "",
+                "GEMINI_API_KEY": "",
+                "HF_TOKEN": "",
+                "USE_LOCAL_QWEN": "1",
+                "QWEN_API_BASE": "",
+                "QWEN_API_KEY": "",
+            }
+        )
+        handler._stop_proxy = MagicMock()  # type: ignore[method-assign]
+        handler._send_page = MagicMock()  # type: ignore[method-assign]
+
+        process = MagicMock()
+        process.poll.return_value = None
+
+        with (
+            patch.object(WEB.subprocess, "Popen", return_value=process),
+            patch.object(WEB, "wait_for_port", return_value=True),
+            patch.dict(os.environ, {}, clear=True),
+        ):
+            handler._start_proxy()
+
+        self.assertIn("Qwen local", handler.state.message)
 
 
 if __name__ == "__main__":

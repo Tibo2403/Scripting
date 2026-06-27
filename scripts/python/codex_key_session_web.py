@@ -10,6 +10,7 @@ import subprocess
 import sys
 import time
 import urllib.parse
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import ClassVar
@@ -30,27 +31,55 @@ PAGE = """<!doctype html>
     :root {{
       color-scheme: light dark;
       font-family: Segoe UI, system-ui, sans-serif;
+      --accent: #1f6feb;
+      --ok: #238636;
+      --warn: #9a6700;
     }}
     body {{
       margin: 0;
       min-height: 100vh;
-      display: grid;
-      place-items: center;
+      background: color-mix(in srgb, Canvas 94%, CanvasText);
       background: Canvas;
       color: CanvasText;
     }}
     main {{
-      width: min(680px, calc(100vw - 32px));
-      border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
-      border-radius: 8px;
-      padding: 24px;
+      width: min(880px, calc(100vw - 32px));
+      margin: 28px auto;
+      padding: 0 0 28px;
     }}
     h1 {{
-      font-size: 22px;
-      margin: 0 0 8px;
+      font-size: clamp(24px, 4vw, 34px);
+      margin: 0 0 10px;
+      letter-spacing: 0;
+    }}
+    h2 {{
+      font-size: 17px;
+      margin: 0 0 14px;
     }}
     p {{
       line-height: 1.5;
+    }}
+    .panel {{
+      border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
+      border-radius: 8px;
+      padding: 18px;
+      margin-top: 16px;
+      background: Canvas;
+    }}
+    .grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 14px;
+    }}
+    .provider {{
+      border: 1px solid color-mix(in srgb, CanvasText 14%, transparent);
+      border-radius: 8px;
+      padding: 14px;
+      min-height: 96px;
+    }}
+    .provider strong {{
+      display: block;
+      margin-bottom: 4px;
     }}
     label {{
       display: block;
@@ -61,57 +90,139 @@ PAGE = """<!doctype html>
       width: 100%;
       box-sizing: border-box;
       margin-top: 6px;
-      padding: 10px;
+      padding: 11px 12px;
       border-radius: 6px;
       border: 1px solid color-mix(in srgb, CanvasText 24%, transparent);
       font: inherit;
     }}
+    input[type="checkbox"] {{
+      width: auto;
+      margin: 0 8px 0 0;
+    }}
+    .check {{
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      font-weight: 600;
+    }}
+    .actions {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 18px;
+    }}
     button {{
-      margin-top: 20px;
       padding: 10px 14px;
       border: 0;
       border-radius: 6px;
-      background: #1f6feb;
+      background: var(--accent);
       color: white;
       font: inherit;
       font-weight: 600;
       cursor: pointer;
     }}
+    button.secondary {{
+      background: color-mix(in srgb, CanvasText 14%, Canvas);
+      color: CanvasText;
+    }}
     .status {{
       margin-top: 16px;
       padding: 12px;
       border-radius: 6px;
-      background: color-mix(in srgb, #1f6feb 12%, Canvas);
+      background: color-mix(in srgb, var(--accent) 12%, Canvas);
       overflow-wrap: anywhere;
+    }}
+    .meta {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }}
+    .pill {{
+      border: 1px solid color-mix(in srgb, CanvasText 14%, transparent);
+      border-radius: 999px;
+      padding: 8px 12px;
+      overflow-wrap: anywhere;
+    }}
+    details {{
+      margin-top: 14px;
+    }}
+    summary {{
+      cursor: pointer;
+      font-weight: 600;
     }}
     .muted {{
       opacity: .75;
       font-size: 14px;
     }}
+    .small {{
+      font-size: 13px;
+    }}
   </style>
 </head>
 <body>
   <main>
-    <h1>Codex LiteLLM session keys</h1>
-    <p class="muted">Keys are kept only in this local process environment and passed to the LiteLLM subprocess. They are not written to disk.</p>
+    <h1>Codex LiteLLM dispatch</h1>
+    <p class="muted">Start a local LiteLLM proxy for Codex with cloud keys kept only in this session. Qwen local runs through Ollama and needs no cloud key.</p>
     {status}
-    <form method="post" action="/start" autocomplete="off">
-      <label for="openai">OPENAI_API_KEY</label>
-      <input id="openai" name="OPENAI_API_KEY" type="password" placeholder="sk-..." autocomplete="off">
-      <label for="gemini">GEMINI_API_KEY</label>
-      <input id="gemini" name="GEMINI_API_KEY" type="password" placeholder="AI..." autocomplete="off">
-      <label for="hf">HF_TOKEN optional</label>
-      <input id="hf" name="HF_TOKEN" type="password" placeholder="hf_..." autocomplete="off">
-      <label for="qwen_base">QWEN_API_BASE optional</label>
-      <input id="qwen_base" name="QWEN_API_BASE" type="url" placeholder="http://127.0.0.1:8000/v1" autocomplete="off">
-      <label for="qwen_key">QWEN_API_KEY optional</label>
-      <input id="qwen_key" name="QWEN_API_KEY" type="password" placeholder="sk-local-qwen" autocomplete="off">
-      <button type="submit">Start session proxy</button>
-    </form>
-    <form method="post" action="/stop">
-      <button type="submit">Stop session proxy</button>
-    </form>
-    <p class="muted">Proxy URL: <code>http://127.0.0.1:{proxy_port}/v1</code></p>
+    <section class="panel">
+      <h2>Providers</h2>
+      <div class="grid">
+        <div class="provider">
+          <strong>OpenAI</strong>
+          <span class="muted small">Used for default and deep coding aliases.</span>
+        </div>
+        <div class="provider">
+          <strong>Gemini</strong>
+          <span class="muted small">Used for low-cost, long-context, and relief routing.</span>
+        </div>
+        <div class="provider">
+          <strong>Hugging Face</strong>
+          <span class="muted small">Optional aliases for HF-hosted open models.</span>
+        </div>
+        <div class="provider">
+          <strong>Qwen local</strong>
+          <span class="muted small">{qwen_status}</span>
+        </div>
+      </div>
+      <div class="meta">
+        <div class="pill">Proxy URL: <code>http://127.0.0.1:{proxy_port}/v1</code></div>
+        <div class="pill">Codex model aliases: <code>codex-light</code>, <code>codex-default</code>, <code>codex-long</code>, <code>codex-deep</code></div>
+        <div class="pill">Local fallback: <code>codex-qwen-local</code></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Session keys</h2>
+      <form method="post" action="/start" autocomplete="off">
+        <label for="openai">OpenAI API key</label>
+        <input id="openai" name="OPENAI_API_KEY" type="password" placeholder="sk-..." autocomplete="off">
+        <label for="gemini">Gemini API key</label>
+        <input id="gemini" name="GEMINI_API_KEY" type="password" placeholder="AI..." autocomplete="off">
+        <label for="hf">Hugging Face token optional</label>
+        <input id="hf" name="HF_TOKEN" type="password" placeholder="hf_..." autocomplete="off">
+        <label class="check" for="use_qwen">
+          <input id="use_qwen" name="USE_LOCAL_QWEN" type="checkbox" value="1" checked>
+          Enable local Qwen fallback through Ollama
+        </label>
+        <details>
+          <summary>Advanced custom Qwen endpoint</summary>
+          <label for="qwen_base">Qwen API base optional</label>
+          <input id="qwen_base" name="QWEN_API_BASE" type="url" placeholder="http://127.0.0.1:11434/v1" autocomplete="off">
+          <label for="qwen_key">Qwen API key optional</label>
+          <input id="qwen_key" name="QWEN_API_KEY" type="password" placeholder="sk-ollama-local" autocomplete="off">
+        </details>
+        <div class="actions">
+          <button type="submit">Start proxy</button>
+        </div>
+      </form>
+      <form method="post" action="/stop">
+        <div class="actions">
+          <button class="secondary" type="submit">Stop proxy</button>
+        </div>
+      </form>
+    </section>
   </main>
 </body>
 </html>
@@ -143,6 +254,18 @@ def wait_for_port(host: str, port: int, timeout: float = 20.0) -> bool:
         except OSError:
             time.sleep(0.25)
     return False
+
+
+def local_qwen_status() -> str:
+    """Return a short status for the local Ollama Qwen fallback."""
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:11434/v1/models", timeout=2) as response:
+            body = response.read().decode("utf-8", errors="replace")
+    except OSError:
+        return "Ollama is not reachable on 127.0.0.1:11434."
+    if "hf.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:latest" in body:
+        return "Ready through Ollama on 127.0.0.1:11434."
+    return "Ollama is running, but the Qwen2.5 Coder model was not found."
 
 
 class SessionState:
@@ -184,7 +307,8 @@ class KeySessionHandler(BaseHTTPRequestHandler):
     def _send_page(self) -> None:
         safe_message = html.escape(self.state.message)
         status = f'<div class="status">{safe_message}</div>'
-        body = PAGE.format(status=status, proxy_port=self.proxy_port).encode("utf-8")
+        qwen_status = html.escape(local_qwen_status())
+        body = PAGE.format(status=status, proxy_port=self.proxy_port, qwen_status=qwen_status).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
@@ -203,10 +327,11 @@ class KeySessionHandler(BaseHTTPRequestHandler):
         openai_key = form.get("OPENAI_API_KEY", "")
         gemini_key = form.get("GEMINI_API_KEY", "")
         hf_token = form.get("HF_TOKEN", "")
+        use_local_qwen = form.get("USE_LOCAL_QWEN", "") == "1"
         qwen_base = form.get("QWEN_API_BASE", "")
         qwen_key = form.get("QWEN_API_KEY", "")
-        if not any((openai_key, gemini_key, hf_token, qwen_base)):
-            self.state.message = "Provide at least one provider key."
+        if not any((openai_key, gemini_key, hf_token, use_local_qwen, qwen_base)):
+            self.state.message = "Provide at least one provider key, or keep local Qwen enabled."
             self._send_page()
             return
 
@@ -256,7 +381,7 @@ class KeySessionHandler(BaseHTTPRequestHandler):
                 providers.append("Gemini")
             if hf_token:
                 providers.append("Hugging Face")
-            if qwen_base:
+            if use_local_qwen or qwen_base:
                 providers.append("Qwen local")
             self.state.message = "Session proxy started with: " + ", ".join(providers)
         else:
