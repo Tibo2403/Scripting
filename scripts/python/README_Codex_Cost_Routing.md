@@ -10,20 +10,51 @@ applies budgets, and selects one of these LiteLLM aliases:
 - `codex-default` for normal coding work
 - `codex-long` for long-context reads, log review, and synthesis
 - `codex-deep` for difficult debugging, security, and architecture decisions
+- `codex-no-openai` for Gemini + local Qwen routing when OpenAI quota is low
+  or exhausted
 - `codex-cheap` and `codex-strong` as backward-compatible aliases
 - `codex-hf-cheap` for simple Hugging Face / open-model tasks when `HF_TOKEN`
   is set
 - `codex-hf-fast` for larger Hugging Face / multi-provider tasks when
   `HF_TOKEN` is set
 
-OpenAI and Gemini are both configured through LiteLLM model groups. The normal
-default keeps most code-generation traffic on OpenAI while letting Gemini absorb
-long-context and lower-risk work. This reduces token saturation without sending
-high-stakes changes blindly to the cheapest model.
+OpenAI, Gemini, and local Qwen are configured through LiteLLM model groups. The
+normal default now balances OpenAI with Gemini relief and keeps Qwen as a local
+zero-cost fallback. This reduces token saturation without sending high-stakes
+changes blindly to the cheapest model.
 
 API keys are never committed or written to a configuration file. `OPENAI_API_KEY`
 is required for the default profile; `GEMINI_API_KEY` is optional but recommended
 to activate the OpenAI/Gemini dispatching path.
+
+## OpenAI Quota Saver
+
+When OpenAI quota is low or exhausted, use the `codex-no-openai` alias. It routes
+through Gemini first and local Qwen second, without OpenAI entries in the model
+group:
+
+```powershell
+codex --model codex-no-openai
+```
+
+For one-shot wrapper calls, either force the provider:
+
+```powershell
+python .\scripts\python\codex_cost_router.py run --dry-run `
+  --provider no-openai `
+  "Refactor this Python API without using OpenAI quota"
+```
+
+or set a temporary session mode:
+
+```powershell
+$env:CODEX_ROUTER_OPENAI_MODE = 'avoid'
+python .\scripts\python\codex_cost_router.py run --dry-run `
+  "Refactor this Python API without using OpenAI quota"
+```
+
+For a durable default, set `avoid_openai: true` in
+`codex-routing-policy.yaml`.
 
 ## Hugging Face Integration
 
@@ -129,6 +160,7 @@ Default policy:
 default_provider: auto
 default_codex_provider: litellm
 open_models_only: false
+avoid_openai: false
 max_cost_usd: 0.0
 
 task_provider_rules:

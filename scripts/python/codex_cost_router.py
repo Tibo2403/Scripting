@@ -34,9 +34,10 @@ HF_FAST_MODEL = "codex-hf-fast"
 HF_CHEAP_MODEL = "codex-hf-cheap"
 HF_DIRECT_MODEL = "openai/gpt-oss-120b:fastest"
 QWEN_LOCAL_MODEL = "codex-qwen-local"
+NO_OPENAI_MODEL = "codex-no-openai"
 DEFAULT_MAX_INPUT_TOKENS = 12_000
 DEFAULT_MAX_OUTPUT_TOKENS = 2_000
-PROVIDERS = ("auto", "openai", "gemini", "huggingface", "qwen")
+PROVIDERS = ("auto", "openai", "gemini", "huggingface", "qwen", "no-openai")
 CODEX_PROVIDERS = ("litellm", "huggingface")
 MODELS = (
     LIGHT_MODEL,
@@ -48,6 +49,7 @@ MODELS = (
     HF_FAST_MODEL,
     HF_CHEAP_MODEL,
     QWEN_LOCAL_MODEL,
+    NO_OPENAI_MODEL,
 )
 LITELLM_HOST = "localhost"
 LITELLM_PORT = 4000
@@ -59,6 +61,7 @@ DEFAULT_POLICY = {
     "default_provider": "auto",
     "default_codex_provider": "litellm",
     "open_models_only": False,
+    "avoid_openai": False,
     "max_cost_usd": 0.0,
     "task_provider_rules": {
         "simple": "auto",
@@ -80,6 +83,7 @@ ESTIMATED_RATES = {
     HF_CHEAP_MODEL: {"input": 0.10, "output": 0.30},
     HF_FAST_MODEL: {"input": 0.25, "output": 0.75},
     QWEN_LOCAL_MODEL: {"input": 0.0, "output": 0.0},
+    NO_OPENAI_MODEL: {"input": 0.40, "output": 1.50},
 }
 
 SIMPLE_TERMS = (
@@ -411,6 +415,16 @@ def default_provider() -> str:
     return provider if provider in PROVIDERS else "auto"
 
 
+def openai_avoidance_enabled(policy: dict[str, Any] | None = None) -> bool:
+    """Return whether OpenAI should be avoided to preserve or bypass quota."""
+    value = os.environ.get("CODEX_ROUTER_OPENAI_MODE", "").casefold()
+    if value in {"avoid", "off", "depleted", "quota", "no-openai", "no_openai"}:
+        return True
+    if value in {"", "auto", "normal", "on"}:
+        return bool(policy and policy.get("avoid_openai"))
+    return False
+
+
 def default_codex_provider() -> str:
     """Read the Codex-facing provider preference with a safe fallback."""
     provider = os.environ.get("CODEX_ROUTER_CODEX_PROVIDER", "litellm").casefold()
@@ -441,6 +455,8 @@ def provider_from_policy(
         return default_provider(), "provider forced by CODEX_ROUTER_PROVIDER"
     if bool(policy.get("open_models_only")):
         return "huggingface", "policy open_models_only"
+    if openai_avoidance_enabled(policy):
+        return "no-openai", "OpenAI avoidance enabled"
     complexity, _ = classify_complexity(prompt)
     rules = policy.get("task_provider_rules", {})
     if isinstance(rules, dict) and complexity in rules:
@@ -518,6 +534,11 @@ def route_model(
         if qwen_available():
             return QWEN_LOCAL_MODEL, f"qwen provider requested; {reason}"
         return DEFAULT_MODEL, "qwen requested but Ollama is not listening on 127.0.0.1:11434; using default OpenAI/Gemini tier"
+
+    if provider == "no-openai":
+        if qwen_available():
+            return NO_OPENAI_MODEL, f"OpenAI avoided; Gemini/Qwen alias selected; {reason}"
+        return LONG_MODEL, f"OpenAI avoided; Qwen unavailable so Gemini long-context alias selected; {reason}"
 
     if provider == "openai":
         model = LIGHT_MODEL if complexity == "simple" else DEEP_MODEL

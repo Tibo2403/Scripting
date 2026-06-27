@@ -6,6 +6,7 @@
 default_provider: auto
 default_codex_provider: litellm
 open_models_only: false
+avoid_openai: false
 max_cost_usd: 0.0
 
 task_provider_rules:
