@@ -1,7 +1,6 @@
 # Codex Cost Router
 
-Optional cost routing for Codex CLI on Windows using the official open-source
-[`BerriAI/litellm`](https://github.com/BerriAI/litellm) proxy.
+Optional routing for Codex CLI on Windows. The default path is the normal Codex CLI. LiteLLM is an opt-in proxy used when you want Gemini API dispatch or a shared gateway to local Qwen.
 
 The local Python wrapper cleans prompts, compresses noisy logs, estimates tokens,
 applies budgets, and selects one of these LiteLLM aliases:
@@ -18,14 +17,9 @@ applies budgets, and selects one of these LiteLLM aliases:
 - `codex-hf-fast` for larger Hugging Face / multi-provider tasks when
   `HF_TOKEN` is set
 
-OpenAI, Gemini, and local Qwen are configured through LiteLLM model groups. The
-normal default now balances OpenAI with Gemini relief and keeps Qwen as a local
-zero-cost fallback. This reduces token saturation without sending high-stakes
-changes blindly to the cheapest model.
+Gemini and local Qwen are configured through LiteLLM model groups when the proxy is active. Without the proxy, the wrapper keeps the standard Codex path and can still call local Qwen directly through Ollama for selected local tasks.
 
-API keys are never committed or written to a configuration file. `OPENAI_API_KEY`
-is required for the default profile; `GEMINI_API_KEY` is optional but recommended
-to activate the OpenAI/Gemini dispatching path.
+API keys are never committed or written to a configuration file. `GEMINI_API_KEY` is only needed for Gemini dispatch through LiteLLM. Local Qwen only needs Ollama running with `qwen2.5-coder:3b` installed.
 
 ## OpenAI Quota Saver
 
@@ -101,7 +95,7 @@ $env:HUGGINGFACE_API_KEY = $env:HF_TOKEN
 
 The local LiteLLM config includes `codex-qwen-local` as a final fallback for
 the main Codex aliases. It uses Ollama's OpenAI-compatible endpoint with the
-lighter Qwen2.5 Coder 7B GGUF model:
+Qwen2.5 Coder 3B model:
 
 ```powershell
 .\scripts\python\Start-CodexQwenOllama.ps1
@@ -110,11 +104,30 @@ lighter Qwen2.5 Coder 7B GGUF model:
 The script starts Ollama if needed and pulls:
 
 ```text
-hf.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:latest
+qwen2.5-coder:3b
 ```
 
 LiteLLM then reaches it through `http://127.0.0.1:11434/v1`. No provider API key
 is required for this local fallback.
+### Local Fast Path
+
+For the fastest local path, call Ollama directly instead of going through
+LiteLLM. This is the preferred path for quick code cleanup, small explanations,
+and local smoke checks:
+
+```powershell
+.\scripts\python\Invoke-QwenLocal.ps1 "Nettoie ce code Python et explique le changement: def f(x): return x+1"
+```
+
+Measure local throughput with the same OpenAI-compatible Ollama endpoint:
+
+```powershell
+.\scripts\python\Measure-QwenLocalSpeed.ps1
+```
+
+Use direct Ollama when raw local speed matters. Use LiteLLM when you need
+Codex-facing profiles, fallback order, provider routing, quotas, or a single
+OpenAI-compatible gateway across local and remote models.
 
 Second, Hugging Face can be added as an optional Codex-facing layer. Running
 `enable` now installs two managed profiles:
@@ -158,7 +171,7 @@ Default policy:
 
 ```yaml
 default_provider: auto
-default_codex_provider: litellm
+default_codex_provider: auto
 open_models_only: false
 avoid_openai: false
 max_cost_usd: 0.0
@@ -170,7 +183,7 @@ task_provider_rules:
 
 fallback_order:
   - litellm
-  - huggingface
+  - standard
 ```
 
 `fallback_order` is used for real Codex execution. If the selected Codex-facing
@@ -186,26 +199,34 @@ Open PowerShell in the repository:
 cd C:\Users\user\Documents\Scripting
 ```
 
-Start LiteLLM and Codex with one command:
+Start Codex with the standard path:
 
 ```powershell
 .\scripts\python\codex-cost-routing.cmd
 ```
 
+Start the LiteLLM proxy only when you want Gemini/API dispatch or a proxy gateway to Qwen:
+
+```powershell
+.\scripts\python\Manage-CodexCostRouting.ps1 -Action Start -CodexProvider LiteLLM
+codex --profile cost-routing
+.\scripts\python\Manage-CodexCostRouting.ps1 -Action Stop
+```
+
 The launcher automatically bypasses restrictive PowerShell execution policies
-for this command only. The script:
+for this command only. With no arguments, it opens the normal Codex CLI path:
+no LiteLLM proxy, no API-key prompt, no temporary Codex profile.
+
+When `-CodexProvider LiteLLM` is selected, the script:
 
 1. installs the official LiteLLM OSS proxy in `C:\tmp\litellm-oss` when needed;
-2. asks for the OpenAI key with masked input when it is missing;
-3. asks for the Gemini key with masked input when it is missing; this is optional
-   but enables the Gemini model groups;
+2. asks only for optional session keys that are not already set;
+3. requires at least `OPENAI_API_KEY`, `GEMINI_API_KEY`, or local Qwen on Ollama;
 4. creates a random local `LITELLM_API_KEY` in memory;
 5. starts the LiteLLM proxy in the background;
-6. enables the optional Codex `cost-routing` profile.
+6. enables the optional Codex `cost-routing` profile;
 7. opens Codex with that profile;
 8. stops LiteLLM and restores the previous configuration when Codex closes.
-
-There is no key to copy and no second terminal is required.
 
 ### Optional local web key session
 
@@ -216,12 +237,13 @@ If you prefer entering keys in a local page for one work session, start:
 ```
 
 Then open `http://127.0.0.1:8787/`, paste `OPENAI_API_KEY`,
-`GEMINI_API_KEY`, `HF_TOKEN`, or optional custom Qwen endpoint fields, and
-submit the form. For the default local Qwen/Ollama fallback, run
-`Start-CodexQwenOllama.ps1`; no Qwen API key is needed. The page starts the
-LiteLLM proxy on `http://127.0.0.1:4000/v1` with submitted values only in the
-proxy process environment. The keys are not written to disk and the web server
-suppresses request logging.
+`GEMINI_API_KEY`, or `HF_TOKEN`, and submit the form. Qwen is not managed as an
+API provider here: it is only an optional local Ollama fallback. Run
+`Start-CodexQwenOllama.ps1` and keep the local Qwen checkbox enabled; no Qwen API
+base or API key is accepted by the page. The page starts the LiteLLM proxy on
+`http://127.0.0.1:4000/v1` with submitted values only in the proxy process
+environment. The keys are not written to disk and the web server suppresses
+request logging.
 
 To launch the optional Hugging Face-facing profile instead of the local LiteLLM
 proxy:
@@ -300,9 +322,11 @@ Prompts and API keys are not logged.
 
 ## Files
 
-- `Manage-CodexCostRouting.ps1`: automatic run, status, and stop workflow.
+- `Manage-CodexCostRouting.ps1`: automatic run, persistent start, status, and stop workflow.
 - `codex-cost-routing.cmd`: simple Windows launcher.
 - `codex_cost_router.py`: prompt optimization and one-shot routing.
+- `Invoke-QwenLocal.ps1`: direct Ollama local Qwen call for fast small tasks.
+- `Measure-QwenLocalSpeed.ps1`: repeatable local token/s benchmark.
 - `codex_key_session_web.py`: local-only web form for session keys.
 - `Start-CodexKeySessionWeb.ps1`: PowerShell launcher for the local key page.
 - `Test-CodexLiteLLMDispatch.ps1`: local proxy alias and optional call test.

@@ -1,11 +1,11 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Run', 'Status', 'Stop')]
+    [ValidateSet('Run', 'Start', 'Status', 'Stop')]
     [string]$Action = 'Run',
     [string]$CodexPath = 'codex',
     [int]$Port = 4000,
-    [ValidateSet('LiteLLM', 'HuggingFace')]
-    [string]$CodexProvider = 'LiteLLM'
+    [ValidateSet('Standard', 'LiteLLM', 'HuggingFace')]
+    [string]$CodexProvider = 'Standard'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -50,6 +50,23 @@ function Test-ProxyPort {
     }
 }
 
+function Test-OllamaQwen {
+    $client = [System.Net.Sockets.TcpClient]::new()
+    try {
+        $connection = $client.BeginConnect('127.0.0.1', 11434, $null, $null)
+        if (-not $connection.AsyncWaitHandle.WaitOne(300)) {
+            return $false
+        }
+        $client.EndConnect($connection)
+        return $true
+    }
+    catch {
+        return $false
+    }
+    finally {
+        $client.Dispose()
+    }
+}
 function Get-ProxyProcess {
     if (-not (Test-Path -LiteralPath $pidPath)) {
         return $null
@@ -91,22 +108,23 @@ function Install-LiteLLM {
 }
 
 function Set-SessionSecrets {
-    if (-not $env:OPENAI_API_KEY) {
-        $secureKey = Read-Host 'OPENAI_API_KEY (saisie masquee, conservee uniquement en memoire)' -AsSecureString
-        $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureKey)
-        try {
-            $env:OPENAI_API_KEY = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+    $qwenLocalAvailable = Test-OllamaQwen
+
+    if (-not $env:OPENAI_API_KEY -and -not $qwenLocalAvailable) {
+        $secureKey = Read-Host 'OPENAI_API_KEY (optionnel, entree pour ignorer)' -AsSecureString
+        if ($secureKey.Length -gt 0) {
+            $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureKey)
+            try {
+                $env:OPENAI_API_KEY = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+            }
+            finally {
+                [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+            }
         }
-        finally {
-            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
-        }
-    }
-    if (-not $env:OPENAI_API_KEY) {
-        throw 'OPENAI_API_KEY est obligatoire.'
     }
 
-    if (-not $env:GEMINI_API_KEY) {
-        $secureKey = Read-Host 'GEMINI_API_KEY (optionnel, entree pour activer le dispatching Gemini)' -AsSecureString
+    if (-not $env:GEMINI_API_KEY -and -not $qwenLocalAvailable) {
+        $secureKey = Read-Host 'GEMINI_API_KEY (optionnel, entree pour ignorer)' -AsSecureString
         if ($secureKey.Length -gt 0) {
             $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureKey)
             try {
@@ -116,6 +134,10 @@ function Set-SessionSecrets {
                 [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
             }
         }
+    }
+
+    if (-not $env:OPENAI_API_KEY -and -not $env:GEMINI_API_KEY -and -not $qwenLocalAvailable) {
+        throw 'LiteLLM a besoin au moins de OPENAI_API_KEY, GEMINI_API_KEY ou Qwen local sur Ollama.'
     }
 
     if (-not $env:LITELLM_API_KEY) {
@@ -155,6 +177,11 @@ function Stop-Router {
 }
 
 function Start-Router {
+    if ($CodexProvider -eq 'Standard') {
+        Write-Host 'Chemin Codex standard: aucun proxy LiteLLM a demarrer.'
+        return
+    }
+
     if (Test-ProxyPort) {
         throw "Le port $Port est deja utilise. Lancez '.\scripts\python\codex-cost-routing.cmd Stop' ou fermez le processus concerne."
     }
@@ -213,7 +240,13 @@ function Show-Status {
 
 switch ($Action) {
     'Run' {
-        if ($CodexProvider -eq 'HuggingFace') {
+        if ($CodexProvider -eq 'Standard') {
+            Write-Host 'Lancement de Codex par le chemin standard.'
+            Write-Host "LiteLLM actif : $(if (Test-ProxyPort) { 'oui' } else { 'non' })"
+            Write-Host "Qwen local : $(if (Test-OllamaQwen) { 'oui' } else { 'non' })"
+            & $CodexPath
+        }
+        elseif ($CodexProvider -eq 'HuggingFace') {
             Set-HuggingFaceSessionSecrets
             & (Get-PythonPath) $routerPath enable | Out-Host
             try {
@@ -229,11 +262,33 @@ switch ($Action) {
             Start-Router
             try {
                 Write-Host 'Lancement de Codex avec le profil cost-routing...'
+                Write-Host 'Gemini peut etre utilise par LiteLLM si GEMINI_API_KEY est configuree.'
+                Write-Host "Qwen local : $(if (Test-OllamaQwen) { 'disponible via Ollama' } else { 'indisponible' })"
                 & $CodexPath --profile cost-routing
             }
             finally {
                 Stop-Router
             }
+        }
+    }
+    'Start' {
+        if ($CodexProvider -eq 'Standard') {
+            Write-Host 'Chemin Codex standard: rien a activer.'
+            Write-Host 'Utilisez -CodexProvider LiteLLM pour activer le proxy Gemini/Qwen.'
+        }
+        elseif ($CodexProvider -eq 'HuggingFace') {
+            Set-HuggingFaceSessionSecrets
+            & (Get-PythonPath) $routerPath enable | Out-Host
+            Write-Host 'Profil cost-routing-hf active.'
+            Write-Host 'Lancez Codex avec: codex --profile cost-routing-hf'
+            Write-Host "Arret: .\scripts\python\Manage-CodexCostRouting.ps1 -Action Stop"
+        }
+        else {
+            Start-Router
+            Write-Host 'LiteLLM OSS actif et profil cost-routing active.'
+            Write-Host "Endpoint: http://localhost:$Port/v1"
+            Write-Host 'Lancez Codex avec: codex --profile cost-routing'
+            Write-Host "Arret: .\scripts\python\Manage-CodexCostRouting.ps1 -Action Stop"
         }
     }
     'Status' {

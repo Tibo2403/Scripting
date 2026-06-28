@@ -54,8 +54,6 @@ class KeySessionWebTests(unittest.TestCase):
                 "GEMINI_API_KEY": "",
                 "HF_TOKEN": "hf_test",
                 "USE_LOCAL_QWEN": "",
-                "QWEN_API_BASE": "",
-                "QWEN_API_KEY": "",
             }
         )
         handler._stop_proxy = MagicMock()  # type: ignore[method-assign]
@@ -93,8 +91,6 @@ class KeySessionWebTests(unittest.TestCase):
                 "GEMINI_API_KEY": "",
                 "HF_TOKEN": "",
                 "USE_LOCAL_QWEN": "1",
-                "QWEN_API_BASE": "",
-                "QWEN_API_KEY": "",
             }
         )
         handler._stop_proxy = MagicMock()  # type: ignore[method-assign]
@@ -111,6 +107,49 @@ class KeySessionWebTests(unittest.TestCase):
             handler._start_proxy()
 
         self.assertIn("Qwen local", handler.state.message)
+
+    def test_page_does_not_accept_qwen_api_fields(self) -> None:
+        self.assertNotIn("QWEN_API_BASE", WEB.PAGE)
+        self.assertNotIn("QWEN_API_KEY", WEB.PAGE)
+        self.assertIn("local Ollama fallback", WEB.PAGE)
+
+    def test_start_proxy_ignores_submitted_qwen_api_fields(self) -> None:
+        handler = object.__new__(WEB.KeySessionHandler)
+        handler.state = WEB.SessionState()
+        handler.config_path = Path("config.yaml")
+        handler.litellm_path = Path("litellm.exe")
+        handler.proxy_host = "127.0.0.1"
+        handler.proxy_port = 4000
+        handler._read_form = MagicMock(  # type: ignore[method-assign]
+            return_value={
+                "OPENAI_API_KEY": "sk-test",
+                "GEMINI_API_KEY": "",
+                "HF_TOKEN": "",
+                "USE_LOCAL_QWEN": "",
+                "QWEN_API_BASE": "https://example.invalid/v1",
+                "QWEN_API_KEY": "qwen-secret",
+            }
+        )
+        handler._stop_proxy = MagicMock()  # type: ignore[method-assign]
+        handler._send_page = MagicMock()  # type: ignore[method-assign]
+
+        process = MagicMock()
+        captured_env: dict[str, str] = {}
+
+        def fake_popen(*args: object, **kwargs: object) -> MagicMock:
+            captured_env.update(kwargs["env"])  # type: ignore[index]
+            return process
+
+        with (
+            patch.object(WEB.subprocess, "Popen", side_effect=fake_popen),
+            patch.object(WEB, "wait_for_port", return_value=True),
+            patch.dict(os.environ, {}, clear=True),
+        ):
+            handler._start_proxy()
+
+        self.assertNotIn("QWEN_API_BASE", captured_env)
+        self.assertNotIn("QWEN_API_KEY", captured_env)
+        self.assertIn("OpenAI", handler.state.message)
 
 
 if __name__ == "__main__":

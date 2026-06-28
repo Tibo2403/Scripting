@@ -1,4 +1,4 @@
-﻿"""Tests for the optional Codex cost-routing wrapper."""
+"""Tests for the optional Codex cost-routing wrapper."""
 
 import importlib.util
 import tempfile
@@ -27,11 +27,11 @@ class CodexCostRouterTests(unittest.TestCase):
     def test_route_model_uses_expected_aliases(self) -> None:
         self.assertEqual(ROUTER.route_model("Corrige une typo dans le README")[0], "codex-light")
         self.assertEqual(ROUTER.route_model("Refactor this Python API")[0], "codex-default")
-        self.assertEqual(ROUTER.route_model("Audit sÃ©curitÃ© production Supabase RLS")[0], "codex-deep")
+        self.assertEqual(ROUTER.route_model("Audit securite production Supabase RLS")[0], "codex-deep")
 
     def test_route_model_matches_accented_french_keywords(self) -> None:
-        self.assertEqual(ROUTER.route_model("PrÃ©pare un rÃ©sumÃ© du README")[0], "codex-light")
-        self.assertEqual(ROUTER.route_model("Question de fiscalitÃ© pour Odoo")[0], "codex-deep")
+        self.assertEqual(ROUTER.route_model("Prepare un resume du README")[0], "codex-light")
+        self.assertEqual(ROUTER.route_model("Question de fiscalite pour Odoo")[0], "codex-deep")
 
     def test_route_model_sends_long_context_to_gemini_biased_alias(self) -> None:
         self.assertEqual(
@@ -60,19 +60,22 @@ class CodexCostRouterTests(unittest.TestCase):
             self.assertEqual(model, "codex-default")
             self.assertIn("HF_TOKEN is missing", reason)
 
-    def test_route_model_can_use_self_hosted_qwen_when_endpoint_exists(self) -> None:
-        with patch.dict(ROUTER.os.environ, {"QWEN_API_BASE": "http://127.0.0.1:11434/v1"}):
+    def test_route_model_can_use_local_qwen_when_ollama_is_reachable(self) -> None:
+        with (
+            patch.dict(ROUTER.os.environ, {"QWEN_API_BASE": "https://ignored.example/v1"}),
+            patch.object(ROUTER.socket, "create_connection"),
+        ):
             self.assertEqual(
-                ROUTER.route_model("Use qwen auto heberge as backup", provider="qwen")[0],
+                ROUTER.route_model("Use qwen ollama as backup", provider="qwen")[0],
                 "codex-qwen-local",
             )
             self.assertEqual(
-                ROUTER.route_model("Prefer self-hosted local llm fallback")[0],
+                ROUTER.route_model("Prefer local llm fallback")[0],
                 "codex-qwen-local",
             )
 
     def test_route_model_can_avoid_openai_with_gemini_qwen_alias(self) -> None:
-        with patch.dict(ROUTER.os.environ, {"QWEN_API_BASE": "http://127.0.0.1:11434/v1"}):
+        with patch.object(ROUTER.socket, "create_connection"):
             model, reason = ROUTER.route_model("Refactor this Python API", provider="no-openai")
         self.assertEqual(model, "codex-no-openai")
         self.assertIn("OpenAI avoided", reason)
@@ -86,6 +89,7 @@ class CodexCostRouterTests(unittest.TestCase):
             self.assertIn("Ollama is not listening", reason)
 
     def test_codex_provider_helpers_select_expected_profiles(self) -> None:
+        self.assertEqual(ROUTER.codex_profile("standard"), "standard")
         self.assertEqual(ROUTER.codex_profile("litellm"), "cost-routing")
         self.assertEqual(ROUTER.codex_profile("huggingface"), "cost-routing-hf")
         self.assertEqual(ROUTER.codex_model("codex-hf-fast", "litellm"), "codex-hf-fast")
@@ -96,7 +100,7 @@ class CodexCostRouterTests(unittest.TestCase):
 
     def test_default_codex_provider_rejects_unknown_environment_value(self) -> None:
         with patch.dict(ROUTER.os.environ, {"CODEX_ROUTER_CODEX_PROVIDER": "unknown"}):
-            self.assertEqual(ROUTER.default_codex_provider(), "litellm")
+            self.assertEqual(ROUTER.default_codex_provider(), "auto")
 
     def test_profile_block_includes_optional_hugging_face_profile(self) -> None:
         self.assertIn("[model_providers.huggingface]", ROUTER.PROFILE_BLOCK)
@@ -136,12 +140,13 @@ class CodexCostRouterTests(unittest.TestCase):
         provider, reason = ROUTER.provider_from_policy("Document this README", None, policy)
         self.assertEqual(provider, "huggingface")
         self.assertIn("policy task rule", reason)
-        codex_provider, codex_reason = ROUTER.codex_provider_from_policy(None, policy)
+        with patch.object(ROUTER, "proxy_available", return_value=True):
+            codex_provider, codex_reason = ROUTER.codex_provider_from_policy(None, policy)
         self.assertEqual(codex_provider, "litellm")
-        self.assertIn("policy default", codex_reason)
+        self.assertIn("LiteLLM proxy detected", codex_reason)
         self.assertEqual(
             ROUTER.fallback_order_from_policy(codex_provider, policy),
-            ["litellm", "huggingface"],
+            ["litellm", "huggingface", "standard"],
         )
 
     def test_policy_open_models_only_prefers_hugging_face(self) -> None:
@@ -203,4 +208,3 @@ class CodexCostRouterTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -8,8 +8,8 @@
 # - codex-no-openai: Gemini/Qwen routing when OpenAI quota is exhausted
 # - codex-qwen-local: local Ollama Qwen fallback
 # API keys are read from environment variables and must never be committed.
-# Qwen fallback expects Ollama on http://127.0.0.1:11434/v1 with:
-#   hf.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:latest
+# Qwen is local-only here; the fallback expects Ollama on http://127.0.0.1:11434/v1 with:
+#   qwen2.5-coder:3b
 
 model_list:
   # Backward-compatible aliases used by older wrapper calls.
@@ -52,7 +52,7 @@ model_list:
 
   - model_name: codex-light
     litellm_params:
-      model: openai/hf.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:latest
+      model: openai/qwen2.5-coder:3b
       api_base: http://127.0.0.1:11434/v1
       api_key: sk-ollama-local
       weight: 1
@@ -71,7 +71,7 @@ model_list:
 
   - model_name: codex-default
     litellm_params:
-      model: openai/hf.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:latest
+      model: openai/qwen2.5-coder:3b
       api_base: http://127.0.0.1:11434/v1
       api_key: sk-ollama-local
       weight: 1
@@ -96,7 +96,7 @@ model_list:
 
   - model_name: codex-long
     litellm_params:
-      model: openai/hf.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:latest
+      model: openai/qwen2.5-coder:3b
       api_base: http://127.0.0.1:11434/v1
       api_key: sk-ollama-local
       weight: 1
@@ -115,7 +115,7 @@ model_list:
 
   - model_name: codex-deep
     litellm_params:
-      model: openai/hf.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:latest
+      model: openai/qwen2.5-coder:3b
       api_base: http://127.0.0.1:11434/v1
       api_key: sk-ollama-local
       weight: 1
@@ -136,17 +136,17 @@ model_list:
 
   - model_name: codex-no-openai
     litellm_params:
-      model: openai/hf.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:latest
+      model: openai/qwen2.5-coder:3b
       api_base: http://127.0.0.1:11434/v1
       api_key: sk-ollama-local
       weight: 2
 
-  # Local Ollama fallback for Qwen2.5 Coder 7B GGUF.
+  # Local Ollama fallback for Qwen2.5 Coder 3B.
   # Prepare with:
-  #   ollama pull hf.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:latest
+  #   ollama pull qwen2.5-coder:3b
   - model_name: codex-qwen-local
     litellm_params:
-      model: openai/hf.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:latest
+      model: openai/qwen2.5-coder:3b
       api_base: http://127.0.0.1:11434/v1
       api_key: sk-ollama-local
       weight: 1
@@ -172,7 +172,7 @@ router_settings:
     gpt-5.4-mini: codex-light
     gemini-3.5-pro: codex-long
     gemini-3.5-flash: codex-light
-    hf.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:latest: codex-qwen-local
+    qwen2.5-coder:3b: codex-qwen-local
   fallbacks:
     - codex-light:
         - codex-no-openai

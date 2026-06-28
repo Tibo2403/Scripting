@@ -206,13 +206,7 @@ PAGE = """<!doctype html>
           <input id="use_qwen" name="USE_LOCAL_QWEN" type="checkbox" value="1" checked>
           Enable local Qwen fallback through Ollama
         </label>
-        <details>
-          <summary>Advanced custom Qwen endpoint</summary>
-          <label for="qwen_base">Qwen API base optional</label>
-          <input id="qwen_base" name="QWEN_API_BASE" type="url" placeholder="http://127.0.0.1:11434/v1" autocomplete="off">
-          <label for="qwen_key">Qwen API key optional</label>
-          <input id="qwen_key" name="QWEN_API_KEY" type="password" placeholder="sk-ollama-local" autocomplete="off">
-        </details>
+        <p class="muted small">Qwen is only used as a local Ollama fallback on <code>127.0.0.1:11434</code>; this page never accepts a Qwen API base or key.</p>
         <div class="actions">
           <button type="submit">Start proxy</button>
         </div>
@@ -328,9 +322,7 @@ class KeySessionHandler(BaseHTTPRequestHandler):
         gemini_key = form.get("GEMINI_API_KEY", "")
         hf_token = form.get("HF_TOKEN", "")
         use_local_qwen = form.get("USE_LOCAL_QWEN", "") == "1"
-        qwen_base = form.get("QWEN_API_BASE", "")
-        qwen_key = form.get("QWEN_API_KEY", "")
-        if not any((openai_key, gemini_key, hf_token, use_local_qwen, qwen_base)):
+        if not any((openai_key, gemini_key, hf_token, use_local_qwen)):
             self.state.message = "Provide at least one provider key, or keep local Qwen enabled."
             self._send_page()
             return
@@ -347,9 +339,6 @@ class KeySessionHandler(BaseHTTPRequestHandler):
         if hf_token:
             env["HF_TOKEN"] = hf_token
             env["HUGGINGFACE_API_KEY"] = hf_token
-        if qwen_base:
-            env["QWEN_API_BASE"] = qwen_base.rstrip("/")
-            env["QWEN_API_KEY"] = qwen_key or "sk-local-qwen"
 
         try:
             self.state.process = subprocess.Popen(
@@ -381,7 +370,7 @@ class KeySessionHandler(BaseHTTPRequestHandler):
                 providers.append("Gemini")
             if hf_token:
                 providers.append("Hugging Face")
-            if use_local_qwen or qwen_base:
+            if use_local_qwen:
                 providers.append("Qwen local")
             self.state.message = "Session proxy started with: " + ", ".join(providers)
         else:

@@ -10,7 +10,10 @@ import shutil
 import socket
 import subprocess
 import sys
+import time
 import unicodedata
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -38,7 +41,7 @@ NO_OPENAI_MODEL = "codex-no-openai"
 DEFAULT_MAX_INPUT_TOKENS = 12_000
 DEFAULT_MAX_OUTPUT_TOKENS = 2_000
 PROVIDERS = ("auto", "openai", "gemini", "huggingface", "qwen", "no-openai")
-CODEX_PROVIDERS = ("litellm", "huggingface")
+CODEX_PROVIDERS = ("auto", "standard", "litellm", "huggingface")
 MODELS = (
     LIGHT_MODEL,
     DEFAULT_MODEL,
@@ -55,11 +58,13 @@ LITELLM_HOST = "localhost"
 LITELLM_PORT = 4000
 OLLAMA_HOST = "127.0.0.1"
 OLLAMA_PORT = 11434
+OLLAMA_CHAT_COMPLETIONS_URL = f"http://{OLLAMA_HOST}:{OLLAMA_PORT}/v1/chat/completions"
+QWEN_OLLAMA_MODEL = "qwen2.5-coder:3b"
 WINDOWS_LITELLM_FALLBACK = Path(r"C:\tmp\litellm-oss\Scripts\litellm.exe")
 POLICY_FILE = Path(__file__).with_name("codex-routing-policy.yaml")
 DEFAULT_POLICY = {
     "default_provider": "auto",
-    "default_codex_provider": "litellm",
+    "default_codex_provider": "auto",
     "open_models_only": False,
     "avoid_openai": False,
     "max_cost_usd": 0.0,
@@ -68,7 +73,7 @@ DEFAULT_POLICY = {
         "medium": "auto",
         "complex": "openai",
     },
-    "fallback_order": ["litellm", "huggingface"],
+    "fallback_order": ["litellm", "standard", "huggingface"],
 }
 
 # Approximate placeholders in USD per million tokens. Adjust these estimates to
@@ -88,7 +93,6 @@ ESTIMATED_RATES = {
 
 SIMPLE_TERMS = (
     "correction mineure",
-    "résumé",
     "resume",
     "documentation",
     "document",
@@ -105,10 +109,8 @@ MEDIUM_TERMS = (
     "typescript",
 )
 COMPLEX_TERMS = (
-    "sécurité",
     "securite",
     "security",
-    "fiscalité",
     "fiscalite",
     "odoo",
     "architecture",
@@ -136,8 +138,7 @@ QWEN_TERMS = (
     "auto-heberge",
     "auto heberge",
     "auto-hebergee",
-    "self-hosted",
-    "self hosted",
+    "ollama",
     "local llm",
     "openai-compatible local",
 )
@@ -150,11 +151,9 @@ LONG_CONTEXT_TERMS = (
     "fichier volumineux",
     "large file",
     "synthese",
-    "synthèse",
     "summarize",
     "compare documents",
 )
-
 PROFILE_BLOCK = f"""\
 # BEGIN CODEX COST ROUTER
 [model_providers.litellm]
@@ -399,9 +398,6 @@ def hf_available() -> bool:
 
 def qwen_available() -> bool:
     """Return whether the local Ollama Qwen endpoint is reachable."""
-    configured_base = os.environ.get("QWEN_API_BASE")
-    if configured_base:
-        return True
     try:
         with socket.create_connection((OLLAMA_HOST, OLLAMA_PORT), timeout=1):
             return True
@@ -427,8 +423,8 @@ def openai_avoidance_enabled(policy: dict[str, Any] | None = None) -> bool:
 
 def default_codex_provider() -> str:
     """Read the Codex-facing provider preference with a safe fallback."""
-    provider = os.environ.get("CODEX_ROUTER_CODEX_PROVIDER", "litellm").casefold()
-    return provider if provider in CODEX_PROVIDERS else "litellm"
+    provider = os.environ.get("CODEX_ROUTER_CODEX_PROVIDER", "auto").casefold()
+    return provider if provider in CODEX_PROVIDERS else "auto"
 
 
 def normalize_provider(provider: Any, fallback: str = "auto") -> str:
@@ -437,10 +433,26 @@ def normalize_provider(provider: Any, fallback: str = "auto") -> str:
     return value if value in PROVIDERS else fallback
 
 
-def normalize_codex_provider(provider: Any, fallback: str = "litellm") -> str:
+def normalize_codex_provider(provider: Any, fallback: str = "auto") -> str:
     """Normalize a Codex-facing provider preference."""
     value = str(provider or fallback).casefold()
     return value if value in CODEX_PROVIDERS else fallback
+
+
+def resolve_auto_codex_provider() -> tuple[str, str]:
+    """Choose the live Codex path: LiteLLM when active, otherwise normal Codex."""
+    if proxy_available():
+        return "litellm", "LiteLLM proxy detected for Gemini/Qwen aliases"
+    return "standard", "standard Codex path; LiteLLM proxy is inactive"
+
+
+def resolve_codex_provider_choice(provider: Any, source: str) -> tuple[str, str]:
+    """Resolve explicit or auto Codex provider choices into an executable path."""
+    normalized = normalize_codex_provider(provider)
+    if normalized == "auto":
+        resolved, reason = resolve_auto_codex_provider()
+        return resolved, f"{source}: {reason}"
+    return normalized, source
 
 
 def provider_from_policy(
@@ -470,12 +482,18 @@ def codex_provider_from_policy(
 ) -> tuple[str, str]:
     """Resolve the Codex-facing provider from CLI and policy."""
     if requested_provider:
-        return normalize_codex_provider(requested_provider), "codex provider forced by CLI option"
+        return resolve_codex_provider_choice(requested_provider, "codex provider forced by CLI option")
     if os.environ.get("CODEX_ROUTER_CODEX_PROVIDER"):
-        return default_codex_provider(), "codex provider forced by CODEX_ROUTER_CODEX_PROVIDER"
+        return resolve_codex_provider_choice(
+            default_codex_provider(),
+            "codex provider forced by CODEX_ROUTER_CODEX_PROVIDER",
+        )
     if bool(policy.get("open_models_only")):
         return "huggingface", "policy open_models_only"
-    return normalize_codex_provider(policy.get("default_codex_provider")), "policy default_codex_provider"
+    return resolve_codex_provider_choice(
+        policy.get("default_codex_provider"),
+        "policy default_codex_provider",
+    )
 
 
 def fallback_order_from_policy(
@@ -486,29 +504,102 @@ def fallback_order_from_policy(
     raw_order = policy.get("fallback_order", [])
     order = [normalize_codex_provider(item) for item in raw_order if item]
     result: list[str] = []
-    for item in [selected_provider, *order]:
+    for item in [selected_provider, *order, "standard"]:
+        if item == "auto":
+            continue
         if item not in result:
             result.append(item)
-    return result or [selected_provider]
+    return result or ["standard"]
 
 
 def codex_profile(provider: str) -> str:
     """Map a Codex-facing provider to the managed profile name."""
-    return "cost-routing-hf" if provider == "huggingface" else "cost-routing"
+    if provider == "huggingface":
+        return "cost-routing-hf"
+    if provider == "litellm":
+        return "cost-routing"
+    return "standard"
 
 
 def codex_model(model: str, provider: str) -> str:
     """Map router aliases to the model name expected by the selected profile."""
     if provider == "huggingface":
         return HF_DIRECT_MODEL
+    if provider == "standard":
+        return "codex default"
     return model
 
 
 def codex_provider_ready(provider: str) -> tuple[bool, str]:
     """Check local prerequisites for a Codex-facing provider."""
+    if provider == "standard":
+        return True, "standard Codex path is always available when Codex CLI exists."
     if provider == "huggingface":
         return hf_available(), "HF_TOKEN is required for the cost-routing-hf Codex profile."
     return proxy_available(), "LiteLLM OSS proxy is not listening on http://localhost:4000."
+
+
+def build_codex_command(
+    codex: str,
+    provider: str,
+    model: str,
+    codex_args: list[str],
+    prompt: str,
+) -> list[str]:
+    """Build a Codex exec command for either the normal path or a managed profile."""
+    if provider == "standard":
+        return [codex, "exec", *codex_args, prompt]
+    return [
+        codex,
+        "exec",
+        "--profile",
+        codex_profile(provider),
+        "--model",
+        codex_model(model, provider),
+        *codex_args,
+        prompt,
+    ]
+
+
+def run_qwen_local(prompt: str, max_output_tokens: int) -> int:
+    """Call local Qwen through Ollama without requiring the LiteLLM proxy."""
+    payload = {
+        "model": QWEN_OLLAMA_MODEL,
+        "messages": [
+            {"role": "system", "content": "You are a concise local coding assistant."},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.1,
+        "max_tokens": max_output_tokens,
+        "stream": False,
+    }
+    request = urllib.request.Request(
+        OLLAMA_CHAT_COMPLETIONS_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    started = time.perf_counter()
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        print(f"Local Qwen call failed: {exc}", file=sys.stderr)
+        return 7
+    elapsed = max(time.perf_counter() - started, 0.001)
+    choice = (data.get("choices") or [{}])[0]
+    message = choice.get("message") or {}
+    content = str(message.get("content") or "").strip()
+    if content:
+        print(content)
+    usage = data.get("usage") or {}
+    completion_tokens = int(usage.get("completion_tokens") or 0)
+    if completion_tokens:
+        print(
+            f"\n[local-qwen] completion_tokens={completion_tokens} "
+            f"elapsed_s={elapsed:.2f} tokens_per_s={completion_tokens / elapsed:.2f}"
+        )
+    return 0
 
 
 def route_model(
@@ -708,21 +799,33 @@ def print_doctor() -> int:
     """Display local setup checks without printing secret values."""
     checks = [
         ("Codex CLI", bool(find_codex()), find_codex() or "not found"),
-        ("LiteLLM command", bool(find_litellm()), find_litellm() or "not found"),
-        ("LiteLLM proxy localhost:4000", proxy_available(), "listening" if proxy_available() else "not listening"),
-        ("LITELLM_API_KEY", bool(os.environ.get("LITELLM_API_KEY")), "set" if os.environ.get("LITELLM_API_KEY") else "missing"),
-        ("OPENAI_API_KEY", bool(os.environ.get("OPENAI_API_KEY")), "set" if os.environ.get("OPENAI_API_KEY") else "missing"),
-        ("Ollama Qwen optional", True, "listening on 127.0.0.1:11434" if qwen_available() else "missing; run Start-CodexQwenOllama.ps1"),
+        ("Standard Codex path", True, "default work path; no proxy required"),
+        ("LiteLLM command optional", True, find_litellm() or "not found; proxy dispatch disabled"),
+        (
+            "LiteLLM proxy optional",
+            True,
+            "listening for Gemini/Qwen aliases" if proxy_available() else "inactive; standard Codex remains usable",
+        ),
+        (
+            "Gemini dispatch optional",
+            True,
+            "ready through proxy" if proxy_available() and os.environ.get("GEMINI_API_KEY") else "needs active proxy + GEMINI_API_KEY",
+        ),
+        (
+            "Ollama Qwen optional",
+            True,
+            "listening on 127.0.0.1:11434" if qwen_available() else "missing; run Start-CodexQwenOllama.ps1",
+        ),
         ("HF_TOKEN optional", True, "set" if hf_available() else "missing; Hugging Face aliases disabled"),
-        ("PYTHONUTF8", os.environ.get("PYTHONUTF8") == "1", "1" if os.environ.get("PYTHONUTF8") == "1" else "missing or not 1"),
-        ("Cost-routing profile", router_enabled(), "enabled" if router_enabled() else "disabled"),
+        ("PYTHONUTF8 optional", True, "1" if os.environ.get("PYTHONUTF8") == "1" else "not forced"),
+        ("Cost-routing profile optional", True, "enabled" if router_enabled() else "disabled"),
     ]
     print("Codex Cost Router doctor")
     print("------------------------")
     for name, passed, detail in checks:
         print(f"{'OK' if passed else 'FIX':3}  {name:30} {detail}")
     if not proxy_available():
-        print("\nStart LiteLLM OSS with:")
+        print("\nLiteLLM is optional. Start it only when you want Gemini/API dispatch:")
         executable = find_litellm() or "litellm"
         print(f"  & '{executable}' --config .\\scripts\\python\\litellm-cost-routing.yaml --port 4000")
     return 0 if all(passed for _, passed, _ in checks) else 1
@@ -786,6 +889,8 @@ def run_router(args: argparse.Namespace) -> int:
     print(f"Compression ratio : {compression_ratio:.2f}")
     print(f"Output budget     : {output_tokens}")
     print(f"Estimated cost    : ${cost:.8f}")
+    print(f"Proxy active      : {'yes' if proxy_available() else 'no'}")
+    print(f"Qwen local        : {'yes' if qwen_available() else 'no'}")
     if max_cost > 0 and cost > max_cost:
         print(f"Policy cost limit : ${max_cost:.8f} exceeded")
 
@@ -794,9 +899,6 @@ def run_router(args: argparse.Namespace) -> int:
         print(optimized)
         return 0
 
-    if not router_enabled():
-        print("Cost routing is disabled. Run: python codex_cost_router.py enable", file=sys.stderr)
-        return 2
     codex = find_codex()
     if not codex:
         print("Codex CLI was not found in PATH or CODEX_CLI_PATH.", file=sys.stderr)
@@ -809,19 +911,26 @@ def run_router(args: argparse.Namespace) -> int:
             print(f"Skipping {attempt_provider}: {message}", file=sys.stderr)
             last_returncode = 5 if attempt_provider == "huggingface" else 4
             continue
+        if attempt_provider != "standard" and not router_enabled():
+            print(
+                f"Skipping {attempt_provider}: managed Codex profile is not enabled.",
+                file=sys.stderr,
+            )
+            last_returncode = 4
+            continue
+        if attempt_provider == "standard" and model == QWEN_LOCAL_MODEL and qwen_available():
+            print("Executing through local Ollama Qwen (no LiteLLM proxy required)")
+            return run_qwen_local(optimized, args.max_output_tokens)
         attempt_profile = codex_profile(attempt_provider)
         attempt_model = codex_model(model, attempt_provider)
         print(f"Executing through {attempt_profile} ({attempt_model})")
-        command = [
+        command = build_codex_command(
             codex,
-            "exec",
-            "--profile",
-            attempt_profile,
-            "--model",
-            attempt_model,
-            *args.codex_arg,
+            attempt_provider,
+            model,
+            args.codex_arg,
             optimized,
-        ]
+        )
         last_returncode = subprocess.run(command, check=False).returncode
         if last_returncode == 0:
             return 0
@@ -863,8 +972,9 @@ def build_parser() -> argparse.ArgumentParser:
         choices=CODEX_PROVIDERS,
         default=None,
         help=(
-            "Codex-facing provider profile: litellm for local proxy routing or "
-            "huggingface for the optional direct HF layer."
+            "Codex-facing provider path: auto chooses LiteLLM when active, "
+            "standard uses normal Codex, litellm uses the local proxy, and "
+            "huggingface uses the optional direct HF layer."
         ),
     )
     run.add_argument("--max-input-tokens", type=int, default=DEFAULT_MAX_INPUT_TOKENS)
