@@ -285,6 +285,45 @@ web page:
 
 The test prints a compact JSON result and never prints provider tokens.
 
+## Verification Checklist
+
+Check that the local checkout matches GitHub before changing routing files:
+
+```powershell
+git fetch origin
+git status -sb
+git rev-list --left-right --count main...origin/main
+```
+
+The last command should print `0 0`. After edits, run the local validation gate:
+
+```powershell
+python -m pytest .\scripts\python\tests\test_codex_cost_router.py .\scripts\python\tests\test_codex_key_session_web.py
+python -m ruff check .\scripts\python\codex_cost_router.py .\scripts\python\codex_key_session_web.py .\scripts\python\tests\test_codex_cost_router.py .\scripts\python\tests\test_codex_key_session_web.py
+.\scripts\python\Manage-CodexCostRouting.ps1 -Action Status
+python .\scripts\python\codex_cost_router.py run --dry-run --codex-provider standard "Verification Codex standard"
+```
+
+For local Qwen, verify Ollama and measure throughput:
+
+```powershell
+.\scripts\python\Start-CodexQwenOllama.ps1
+.\scripts\python\Measure-QwenLocalSpeed.ps1
+python .\scripts\python\codex_cost_router.py run --provider qwen --max-output-tokens 20 "Reponds exactement: OK qwen local"
+```
+
+For the optional proxy path, start LiteLLM only for Gemini/API dispatch or a
+single proxy gateway to local Qwen, then stop it when the session is done:
+
+```powershell
+.\scripts\python\Manage-CodexCostRouting.ps1 -Action Start -CodexProvider LiteLLM
+.\scripts\python\Test-CodexLiteLLMDispatch.ps1 -Model codex-qwen-local -Call
+.\scripts\python\Manage-CodexCostRouting.ps1 -Action Stop
+```
+
+The normal final state for daily Codex work is `LiteLLM OSS : arrete` and
+`Codex profile : standard`.
+
 ## Optimized One-Shot Requests
 
 Use the Python wrapper when prompt cleanup and dynamic model routing are needed:

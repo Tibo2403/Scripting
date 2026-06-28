@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Model = "hf.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:latest",
+    [string]$Model = "qwen2.5-coder:3b",
     [switch]$SkipPull
 )
 
