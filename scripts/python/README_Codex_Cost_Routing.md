@@ -287,17 +287,22 @@ codex --profile cost-routing
 .\scripts\python\Manage-CodexCostRouting.ps1 -Action Stop
 ```
 
-Update the local LiteLLM OSS proxy to the latest stable PyPI release:
+Install or update the local LiteLLM OSS proxy to the currently pinned stable
+PyPI release. As of 2026-06-29 this repository pins `litellm==1.90.0`:
 
 ```powershell
-.\scripts\python\Manage-CodexCostRouting.ps1 -Action Update
+.\scripts\python\Install-CodexLocalLiteLLMAssets.ps1
+.\scripts\python\Manage-CodexCostRouting.ps1 -Action Update -LiteLLMVersion 1.90.0
 .\scripts\python\Manage-CodexCostRouting.ps1 -Action Status
 ```
+
+Use `-LiteLLMVersion latest` only when you intentionally want to move beyond
+the pinned stable version after checking PyPI/release notes.
 
 You can also update while starting the proxy:
 
 ```powershell
-.\scripts\python\Manage-CodexCostRouting.ps1 -Action Start -CodexProvider LiteLLM -UpdateLiteLLM
+.\scripts\python\Manage-CodexCostRouting.ps1 -Action Start -CodexProvider LiteLLM -UpdateLiteLLM -LiteLLMVersion 1.90.0
 ```
 
 The launcher automatically bypasses restrictive PowerShell execution policies

@@ -6,7 +6,8 @@ param(
     [int]$Port = 4000,
     [ValidateSet('Standard', 'LiteLLM', 'HuggingFace')]
     [string]$CodexProvider = 'Standard',
-    [switch]$UpdateLiteLLM
+    [switch]$UpdateLiteLLM,
+    [string]$LiteLLMVersion = '1.90.0'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -121,7 +122,17 @@ function Install-LiteLLM {
         return
     }
 
-    if (-not (Test-Path -LiteralPath $pythonPath)) {
+    $venvHealthy = $false
+    if (Test-Path -LiteralPath $pythonPath) {
+        & $pythonPath -c "print('ok')" 1>$null 2>$null
+        $venvHealthy = ($LASTEXITCODE -eq 0)
+    }
+
+    if (-not $venvHealthy) {
+        if (Test-Path -LiteralPath $venvPath) {
+            Write-Host "Recreation du venv LiteLLM OSS casse dans $venvPath..."
+            Remove-Item -LiteralPath $venvPath -Recurse -Force
+        }
         Write-Host "Installation locale de LiteLLM OSS dans $venvPath..."
         New-Item -ItemType Directory -Path (Split-Path -Parent $venvPath) -Force | Out-Null
         & (Get-PythonPath) -m venv $venvPath
@@ -130,10 +141,17 @@ function Install-LiteLLM {
         }
     }
     elseif ($forceUpdate) {
-        Write-Host 'Mise a jour locale de LiteLLM OSS vers la derniere version stable PyPI...'
+        Write-Host "Mise a jour locale de LiteLLM OSS vers $LiteLLMVersion..."
     }
 
-    & $pythonPath -m pip install --upgrade 'litellm[proxy]'
+    $packageSpec = if ($LiteLLMVersion -eq 'latest') {
+        'litellm[proxy]'
+    }
+    else {
+        "litellm[proxy]==$LiteLLMVersion"
+    }
+
+    & $pythonPath -m pip install --upgrade $packageSpec
     if ($LASTEXITCODE -ne 0) {
         throw 'Echec de installation ou de mise a jour de LiteLLM OSS.'
     }

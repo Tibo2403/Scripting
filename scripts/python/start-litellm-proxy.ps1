@@ -8,6 +8,7 @@ $ErrorActionPreference = 'Stop'
 
 $root = 'C:\Users\user\.codex\litellm-proxy'
 $python = 'C:\Users\user\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe'
+$expectedLiteLLMVersion = '1.90.0'
 $launcher = Join-Path $root 'start_litellm_proxy.py'
 $baseConfig = Join-Path $root 'config.yaml'
 $runtimeConfig = Join-Path $root 'config.runtime.yaml'
@@ -29,6 +30,15 @@ if (-not (Test-Path -LiteralPath $launcher)) {
 }
 if (-not (Test-Path -LiteralPath $baseConfig)) {
   throw "LiteLLM config not found: $baseConfig"
+}
+$versionProbe = "import sys; from pathlib import Path; p=Path(r'$root')/'venv'/'Lib'/'site-packages'; sys.path.insert(0, str(p)); import importlib.metadata as m; print(m.version('litellm'))"
+$installedLiteLLMVersion = & $python -c $versionProbe 2>$null
+if ($LASTEXITCODE -ne 0) {
+  throw "LiteLLM is not installed in $root\venv. Run Install-CodexLocalLiteLLMAssets.ps1 first."
+}
+Write-Output "LiteLLM package version: $installedLiteLLMVersion"
+if ($installedLiteLLMVersion -ne $expectedLiteLLMVersion) {
+  Write-Output "Expected LiteLLM $expectedLiteLLMVersion. Re-run Install-CodexLocalLiteLLMAssets.ps1 or pass -LiteLLMVersion latest intentionally."
 }
 
 $existing = Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort 4000 -State Listen -ErrorAction SilentlyContinue
