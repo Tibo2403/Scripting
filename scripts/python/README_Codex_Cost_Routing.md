@@ -163,6 +163,75 @@ Use `cost-routing` for the normal local proxy path and `cost-routing-hf` only
 when you explicitly want Hugging Face between Codex and the rest of the routing
 setup.
 
+## Optional Risk-Adjusted LiteLLM Router
+
+The stable path uses LiteLLM's native router on `127.0.0.1:4000`. An optional
+front router can be started on `127.0.0.1:4001` when you want experimental
+risk-adjusted dispatching:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File `
+  $env:USERPROFILE\.codex\litellm-proxy\start-litellm-proxy.ps1 `
+  -EnableRiskRouter
+```
+
+The custom router first applies hard limits, then computes a soft risk score on
+the remaining candidates:
+
+```text
+soft_risk_i =
+  wc    * norm(response_cost_i)
++ wttft * norm(ttft_i)
++ wlat  * norm(total_latency_i)
++ wtps  * norm(-tokens_per_second_i)
++ we    * error_rate_i
++ wtok  * token_pressure_i
++ wq    * norm(queue_depth_i)
+
+Pr(i) = softmax(-soft_risk_i / tau)
+```
+
+Hard limits keep unavailable deployments out of traffic before scoring. Gemini
+`429` free-tier quota responses are cooled down for five minutes, `401`/`403`
+auth failures for one hour, and model `404` failures for thirty minutes. Live
+in-flight request counts also act as hard limits so a busy local Qwen worker is
+not overloaded.
+
+The soft score uses EWMA metrics for TTFT, total latency, tokens/second,
+response cost, error rate, token pressure, and queue depth. Streaming requests
+update real Time To First Token and generation throughput; non-streaming
+requests approximate TTFT as total latency because the buffered upstream
+response does not expose the first generated token.
+
+Codex-facing aliases can retry remaining candidates on retryable provider
+failures. Direct probes such as `gemini-flash-direct` remain strict so API-key,
+model-name, and quota problems are visible instead of hidden by fallback.
+
+Useful diagnostics:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File `
+  $env:USERPROFILE\.codex\litellm-proxy\measure-risk-adjusted-dispatch.ps1 `
+  -Iterations 5
+
+powershell -NoProfile -ExecutionPolicy Bypass -File `
+  $env:USERPROFILE\.codex\litellm-proxy\measure-risk-adjusted-streaming.ps1 `
+  -Iterations 3
+
+Invoke-RestMethod http://127.0.0.1:4001/dispatch/metrics
+Invoke-RestMethod http://127.0.0.1:4001/dispatch/state
+Invoke-RestMethod -Method Post http://127.0.0.1:4001/dispatch/reset
+```
+
+Key metrics:
+
+- `ewma_ttft_ms`: streaming Time To First Token.
+- `ewma_total_latency_ms`: full request duration.
+- `ewma_tokens_per_second`: generation speed after TTFT.
+- `ewma_queue_depth` and `in_flight`: current load pressure.
+- `hard_limited_remaining_s` and `hard_limit_reason`: temporary exclusions.
+- `soft_score_weights`: active scoring weights.
+
 ## Routing Policy
 
 Default routing is controlled by `codex-routing-policy.yaml`. Precedence is:
@@ -394,6 +463,12 @@ Prompts and API keys are not logged.
 - `codex_key_session_web.py`: local-only web form for session keys.
 - `Start-CodexKeySessionWeb.ps1`: PowerShell launcher for the local key page.
 - `Test-CodexLiteLLMDispatch.ps1`: local proxy alias and optional call test.
+- `start-litellm-proxy.ps1`: local LiteLLM starter with native strategy
+  selection and optional risk-router startup.
+- `risk_adjusted_router.py`: optional TTFT/tokens-per-second/in-flight-aware
+  risk-adjusted front router.
+- `measure-risk-adjusted-dispatch.ps1`: non-streaming risk-router benchmark.
+- `measure-risk-adjusted-streaming.ps1`: streaming TTFT and throughput probe.
 - `codex-routing-policy.yaml`: editable routing policy and fallback order.
 - `litellm-cost-routing.yaml`: local LiteLLM OSS OpenAI/Gemini model groups,
   context-window fallbacks, cooldowns, and compatibility aliases.
