@@ -19,7 +19,12 @@ applies budgets, and selects one of these LiteLLM aliases:
 
 Gemini and local Qwen are configured through LiteLLM model groups when the proxy is active. Without the proxy, the wrapper keeps the standard Codex path and can still call local Qwen directly through Ollama for selected local tasks.
 
-API keys are never committed or written to a configuration file. `GEMINI_API_KEY` is only needed for Gemini dispatch through LiteLLM. Local Qwen only needs Ollama running with `qwen2.5-coder:3b` installed.
+Provider API keys are never committed or written to a configuration file.
+`GEMINI_API_KEY` is only needed for Gemini dispatch through LiteLLM. Local Qwen
+only needs Ollama running with `qwen2.5-coder:3b` installed. The local proxy
+master key is generated per session and written only to
+`%TEMP%\codex-litellm-proxy.key` so local test scripts can authenticate; it is
+removed when the proxy stops.
 
 ## OpenAI Quota Saver
 
@@ -213,6 +218,19 @@ codex --profile cost-routing
 .\scripts\python\Manage-CodexCostRouting.ps1 -Action Stop
 ```
 
+Update the local LiteLLM OSS proxy to the latest stable PyPI release:
+
+```powershell
+.\scripts\python\Manage-CodexCostRouting.ps1 -Action Update
+.\scripts\python\Manage-CodexCostRouting.ps1 -Action Status
+```
+
+You can also update while starting the proxy:
+
+```powershell
+.\scripts\python\Manage-CodexCostRouting.ps1 -Action Start -CodexProvider LiteLLM -UpdateLiteLLM
+```
+
 The launcher automatically bypasses restrictive PowerShell execution policies
 for this command only. With no arguments, it opens the normal Codex CLI path:
 no LiteLLM proxy, no API-key prompt, no temporary Codex profile.
@@ -220,13 +238,15 @@ no LiteLLM proxy, no API-key prompt, no temporary Codex profile.
 When `-CodexProvider LiteLLM` is selected, the script:
 
 1. installs the official LiteLLM OSS proxy in `C:\tmp\litellm-oss` when needed;
-2. asks only for optional session keys that are not already set;
-3. requires at least `OPENAI_API_KEY`, `GEMINI_API_KEY`, or local Qwen on Ollama;
-4. creates a random local `LITELLM_API_KEY` in memory;
-5. starts the LiteLLM proxy in the background;
-6. enables the optional Codex `cost-routing` profile;
-7. opens Codex with that profile;
-8. stops LiteLLM and restores the previous configuration when Codex closes.
+2. can update the local LiteLLM package with `-Action Update` or `-UpdateLiteLLM`;
+3. asks only for optional session keys that are not already set;
+4. requires at least `OPENAI_API_KEY`, `GEMINI_API_KEY`, or local Qwen on Ollama;
+5. creates a random local `LITELLM_API_KEY` for the proxy session and writes
+   only that local proxy key to `%TEMP%\codex-litellm-proxy.key`;
+6. starts the LiteLLM proxy in the background;
+7. enables the optional Codex `cost-routing` profile;
+8. opens Codex with that profile;
+9. stops LiteLLM and restores the previous configuration when Codex closes.
 
 ### Optional local web key session
 
@@ -262,11 +282,16 @@ Stop and restore the Codex configuration after an interrupted session:
 
 ```powershell
 .\scripts\python\codex-cost-routing.cmd Status
+.\scripts\python\Manage-CodexCostRouting.ps1 -Action Status
 python .\scripts\python\codex_cost_router.py doctor
 ```
 
+`Status` prints the local LiteLLM version from `C:\tmp\litellm-oss` when it is
+installed.
+
 If a browser opened on `http://localhost:4000/health` shows `Unauthorized`,
-that is expected: the local proxy is protected by `LITELLM_API_KEY`.
+that is expected: the local proxy is protected by `LITELLM_API_KEY`. The local
+test script reads the temporary proxy key automatically after `Start`.
 
 Validate the local proxy aliases without making a paid/model call:
 

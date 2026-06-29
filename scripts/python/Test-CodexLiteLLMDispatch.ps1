@@ -1,13 +1,30 @@
 [CmdletBinding()]
 param(
     [string]$BaseUrl = "http://127.0.0.1:4000/v1",
-    [string]$ApiKey = "sk-local-codex",
+    [string]$ApiKey = "",
     [string]$Model = "codex-default",
     [switch]$Call,
     [int]$TimeoutSec = 90
 )
 
 $ErrorActionPreference = "Stop"
+$apiKeyPath = Join-Path $env:TEMP "codex-litellm-proxy.key"
+$apiKeySource = "parameter"
+
+if (-not $ApiKey) {
+    if ($env:LITELLM_API_KEY) {
+        $ApiKey = $env:LITELLM_API_KEY
+        $apiKeySource = "environment"
+    }
+    elseif (Test-Path -LiteralPath $apiKeyPath) {
+        $ApiKey = (Get-Content -LiteralPath $apiKeyPath -Raw).Trim()
+        $apiKeySource = "temp-file"
+    }
+    else {
+        $ApiKey = "sk-local-codex"
+        $apiKeySource = "default"
+    }
+}
 
 $headers = @{
     "Authorization" = "Bearer $ApiKey"
@@ -86,6 +103,7 @@ if ($Call) {
 [pscustomobject]@{
     ok = ($missingAliases.Count -eq 0 -and (-not $Call -or ($callResult -and $callResult.ok)))
     base_url = $BaseUrl
+    api_key_source = $apiKeySource
     aliases_present = @($requiredAliases | Where-Object { $modelIds -contains $_ })
     aliases_missing = $missingAliases
     healthy_count = $health.healthy_count

@@ -1,11 +1,12 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Run', 'Start', 'Status', 'Stop')]
+    [ValidateSet('Run', 'Start', 'Status', 'Stop', 'Update')]
     [string]$Action = 'Run',
     [string]$CodexPath = 'codex',
     [int]$Port = 4000,
     [ValidateSet('Standard', 'LiteLLM', 'HuggingFace')]
-    [string]$CodexProvider = 'Standard'
+    [string]$CodexProvider = 'Standard',
+    [switch]$UpdateLiteLLM
 )
 
 $ErrorActionPreference = 'Stop'
@@ -15,6 +16,7 @@ $pythonPath = Join-Path $venvPath 'Scripts\python.exe'
 $configPath = Join-Path $PSScriptRoot 'litellm-cost-routing.yaml'
 $routerPath = Join-Path $PSScriptRoot 'codex_cost_router.py'
 $pidPath = Join-Path $env:TEMP 'codex-litellm-proxy.pid'
+$apiKeyPath = Join-Path $env:TEMP 'codex-litellm-proxy.key'
 $stdoutPath = Join-Path $env:TEMP 'codex-litellm-proxy.out.log'
 $stderrPath = Join-Path $env:TEMP 'codex-litellm-proxy.err.log'
 
@@ -89,21 +91,56 @@ function Remove-SessionSecrets {
 
 function Remove-ProxyFiles {
     Remove-Item -LiteralPath $pidPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $apiKeyPath -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $stdoutPath -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
 }
 
+function Get-LiteLLMVersion {
+    if (-not (Test-Path -LiteralPath $pythonPath)) {
+        return $null
+    }
+
+    $showOutput = & $pythonPath -m pip show litellm 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        return $null
+    }
+
+    foreach ($line in $showOutput) {
+        if ($line -match '^Version:\s*(.+)$') {
+            return $Matches[1].Trim()
+        }
+    }
+
+    return $null
+}
+
 function Install-LiteLLM {
-    if (Test-Path -LiteralPath $litellmPath) {
+    $forceUpdate = $UpdateLiteLLM -or ($Action -eq 'Update')
+    if ((Test-Path -LiteralPath $litellmPath) -and (-not $forceUpdate)) {
         return
     }
 
-    Write-Host "Installation locale de LiteLLM OSS dans $venvPath..."
-    New-Item -ItemType Directory -Path (Split-Path -Parent $venvPath) -Force | Out-Null
-    & (Get-PythonPath) -m venv $venvPath
-    & $pythonPath -m pip install 'litellm[proxy]'
+    if (-not (Test-Path -LiteralPath $pythonPath)) {
+        Write-Host "Installation locale de LiteLLM OSS dans $venvPath..."
+        New-Item -ItemType Directory -Path (Split-Path -Parent $venvPath) -Force | Out-Null
+        & (Get-PythonPath) -m venv $venvPath
+        if ($LASTEXITCODE -ne 0) {
+            throw 'Echec de creation du venv LiteLLM OSS.'
+        }
+    }
+    elseif ($forceUpdate) {
+        Write-Host 'Mise a jour locale de LiteLLM OSS vers la derniere version stable PyPI...'
+    }
+
+    & $pythonPath -m pip install --upgrade 'litellm[proxy]'
     if ($LASTEXITCODE -ne 0) {
-        throw 'Echec de installation de LiteLLM OSS.'
+        throw 'Echec de installation ou de mise a jour de LiteLLM OSS.'
+    }
+
+    $version = Get-LiteLLMVersion
+    if ($version) {
+        Write-Host "LiteLLM OSS version : $version"
     }
 }
 
@@ -143,6 +180,7 @@ function Set-SessionSecrets {
     if (-not $env:LITELLM_API_KEY) {
         $env:LITELLM_API_KEY = 'sk-local-' + [Guid]::NewGuid().ToString('N')
     }
+    Set-Content -LiteralPath $apiKeyPath -Value $env:LITELLM_API_KEY -Encoding ascii
     $env:PYTHONUTF8 = '1'
 }
 
@@ -187,8 +225,8 @@ function Start-Router {
     }
 
     Install-LiteLLM
-    Set-SessionSecrets
     Remove-ProxyFiles
+    Set-SessionSecrets
 
     Write-Host "Demarrage de LiteLLM OSS sur http://localhost:$Port..."
     $proxyProcess = Start-Process `
@@ -234,6 +272,13 @@ function Show-Status {
     }
     else {
         Write-Host 'LiteLLM OSS : arrete'
+    }
+    $litellmVersion = Get-LiteLLMVersion
+    if ($litellmVersion) {
+        Write-Host "LiteLLM version : $litellmVersion"
+    }
+    else {
+        Write-Host 'LiteLLM version : non installe'
     }
     & (Get-PythonPath) $routerPath status
 }
@@ -292,6 +337,10 @@ switch ($Action) {
         }
     }
     'Status' {
+        Show-Status
+    }
+    'Update' {
+        Install-LiteLLM
         Show-Status
     }
     'Stop' {
