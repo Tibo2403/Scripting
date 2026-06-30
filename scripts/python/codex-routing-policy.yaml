@@ -19,3 +19,17 @@ fallback_order:
   - litellm
   - standard
   - huggingface
+
+adaptive_router:
+  enabled: false
+  shadow_mode: true
+  min_confidence_delta: 0.15
+  overload_penalty: 0.35
+  cold_start_penalty: 0.5
+  performance_weight: 0.35
+  min_performance_observations: 2
+  cost_guard_enabled: true
+  max_cost_multiplier: 2.0
+  critical_risk_threshold: 0.65
+  decay: 0.65
+  max_history: 200
