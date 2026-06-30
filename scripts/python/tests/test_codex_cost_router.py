@@ -328,6 +328,47 @@ class CodexCostRouterTests(unittest.TestCase):
         self.assertEqual(decision["effective_order"][0], "litellm")
         self.assertGreater(decision["cost_multiplier"], 5.0)
 
+    def test_run_router_logs_active_provider_after_adaptive_switch(self) -> None:
+        policy = {
+            **ROUTER.DEFAULT_POLICY,
+            "adaptive_router": {"enabled": True, "shadow_mode": False, "min_confidence_delta": 0.05},
+        }
+        history = [
+            {"codex_provider": "litellm", "ttft_ms": 9000, "latency_ms": 60000, "success": False},
+            {"codex_provider": "litellm", "error_rate": 1.0, "returncode": 1},
+            {"codex_provider": "standard", "ttft_ms": 500, "latency_ms": 3000, "success": True},
+        ]
+        args = ROUTER.argparse.Namespace(
+            prompt=["Refactor this Python API"],
+            max_input_tokens=ROUTER.DEFAULT_MAX_INPUT_TOKENS,
+            policy=Path("unused-policy.yaml"),
+            codex_provider="litellm",
+            provider=None,
+            force_model=None,
+            max_output_tokens=ROUTER.DEFAULT_MAX_OUTPUT_TOKENS,
+            dry_run=True,
+            codex_arg=[],
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            log_file = home / "logs" / "cost_router.jsonl"
+            state_file = home / "logs" / "cost_router_state.json"
+            with (
+                patch.object(ROUTER, "LOG_DIR", home / "logs"),
+                patch.object(ROUTER, "LOG_FILE", log_file),
+                patch.object(ROUTER, "STATE_FILE", state_file),
+                patch.object(ROUTER, "load_policy", return_value=policy),
+                patch.object(ROUTER, "read_history", return_value=history),
+                patch.object(ROUTER, "proxy_available", return_value=False),
+                patch.object(ROUTER, "qwen_available", return_value=False),
+            ):
+                self.assertEqual(ROUTER.run_router(args), 0)
+            record = ROUTER.json.loads(log_file.read_text(encoding="utf-8").splitlines()[0])
+        self.assertTrue(record["adaptive_router"]["applied"])
+        self.assertEqual(record["requested_codex_provider"], "litellm")
+        self.assertEqual(record["codex_provider"], "standard")
+        self.assertEqual(record["codex_profile"], "standard")
+
     def test_build_optimized_prompt_respects_budget(self) -> None:
         context = "<div>" + ("Architecture production Odoo migration security. " * 1000) + "</div>"
         optimized = ROUTER.build_optimized_prompt(context, 120)

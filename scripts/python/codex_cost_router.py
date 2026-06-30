@@ -1145,8 +1145,9 @@ def run_router(args: argparse.Namespace) -> int:
     fallback_order = fallback_order_from_policy(selected_codex_provider, policy)
     adaptive_decision = adaptive_router_decision(fallback_order, policy)
     fallback_order = list(adaptive_decision["effective_order"])
-    selected_codex_profile = codex_profile(selected_codex_provider)
-    selected_codex_model = codex_model(model, selected_codex_provider)
+    active_codex_provider = fallback_order[0] if fallback_order else selected_codex_provider
+    selected_codex_profile = codex_profile(active_codex_provider)
+    selected_codex_model = codex_model(model, active_codex_provider)
     original_tokens = estimate_tokens(prompt)
     input_tokens = estimate_tokens(optimized)
     output_tokens = args.max_output_tokens
@@ -1161,7 +1162,8 @@ def run_router(args: argparse.Namespace) -> int:
         "model": model,
         "provider": effective_provider,
         "provider_reason": provider_reason,
-        "codex_provider": selected_codex_provider,
+        "codex_provider": active_codex_provider,
+        "requested_codex_provider": selected_codex_provider,
         "codex_provider_reason": codex_provider_reason,
         "codex_profile": selected_codex_profile,
         "codex_model": selected_codex_model,

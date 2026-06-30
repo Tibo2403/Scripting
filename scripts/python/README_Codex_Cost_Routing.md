@@ -232,6 +232,87 @@ Key metrics:
 - `hard_limited_remaining_s` and `hard_limit_reason`: temporary exclusions.
 - `soft_score_weights`: active scoring weights.
 
+## Optional Markov Adaptive Router
+
+The Python wrapper also includes an experimental lightweight Markov adaptive
+router. It is disabled by default and starts in shadow mode when enabled, so
+the default routing behavior is not changed until `shadow_mode: false` is set.
+
+The Markov router scores each Codex-facing fallback provider from recent
+history. It estimates provider state as `healthy`, `warming`, `overloaded`,
+`failing`, or `cooldown` using TTFT, total latency, token pressure, estimated
+cost, quality score, error rate, and command failures. It only changes the
+fallback order when the expected improvement is above `min_confidence_delta`.
+
+Enable shadow-mode observations in `codex-routing-policy.yaml`:
+
+```yaml
+adaptive_router:
+  enabled: true
+  shadow_mode: true
+  min_confidence_delta: 0.15
+  cost_guard_enabled: true
+  max_cost_multiplier: 2.0
+  critical_risk_threshold: 0.65
+```
+
+After enough shadow-mode data, live switching can be tested by setting:
+
+```yaml
+adaptive_router:
+  enabled: true
+  shadow_mode: false
+```
+
+The cost guard blocks a non-critical switch to a provider that is more than
+`max_cost_multiplier` times more expensive than the current provider. It still
+allows the switch when the baseline provider risk is critical, because avoiding
+an imminent failure can be more important than the marginal request cost.
+
+Each run logs the adaptive decision under `adaptive_router` in:
+
+```text
+%USERPROFILE%\.codex\logs\cost_router.jsonl
+```
+
+Important fields:
+
+- `baseline_provider`: provider selected by the normal policy.
+- `suggested_provider`: provider suggested by the Markov model.
+- `would_switch`: whether the model found enough expected gain.
+- `applied`: whether live switching actually changed the fallback order.
+- `cost_guard_blocked`: whether a costly non-critical switch was blocked.
+- `health`: per-provider state, risk, performance, and cost observations.
+
+Controlled synthetic benchmark results from the local test harness:
+
+```text
+Scenarios: 8
+Switches applied: 4
+Latency gain: +35.25%
+TTFT gain: +32.11%
+Cost reduction: +6.29%
+Error-rate gain: +39.39%
+Quality delta: +3.12 points
+```
+
+For lower-is-better metrics, the benchmark uses:
+
+```text
+gain_pct = (baseline_value - markov_value) / baseline_value * 100
+```
+
+For quality, it uses:
+
+```text
+quality_delta = markov_quality - baseline_quality
+```
+
+These numbers are controlled synthetic results, not production claims. The
+recommended production path is shadow mode first, then a small canary, then a
+progressive rollout if p50 TTFT, p95 latency, error rate, cost per 1k requests,
+and quality proxy stay stable or improve.
+
 ## Routing Policy
 
 Default routing is controlled by `codex-routing-policy.yaml`. Precedence is:
