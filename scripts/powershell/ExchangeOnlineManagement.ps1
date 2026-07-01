@@ -51,14 +51,14 @@ param(
 # Ensure module is available
 if (-not (Get-Module -ListAvailable -Name ExchangeOnlineManagement)) {
     Write-Error 'Exchange Online module is not installed. Install-Module ExchangeOnlineManagement'
-    return
+    exit 1
 }
 
 try {
     Import-Module ExchangeOnlineManagement -ErrorAction Stop
 } catch {
     Write-Error "Failed to import Exchange Online module. $_"
-    return
+    exit 1
 }
 
 switch ($Action.ToLower()) {
@@ -71,7 +71,11 @@ switch ($Action.ToLower()) {
         }
     }
     'list' {
-        Get-Mailbox
+        try {
+            Get-Mailbox -ErrorAction Stop
+        } catch {
+            Write-Error "Failed to list mailboxes. $_"
+        }
     }
     'create' {
         if (-not $UserPrincipalName) {
@@ -154,6 +158,10 @@ switch ($Action.ToLower()) {
         }
     }
     'disconnect' {
-        Disconnect-ExchangeOnline -Confirm:$false
+        try {
+            Disconnect-ExchangeOnline -Confirm:$false -ErrorAction Stop
+        } catch {
+            Write-Error "Failed to disconnect. $_"
+        }
     }
 }

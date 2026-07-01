@@ -94,7 +94,9 @@ done
 
 OUT="$(mktemp)"
 ENC_OUT="$OUT.gpg"
-trap 'rm -f "$OUT" "$ENC_OUT"' EXIT
+NETRC_FILE="$(mktemp)"
+trap 'rm -f "$OUT" "$ENC_OUT" "$NETRC_FILE"' EXIT
+chmod 600 "$NETRC_FILE"
 
 {
     echo "[*] $(date '+%Y-%m-%d %H:%M:%S')"
@@ -105,16 +107,19 @@ trap 'rm -f "$OUT" "$ENC_OUT"' EXIT
     df -h
 } > "$OUT"
 
-if ! gpg --batch --yes --passphrase "$GPG_PASSPHRASE" -c "$OUT"; then
+# Pass passphrase via file descriptor to avoid exposure in the process list.
+if ! gpg --batch --yes --passphrase-fd 3 -c "$OUT" 3<<<"$GPG_PASSPHRASE"; then
     echo "gpg encryption failed." >&2
     exit 1
 fi
 
-if ! curl --ftp-ssl --ssl-reqd -sS -T "$ENC_OUT" --user "$FTP_USER:$FTP_PASS" "ftp://$FTP_HOST/$FTP_PATH" --ftp-create-dirs >/dev/null; then
+# Use a netrc file so FTP credentials are not visible in the process list.
+printf 'machine %s login %s password %s\n' "$FTP_HOST" "$FTP_USER" "$FTP_PASS" > "$NETRC_FILE"
+if ! curl --ftp-ssl --ssl-reqd -sS -T "$ENC_OUT" --netrc-file "$NETRC_FILE" "ftp://$FTP_HOST/$FTP_PATH" --ftp-create-dirs >/dev/null; then
     echo "FTPS upload failed." >&2
     exit 1
 fi
 
-shred -u "$OUT" "$ENC_OUT"
+shred -u "$OUT" "$ENC_OUT" "$NETRC_FILE"
 trap - EXIT
 echo "Encrypted metadata uploaded to ftps://$FTP_HOST/$FTP_PATH"

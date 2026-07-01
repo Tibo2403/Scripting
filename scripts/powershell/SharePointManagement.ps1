@@ -52,12 +52,14 @@ function Connect-SP {
     )
 
     if ($Mode -eq 'Online') {
+        if (-not $SiteUrl) { throw 'SiteUrl is required for Online mode.' }
         Write-Verbose 'Connecting to SharePoint Online...'
-        Connect-SPOService -Url "https://$((New-Object System.Uri($SiteUrl)).Host)" -Credential $Credential
+        $adminUrl = "https://$((New-Object System.Uri($SiteUrl)).Host)"
+        Connect-SPOService -Url $adminUrl -Credential $Credential -ErrorAction Stop
     } else {
         Write-Verbose 'Loading SharePoint On-Premise snap-in...'
         Add-PSSnapin Microsoft.SharePoint.PowerShell -ErrorAction SilentlyContinue
-        $script:SPSite = Get-SPSite $SiteUrl
+        $script:SPSite = Get-SPSite $SiteUrl -ErrorAction Stop
     }
 }
 
@@ -92,7 +94,7 @@ function Add-User {
     if ($Mode -eq 'Online') {
         Set-SPOUser -Site $SiteUrl -LoginName $UserLogin -IsSiteCollectionAdmin $true
     } else {
-        $web  = $SPSite.RootWeb
+        $web  = $script:SPSite.RootWeb
         $user = $web.EnsureUser($UserLogin)
         $user.Update()
     }
@@ -102,6 +104,13 @@ Connect-SP -Mode $Mode -SiteUrl $SiteUrl -Credential $Credential
 
 switch ($Action) {
     'ListSites'  { List-Sites }
-    'CreateSite' { Create-Site -SiteUrl $SiteUrl -Template $Template }
-    'AddUser'    { Add-User -UserLogin $UserLogin -DisplayName $DisplayName -Email $Email }
+    'CreateSite' {
+        if (-not $SiteUrl) { throw 'SiteUrl is required for CreateSite.' }
+        if (-not $Template) { throw 'Template is required for CreateSite.' }
+        Create-Site -SiteUrl $SiteUrl -Template $Template
+    }
+    'AddUser'    {
+        if (-not $UserLogin) { throw 'UserLogin is required for AddUser.' }
+        Add-User -UserLogin $UserLogin -DisplayName $DisplayName -Email $Email
+    }
 }
