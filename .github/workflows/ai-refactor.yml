@@ -22,10 +22,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
       - name: Prepare tools
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y jq
+          sudo apt-get install -y jq shellcheck
 
       - id: generate
         name: Ask OpenAI for a small safe patch
@@ -94,6 +99,27 @@ jobs:
         run: |
           set -euo pipefail
           git apply --whitespace=fix ai.patch
+
+      - name: Validate generated patch
+        if: steps.generate.outputs.has_patch == 'true'
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/python/codex_cost_router.py scripts/python/mcp_server.py
+          python -m unittest discover -s scripts/python/tests -v
+
+      - name: Validate PowerShell syntax
+        if: steps.generate.outputs.has_patch == 'true'
+        shell: pwsh
+        run: ./scripts/powershell/Test-ScriptSyntax.ps1 -Path ./scripts
+
+      - name: Validate shell scripts
+        if: steps.generate.outputs.has_patch == 'true'
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' file; do
+            bash -n "$file"
+          done < <(find scripts -name "*.sh" -print0)
+          find scripts -name "*.sh" -print0 | xargs -0 shellcheck --severity=error
 
       - name: Create pull request
         if: steps.generate.outputs.has_patch == 'true'
