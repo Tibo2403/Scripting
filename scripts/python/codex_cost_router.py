@@ -59,6 +59,8 @@ PROVIDERS = (
 CODEX_PROVIDERS = ("auto", "standard", "litellm", "huggingface")
 LOCAL_SMALL_MODELS = {SMALL_LOCAL_MODEL, PHI_LOCAL_MODEL}
 OLLAMA_MODELS = {SMALL_LOCAL_MODEL, PHI_LOCAL_MODEL, QWEN_LOCAL_MODEL}
+LITELLM_REQUIRED_PROVIDERS = {"claude", "gemini", "no-openai"}
+LITELLM_REQUIRED_MODELS = {CLAUDE_COMPLEX_MODEL, NO_OPENAI_MODEL}
 MODELS = (
     LIGHT_MODEL,
     DEFAULT_MODEL,
@@ -108,7 +110,7 @@ DEFAULT_POLICY = {
         "medium": "auto",
         "complex": "claude",
     },
-    "fallback_order": ["litellm", "standard", "huggingface"],
+    "fallback_order": ["standard", "litellm", "huggingface"],
     "adaptive_router": DEFAULT_ADAPTIVE_ROUTER,
 }
 MARKOV_STATES = ("healthy", "warming", "overloaded", "failing", "cooldown")
@@ -601,6 +603,69 @@ def fallback_order_from_policy(
         if item not in result:
             result.append(item)
     return result or ["standard"]
+
+
+def request_needs_litellm(provider: str, model: str) -> bool:
+    """Return whether a routed request needs the LiteLLM proxy path."""
+    return provider in LITELLM_REQUIRED_PROVIDERS or model in LITELLM_REQUIRED_MODELS
+
+
+def prefer_provider(order: list[str], preferred: str) -> list[str]:
+    """Move a provider to the front while preserving the rest of the order."""
+    normalized = [normalize_codex_provider(item) for item in order if item]
+    result: list[str] = []
+    for item in [preferred, *normalized, "standard"]:
+        if item == "auto":
+            continue
+        if item not in result:
+            result.append(item)
+    return result
+
+
+def traffic_preserving_fallback_order(
+    selected_codex_provider: str,
+    effective_provider: str,
+    model: str,
+    policy: dict[str, Any],
+    preserve_direct_traffic: bool = True,
+) -> list[str]:
+    """Keep normal Codex traffic direct while preserving explicit proxy routes."""
+    order = fallback_order_from_policy(selected_codex_provider, policy)
+    if selected_codex_provider == "huggingface":
+        return order
+    if request_needs_litellm(effective_provider, model):
+        return prefer_provider(order, "litellm")
+    if not preserve_direct_traffic:
+        return order
+    return prefer_provider(order, "standard")
+
+
+def preserve_direct_traffic_order(
+    order: list[str],
+    selected_codex_provider: str,
+    effective_provider: str,
+    model: str,
+    preserve_direct_traffic: bool = True,
+) -> list[str]:
+    """Prevent additive proxy routes from becoming the default traffic path."""
+    if selected_codex_provider == "huggingface":
+        return order
+    if request_needs_litellm(effective_provider, model):
+        return prefer_provider(order, "litellm")
+    if not preserve_direct_traffic:
+        return order
+    return prefer_provider(order, "standard")
+
+
+def should_preserve_direct_traffic(requested_provider: str | None, policy: dict[str, Any]) -> bool:
+    """Return whether proxy expansion should keep the direct Codex path first."""
+    if requested_provider:
+        return normalize_codex_provider(requested_provider) == "auto"
+    if os.environ.get("CODEX_ROUTER_CODEX_PROVIDER"):
+        return default_codex_provider() == "auto"
+    if bool(policy.get("open_models_only")):
+        return False
+    return normalize_codex_provider(policy.get("default_codex_provider")) == "auto"
 
 
 def truthy(value: Any) -> bool:
@@ -1243,9 +1308,22 @@ def run_router(args: argparse.Namespace) -> int:
         else selected_provider
     )
     model, reason = route_model(prompt, args.force_model, effective_provider)
-    fallback_order = fallback_order_from_policy(selected_codex_provider, policy)
+    preserve_direct_traffic = should_preserve_direct_traffic(args.codex_provider, policy)
+    fallback_order = traffic_preserving_fallback_order(
+        selected_codex_provider,
+        effective_provider,
+        model,
+        policy,
+        preserve_direct_traffic,
+    )
     adaptive_decision = adaptive_router_decision(fallback_order, policy)
-    fallback_order = list(adaptive_decision["effective_order"])
+    fallback_order = preserve_direct_traffic_order(
+        list(adaptive_decision["effective_order"]),
+        selected_codex_provider,
+        effective_provider,
+        model,
+        preserve_direct_traffic,
+    )
     active_codex_provider = fallback_order[0] if fallback_order else selected_codex_provider
     selected_codex_profile = codex_profile(active_codex_provider)
     selected_codex_model = codex_model(model, active_codex_provider)

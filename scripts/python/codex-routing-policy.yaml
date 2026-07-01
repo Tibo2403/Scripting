@@ -17,8 +17,8 @@ task_provider_rules:
   complex: claude
 
 fallback_order:
-  - litellm
   - standard
+  - litellm
   - huggingface
 
 adaptive_router:

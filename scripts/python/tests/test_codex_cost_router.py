@@ -179,6 +179,79 @@ class CodexCostRouterTests(unittest.TestCase):
             ["litellm", "huggingface", "standard"],
         )
 
+    def test_proxy_expansion_keeps_standard_first_for_normal_traffic(self) -> None:
+        policy = {
+            **ROUTER.DEFAULT_POLICY,
+            "fallback_order": ["litellm", "standard", "huggingface"],
+        }
+        order = ROUTER.traffic_preserving_fallback_order(
+            "litellm",
+            "auto",
+            ROUTER.DEFAULT_MODEL,
+            policy,
+        )
+        self.assertEqual(order, ["standard", "litellm", "huggingface"])
+
+    def test_proxy_routes_stay_first_for_claude_and_gemini_requests(self) -> None:
+        policy = {
+            **ROUTER.DEFAULT_POLICY,
+            "fallback_order": ["standard", "litellm", "huggingface"],
+        }
+        self.assertEqual(
+            ROUTER.traffic_preserving_fallback_order(
+                "standard",
+                "claude",
+                ROUTER.CLAUDE_COMPLEX_MODEL,
+                policy,
+            )[0],
+            "litellm",
+        )
+        self.assertEqual(
+            ROUTER.traffic_preserving_fallback_order(
+                "standard",
+                "gemini",
+                ROUTER.LONG_MODEL,
+                policy,
+            )[0],
+            "litellm",
+        )
+
+    def test_run_router_dry_run_keeps_direct_codex_when_proxy_is_available(self) -> None:
+        policy = {
+            **ROUTER.DEFAULT_POLICY,
+            "task_provider_rules": {"medium": "auto"},
+            "fallback_order": ["litellm", "standard", "huggingface"],
+        }
+        args = ROUTER.argparse.Namespace(
+            prompt=["Refactor this Python API"],
+            max_input_tokens=ROUTER.DEFAULT_MAX_INPUT_TOKENS,
+            policy=Path("unused-policy.yaml"),
+            codex_provider=None,
+            provider=None,
+            force_model=None,
+            max_output_tokens=ROUTER.DEFAULT_MAX_OUTPUT_TOKENS,
+            dry_run=True,
+            codex_arg=[],
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            log_file = home / "logs" / "cost_router.jsonl"
+            state_file = home / "logs" / "cost_router_state.json"
+            with (
+                patch.object(ROUTER, "LOG_DIR", home / "logs"),
+                patch.object(ROUTER, "LOG_FILE", log_file),
+                patch.object(ROUTER, "STATE_FILE", state_file),
+                patch.object(ROUTER, "load_policy", return_value=policy),
+                patch.object(ROUTER, "proxy_available", return_value=True),
+                patch.object(ROUTER, "qwen_available", return_value=False),
+                patch.object(ROUTER, "phi_available", return_value=False),
+            ):
+                self.assertEqual(ROUTER.run_router(args), 0)
+            record = ROUTER.json.loads(log_file.read_text(encoding="utf-8").splitlines()[0])
+        self.assertEqual(record["requested_codex_provider"], "litellm")
+        self.assertEqual(record["codex_provider"], "standard")
+        self.assertEqual(record["fallback_order"][0], "standard")
+
     def test_policy_open_models_only_prefers_hugging_face(self) -> None:
         policy = {**ROUTER.DEFAULT_POLICY, "open_models_only": True}
         self.assertEqual(ROUTER.provider_from_policy("Security review", None, policy)[0], "huggingface")
