@@ -107,8 +107,8 @@ chmod 600 "$NETRC_FILE"
     df -h
 } > "$OUT"
 
-# Pass passphrase via file descriptor to avoid exposure in the process list.
-if ! gpg --batch --yes --passphrase-fd 3 -c "$OUT" 3<<<"$GPG_PASSPHRASE"; then
+# Pass passphrase via pipe to avoid exposure in the process list.
+if ! printf '%s' "$GPG_PASSPHRASE" | gpg --batch --yes --passphrase-fd 0 -c "$OUT"; then
     echo "gpg encryption failed." >&2
     exit 1
 fi

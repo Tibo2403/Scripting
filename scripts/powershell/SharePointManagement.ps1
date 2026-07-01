@@ -57,6 +57,7 @@ function Connect-SP {
         $adminUrl = "https://$((New-Object System.Uri($SiteUrl)).Host)"
         Connect-SPOService -Url $adminUrl -Credential $Credential -ErrorAction Stop
     } else {
+        if (-not $SiteUrl) { throw 'SiteUrl is required for OnPrem mode.' }
         Write-Verbose 'Loading SharePoint On-Premise snap-in...'
         Add-PSSnapin Microsoft.SharePoint.PowerShell -ErrorAction SilentlyContinue
         $script:SPSite = Get-SPSite $SiteUrl -ErrorAction Stop
