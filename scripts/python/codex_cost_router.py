@@ -45,8 +45,20 @@ DEFAULT_MAX_INPUT_TOKENS = 12_000
 DEFAULT_MAX_OUTPUT_TOKENS = 2_000
 SMALL_TASK_MAX_OUTPUT_TOKENS = 64
 SMALL_TASK_TARGET_TOKENS_PER_SECOND = 5.0
-PROVIDERS = ("auto", "openai", "gemini", "huggingface", "local-small", "phi", "qwen", "claude", "no-openai")
+PROVIDERS = (
+    "auto",
+    "openai",
+    "gemini",
+    "huggingface",
+    "local-small",
+    "phi",
+    "qwen",
+    "claude",
+    "no-openai",
+)
 CODEX_PROVIDERS = ("auto", "standard", "litellm", "huggingface")
+LOCAL_SMALL_MODELS = {SMALL_LOCAL_MODEL, PHI_LOCAL_MODEL}
+OLLAMA_MODELS = {SMALL_LOCAL_MODEL, PHI_LOCAL_MODEL, QWEN_LOCAL_MODEL}
 MODELS = (
     LIGHT_MODEL,
     DEFAULT_MODEL,
@@ -461,6 +473,29 @@ def claude_available() -> bool:
     return bool(os.environ.get("ANTHROPIC_API_KEY"))
 
 
+def select_local_small_model(reason: str) -> tuple[str, str]:
+    """Choose the fastest local small-task model with a remote fallback."""
+    if phi_available():
+        return SMALL_LOCAL_MODEL, (
+            f"local small-task provider requested; capped at {SMALL_TASK_MAX_OUTPUT_TOKENS} "
+            f"output tokens to target >= {SMALL_TASK_TARGET_TOKENS_PER_SECOND:.1f} tok/s; {reason}"
+        )
+    if qwen_available():
+        return QWEN_LOCAL_MODEL, f"local small-task provider requested; Phi unavailable so Qwen selected; {reason}"
+    return LIGHT_MODEL, "local small-task provider requested but Ollama is not listening; using light remote tier"
+
+
+def select_claude_model(reason: str) -> tuple[str, str]:
+    """Choose Claude through LiteLLM when ready, otherwise keep Codex deep available."""
+    has_key = claude_available()
+    has_proxy = proxy_available()
+    if has_key and has_proxy:
+        return CLAUDE_COMPLEX_MODEL, f"claude provider requested through active LiteLLM proxy; {reason}"
+    if has_key:
+        return DEEP_MODEL, "claude requested but LiteLLM proxy is inactive; using default deep Codex tier"
+    return DEEP_MODEL, "claude requested but ANTHROPIC_API_KEY is missing; using default deep Codex tier"
+
+
 def default_provider() -> str:
     """Read the provider preference from the environment with a safe fallback."""
     provider = os.environ.get("CODEX_ROUTER_PROVIDER", "auto").casefold()
@@ -848,7 +883,7 @@ def codex_model(model: str, provider: str) -> str:
     """Map router aliases to the model name expected by the selected profile."""
     if provider == "huggingface":
         return HF_DIRECT_MODEL
-    if provider == "standard" and model in {SMALL_LOCAL_MODEL, PHI_LOCAL_MODEL, QWEN_LOCAL_MODEL}:
+    if provider == "standard" and model in OLLAMA_MODELS:
         return model
     if provider == "standard":
         return "codex default"
@@ -958,14 +993,7 @@ def route_model(
         return DEFAULT_MODEL, "huggingface requested but HF_TOKEN is missing; using default OpenAI/Gemini tier"
 
     if provider in {"local-small", "phi"}:
-        if phi_available():
-            return SMALL_LOCAL_MODEL, (
-                f"local small-task provider requested; capped at {SMALL_TASK_MAX_OUTPUT_TOKENS} "
-                f"output tokens to target >= {SMALL_TASK_TARGET_TOKENS_PER_SECOND:.1f} tok/s; {reason}"
-            )
-        if qwen_available():
-            return QWEN_LOCAL_MODEL, f"local small-task provider requested; Phi unavailable so Qwen selected; {reason}"
-        return LIGHT_MODEL, "local small-task provider requested but Ollama is not listening; using light remote tier"
+        return select_local_small_model(reason)
 
     if provider == "qwen":
         if qwen_available():
@@ -973,11 +1001,7 @@ def route_model(
         return DEFAULT_MODEL, "qwen requested but Ollama is not listening on 127.0.0.1:11434; using default OpenAI/Gemini tier"
 
     if provider == "claude":
-        if claude_available() and proxy_available():
-            return CLAUDE_COMPLEX_MODEL, f"claude provider requested through active LiteLLM proxy; {reason}"
-        if claude_available():
-            return DEEP_MODEL, "claude requested but LiteLLM proxy is inactive; using default deep Codex tier"
-        return DEEP_MODEL, "claude requested but ANTHROPIC_API_KEY is missing; using default deep Codex tier"
+        return select_claude_model(reason)
 
     if provider == "no-openai":
         if qwen_available():
@@ -1229,7 +1253,7 @@ def run_router(args: argparse.Namespace) -> int:
     input_tokens = estimate_tokens(optimized)
     output_tokens = (
         min(args.max_output_tokens, SMALL_TASK_MAX_OUTPUT_TOKENS)
-        if model in {SMALL_LOCAL_MODEL, PHI_LOCAL_MODEL}
+        if model in LOCAL_SMALL_MODELS
         else args.max_output_tokens
     )
     compression_ratio = round(input_tokens / max(1, original_tokens), 4)
@@ -1301,7 +1325,7 @@ def run_router(args: argparse.Namespace) -> int:
     print(f"Proxy active      : {'yes' if proxy_available() else 'no'}")
     print(f"Phi small local   : {'yes' if phi_available() else 'no'}")
     print(f"Qwen local        : {'yes' if qwen_available() else 'no'}")
-    if model in {SMALL_LOCAL_MODEL, PHI_LOCAL_MODEL}:
+    if model in LOCAL_SMALL_MODELS:
         print(
             "Small-task target : "
             f">= {SMALL_TASK_TARGET_TOKENS_PER_SECOND:.1f} tok/s with <= {SMALL_TASK_MAX_OUTPUT_TOKENS} output tokens"
@@ -1333,7 +1357,7 @@ def run_router(args: argparse.Namespace) -> int:
             )
             last_returncode = 4
             continue
-        if attempt_provider == "standard" and model in {SMALL_LOCAL_MODEL, PHI_LOCAL_MODEL} and phi_available():
+        if attempt_provider == "standard" and model in LOCAL_SMALL_MODELS and phi_available():
             print("Executing through local Ollama Phi-4 Mini (no LiteLLM proxy required)")
             return run_phi_local(optimized, output_tokens)
         if attempt_provider == "standard" and model == QWEN_LOCAL_MODEL and qwen_available():
