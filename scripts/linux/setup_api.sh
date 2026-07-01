@@ -109,7 +109,9 @@ def generate():
     return jsonify({"response": result.stdout.strip()})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    # Listen on localhost only; bind to 0.0.0.0 only behind a reverse proxy
+    # with proper authentication in place.
+    app.run(host='127.0.0.1', port=5000)
 APP
 
 echo "✅ API créée avec succès : $APP_PATH"
