@@ -33,6 +33,9 @@ LONG_MODEL = "codex-long"
 DEEP_MODEL = "codex-deep"
 LEGACY_CHEAP_MODEL = "codex-cheap"
 LEGACY_STRONG_MODEL = "codex-strong"
+SMALL_LOCAL_MODEL = "codex-small-local"
+PHI_LOCAL_MODEL = "codex-phi-local"
+CLAUDE_COMPLEX_MODEL = "codex-claude-complex"
 HF_FAST_MODEL = "codex-hf-fast"
 HF_CHEAP_MODEL = "codex-hf-cheap"
 HF_DIRECT_MODEL = "openai/gpt-oss-120b:fastest"
@@ -40,7 +43,9 @@ QWEN_LOCAL_MODEL = "codex-qwen-local"
 NO_OPENAI_MODEL = "codex-no-openai"
 DEFAULT_MAX_INPUT_TOKENS = 12_000
 DEFAULT_MAX_OUTPUT_TOKENS = 2_000
-PROVIDERS = ("auto", "openai", "gemini", "huggingface", "qwen", "no-openai")
+SMALL_TASK_MAX_OUTPUT_TOKENS = 64
+SMALL_TASK_TARGET_TOKENS_PER_SECOND = 5.0
+PROVIDERS = ("auto", "openai", "gemini", "huggingface", "local-small", "phi", "qwen", "claude", "no-openai")
 CODEX_PROVIDERS = ("auto", "standard", "litellm", "huggingface")
 MODELS = (
     LIGHT_MODEL,
@@ -51,6 +56,9 @@ MODELS = (
     LEGACY_STRONG_MODEL,
     HF_FAST_MODEL,
     HF_CHEAP_MODEL,
+    SMALL_LOCAL_MODEL,
+    PHI_LOCAL_MODEL,
+    CLAUDE_COMPLEX_MODEL,
     QWEN_LOCAL_MODEL,
     NO_OPENAI_MODEL,
 )
@@ -59,6 +67,7 @@ LITELLM_PORT = 4000
 OLLAMA_HOST = "127.0.0.1"
 OLLAMA_PORT = 11434
 OLLAMA_CHAT_COMPLETIONS_URL = f"http://{OLLAMA_HOST}:{OLLAMA_PORT}/v1/chat/completions"
+PHI_OLLAMA_MODEL = "phi4-mini"
 QWEN_OLLAMA_MODEL = "qwen2.5-coder:3b"
 WINDOWS_LITELLM_FALLBACK = Path(r"C:\tmp\litellm-oss\Scripts\litellm.exe")
 POLICY_FILE = Path(__file__).with_name("codex-routing-policy.yaml")
@@ -83,9 +92,9 @@ DEFAULT_POLICY = {
     "avoid_openai": False,
     "max_cost_usd": 0.0,
     "task_provider_rules": {
-        "simple": "auto",
+        "simple": "local-small",
         "medium": "auto",
-        "complex": "openai",
+        "complex": "claude",
     },
     "fallback_order": ["litellm", "standard", "huggingface"],
     "adaptive_router": DEFAULT_ADAPTIVE_ROUTER,
@@ -112,7 +121,10 @@ ESTIMATED_RATES = {
     HF_CHEAP_MODEL: {"input": 0.10, "output": 0.30},
     HF_FAST_MODEL: {"input": 0.25, "output": 0.75},
     QWEN_LOCAL_MODEL: {"input": 0.0, "output": 0.0},
+    SMALL_LOCAL_MODEL: {"input": 0.0, "output": 0.0},
+    PHI_LOCAL_MODEL: {"input": 0.0, "output": 0.0},
     NO_OPENAI_MODEL: {"input": 0.40, "output": 1.50},
+    CLAUDE_COMPLEX_MODEL: {"input": 3.0, "output": 15.0},
 }
 
 SIMPLE_TERMS = (
@@ -165,6 +177,11 @@ QWEN_TERMS = (
     "ollama",
     "local llm",
     "openai-compatible local",
+)
+CLAUDE_TERMS = (
+    "claude",
+    "anthropic",
+    "sonnet",
 )
 LONG_CONTEXT_TERMS = (
     "gros contexte",
@@ -420,13 +437,28 @@ def hf_available() -> bool:
     return bool(os.environ.get("HF_TOKEN"))
 
 
-def qwen_available() -> bool:
-    """Return whether the local Ollama Qwen endpoint is reachable."""
+def ollama_available() -> bool:
+    """Return whether the local Ollama OpenAI-compatible endpoint is reachable."""
     try:
         with socket.create_connection((OLLAMA_HOST, OLLAMA_PORT), timeout=1):
             return True
     except OSError:
         return False
+
+
+def phi_available() -> bool:
+    """Return whether local small-task routing can use Ollama Phi-4 Mini."""
+    return ollama_available()
+
+
+def qwen_available() -> bool:
+    """Return whether the local Ollama Qwen endpoint is reachable."""
+    return ollama_available()
+
+
+def claude_available() -> bool:
+    """Return whether Anthropic Claude routing can be used through LiteLLM."""
+    return bool(os.environ.get("ANTHROPIC_API_KEY"))
 
 
 def default_provider() -> str:
@@ -816,6 +848,8 @@ def codex_model(model: str, provider: str) -> str:
     """Map router aliases to the model name expected by the selected profile."""
     if provider == "huggingface":
         return HF_DIRECT_MODEL
+    if provider == "standard" and model in {SMALL_LOCAL_MODEL, PHI_LOCAL_MODEL, QWEN_LOCAL_MODEL}:
+        return model
     if provider == "standard":
         return "codex default"
     return model
@@ -852,10 +886,10 @@ def build_codex_command(
     ]
 
 
-def run_qwen_local(prompt: str, max_output_tokens: int) -> int:
-    """Call local Qwen through Ollama without requiring the LiteLLM proxy."""
+def run_ollama_local(prompt: str, max_output_tokens: int, ollama_model: str, label: str) -> int:
+    """Call a local Ollama model without requiring the LiteLLM proxy."""
     payload = {
-        "model": QWEN_OLLAMA_MODEL,
+        "model": ollama_model,
         "messages": [
             {"role": "system", "content": "You are a concise local coding assistant."},
             {"role": "user", "content": prompt},
@@ -875,7 +909,7 @@ def run_qwen_local(prompt: str, max_output_tokens: int) -> int:
         with urllib.request.urlopen(request, timeout=120) as response:
             data = json.loads(response.read().decode("utf-8"))
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-        print(f"Local Qwen call failed: {exc}", file=sys.stderr)
+        print(f"Local {label} call failed: {exc}", file=sys.stderr)
         return 7
     elapsed = max(time.perf_counter() - started, 0.001)
     choice = (data.get("choices") or [{}])[0]
@@ -887,10 +921,20 @@ def run_qwen_local(prompt: str, max_output_tokens: int) -> int:
     completion_tokens = int(usage.get("completion_tokens") or 0)
     if completion_tokens:
         print(
-            f"\n[local-qwen] completion_tokens={completion_tokens} "
+            f"\n[local-{label}] completion_tokens={completion_tokens} "
             f"elapsed_s={elapsed:.2f} tokens_per_s={completion_tokens / elapsed:.2f}"
         )
     return 0
+
+
+def run_phi_local(prompt: str, max_output_tokens: int) -> int:
+    """Call local Phi-4 Mini through Ollama without requiring the LiteLLM proxy."""
+    return run_ollama_local(prompt, max_output_tokens, PHI_OLLAMA_MODEL, "phi")
+
+
+def run_qwen_local(prompt: str, max_output_tokens: int) -> int:
+    """Call local Qwen through Ollama without requiring the LiteLLM proxy."""
+    return run_ollama_local(prompt, max_output_tokens, QWEN_OLLAMA_MODEL, "qwen")
 
 
 def route_model(
@@ -905,6 +949,7 @@ def route_model(
     normalized = normalize_for_matching(prompt)
     wants_hf = any(term in normalized for term in HF_TERMS)
     wants_long_context = any(term in normalized for term in LONG_CONTEXT_TERMS)
+    wants_claude = any(term in normalized for term in CLAUDE_TERMS)
 
     if provider == "huggingface":
         if hf_available():
@@ -912,10 +957,27 @@ def route_model(
             return model, f"huggingface provider requested; {reason}"
         return DEFAULT_MODEL, "huggingface requested but HF_TOKEN is missing; using default OpenAI/Gemini tier"
 
+    if provider in {"local-small", "phi"}:
+        if phi_available():
+            return SMALL_LOCAL_MODEL, (
+                f"local small-task provider requested; capped at {SMALL_TASK_MAX_OUTPUT_TOKENS} "
+                f"output tokens to target >= {SMALL_TASK_TARGET_TOKENS_PER_SECOND:.1f} tok/s; {reason}"
+            )
+        if qwen_available():
+            return QWEN_LOCAL_MODEL, f"local small-task provider requested; Phi unavailable so Qwen selected; {reason}"
+        return LIGHT_MODEL, "local small-task provider requested but Ollama is not listening; using light remote tier"
+
     if provider == "qwen":
         if qwen_available():
             return QWEN_LOCAL_MODEL, f"qwen provider requested; {reason}"
         return DEFAULT_MODEL, "qwen requested but Ollama is not listening on 127.0.0.1:11434; using default OpenAI/Gemini tier"
+
+    if provider == "claude":
+        if claude_available() and proxy_available():
+            return CLAUDE_COMPLEX_MODEL, f"claude provider requested through active LiteLLM proxy; {reason}"
+        if claude_available():
+            return DEEP_MODEL, "claude requested but LiteLLM proxy is inactive; using default deep Codex tier"
+        return DEEP_MODEL, "claude requested but ANTHROPIC_API_KEY is missing; using default deep Codex tier"
 
     if provider == "no-openai":
         if qwen_available():
@@ -936,6 +998,9 @@ def route_model(
 
     if any(term in normalized for term in QWEN_TERMS) and qwen_available():
         return QWEN_LOCAL_MODEL, f"qwen local task; {reason}"
+
+    if wants_claude and claude_available() and proxy_available():
+        return CLAUDE_COMPLEX_MODEL, f"claude-related task through active LiteLLM proxy; {reason}"
 
     if wants_long_context:
         return LONG_MODEL, f"long-context task; {reason}"
@@ -1102,7 +1167,7 @@ def print_doctor() -> int:
         (
             "LiteLLM proxy optional",
             True,
-            "listening for Gemini/Qwen aliases" if proxy_available() else "inactive; standard Codex remains usable",
+            "listening for Gemini/Phi/Qwen/Claude aliases" if proxy_available() else "inactive; standard Codex remains usable",
         ),
         (
             "Gemini dispatch optional",
@@ -1110,9 +1175,21 @@ def print_doctor() -> int:
             "ready through proxy" if proxy_available() and os.environ.get("GEMINI_API_KEY") else "needs active proxy + GEMINI_API_KEY",
         ),
         (
+            "Ollama Phi small-task optional",
+            True,
+            "listening; small tasks can use Phi-4 Mini"
+            if phi_available()
+            else "missing; run ollama pull phi4-mini and start Ollama",
+        ),
+        (
             "Ollama Qwen optional",
             True,
             "listening on 127.0.0.1:11434" if qwen_available() else "missing; run Start-CodexQwenOllama.ps1",
+        ),
+        (
+            "Claude complex optional",
+            True,
+            "ready through proxy" if proxy_available() and claude_available() else "needs active proxy + ANTHROPIC_API_KEY",
         ),
         ("HF_TOKEN optional", True, "set" if hf_available() else "missing; Hugging Face aliases disabled"),
         ("PYTHONUTF8 optional", True, "1" if os.environ.get("PYTHONUTF8") == "1" else "not forced"),
@@ -1123,7 +1200,7 @@ def print_doctor() -> int:
     for name, passed, detail in checks:
         print(f"{'OK' if passed else 'FIX':3}  {name:30} {detail}")
     if not proxy_available():
-        print("\nLiteLLM is optional. Start it only when you want Gemini/API dispatch:")
+        print("\nLiteLLM is optional. Start it only when you want Gemini/Claude/API dispatch:")
         executable = find_litellm() or "litellm"
         print(f"  & '{executable}' --config .\\scripts\\python\\litellm-cost-routing.yaml --port 4000")
     return 0 if all(passed for _, passed, _ in checks) else 1
@@ -1150,7 +1227,11 @@ def run_router(args: argparse.Namespace) -> int:
     selected_codex_model = codex_model(model, active_codex_provider)
     original_tokens = estimate_tokens(prompt)
     input_tokens = estimate_tokens(optimized)
-    output_tokens = args.max_output_tokens
+    output_tokens = (
+        min(args.max_output_tokens, SMALL_TASK_MAX_OUTPUT_TOKENS)
+        if model in {SMALL_LOCAL_MODEL, PHI_LOCAL_MODEL}
+        else args.max_output_tokens
+    )
     compression_ratio = round(input_tokens / max(1, original_tokens), 4)
     cost = estimate_cost(model, input_tokens, output_tokens)
     max_cost = float(policy.get("max_cost_usd") or 0)
@@ -1218,7 +1299,13 @@ def run_router(args: argparse.Namespace) -> int:
     print(f"Output budget     : {output_tokens}")
     print(f"Estimated cost    : ${cost:.8f}")
     print(f"Proxy active      : {'yes' if proxy_available() else 'no'}")
+    print(f"Phi small local   : {'yes' if phi_available() else 'no'}")
     print(f"Qwen local        : {'yes' if qwen_available() else 'no'}")
+    if model in {SMALL_LOCAL_MODEL, PHI_LOCAL_MODEL}:
+        print(
+            "Small-task target : "
+            f">= {SMALL_TASK_TARGET_TOKENS_PER_SECOND:.1f} tok/s with <= {SMALL_TASK_MAX_OUTPUT_TOKENS} output tokens"
+        )
     if max_cost > 0 and cost > max_cost:
         print(f"Policy cost limit : ${max_cost:.8f} exceeded")
 
@@ -1246,9 +1333,12 @@ def run_router(args: argparse.Namespace) -> int:
             )
             last_returncode = 4
             continue
+        if attempt_provider == "standard" and model in {SMALL_LOCAL_MODEL, PHI_LOCAL_MODEL} and phi_available():
+            print("Executing through local Ollama Phi-4 Mini (no LiteLLM proxy required)")
+            return run_phi_local(optimized, output_tokens)
         if attempt_provider == "standard" and model == QWEN_LOCAL_MODEL and qwen_available():
             print("Executing through local Ollama Qwen (no LiteLLM proxy required)")
-            return run_qwen_local(optimized, args.max_output_tokens)
+            return run_qwen_local(optimized, output_tokens)
         attempt_profile = codex_profile(attempt_provider)
         attempt_model = codex_model(model, attempt_provider)
         print(f"Executing through {attempt_profile} ({attempt_model})")

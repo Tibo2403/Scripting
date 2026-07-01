@@ -1,14 +1,18 @@
 # LiteLLM OSS self-hosted proxy example for Codex.
 # Task-oriented aliases let Codex route by workload instead of hard-coding a
 # single provider:
-# - codex-light: cheap/frequent work, Gemini Flash biased with local Qwen relief
+# - codex-light: cheap/frequent work, Gemini Flash biased with local Phi/Qwen relief
+# - codex-small-local: small local tasks, Phi-4 Mini biased with Qwen fallback
+# - codex-phi-local: direct local Phi-4 Mini alias
 # - codex-default: normal coding work, balanced OpenAI/Gemini with local Qwen relief
 # - codex-long: long-context reads and synthesis, Gemini Pro biased
 # - codex-deep: high-stakes debugging/security/architecture, OpenAI biased with fast fallback
+# - codex-claude-complex: complex reasoning/debugging through Claude when ANTHROPIC_API_KEY is set
 # - codex-no-openai: Gemini/Qwen routing when OpenAI quota is exhausted
 # - codex-qwen-local: local Ollama Qwen fallback
 # API keys are read from environment variables and must never be committed.
-# Qwen is local-only here; the fallback expects Ollama on http://127.0.0.1:11434/v1 with:
+# Local aliases expect Ollama on http://127.0.0.1:11434/v1 with:
+#   phi4-mini
 #   qwen2.5-coder:3b
 
 model_list:
@@ -52,7 +56,7 @@ model_list:
 
   - model_name: codex-light
     litellm_params:
-      model: openai/qwen2.5-coder:3b
+      model: openai/phi4-mini
       api_base: http://127.0.0.1:11434/v1
       api_key: sk-ollama-local
       weight: 1
@@ -106,6 +110,38 @@ model_list:
       model: openai/gpt-5.5
       api_key: os.environ/OPENAI_API_KEY
       weight: 7
+
+  # Complex Claude route. The Python router selects this only when the
+  # LiteLLM proxy is active and ANTHROPIC_API_KEY is available.
+  - model_name: codex-claude-complex
+    litellm_params:
+      model: anthropic/claude-sonnet-4-20250514
+      api_key: os.environ/ANTHROPIC_API_KEY
+      weight: 1
+
+  # Local small-task route. Keep outputs short in codex_cost_router.py to make
+  # latency and measured tokens/second easier to control.
+  - model_name: codex-small-local
+    litellm_params:
+      model: openai/phi4-mini
+      api_base: http://127.0.0.1:11434/v1
+      api_key: sk-ollama-local
+      weight: 4
+
+  - model_name: codex-small-local
+    litellm_params:
+      model: openai/qwen2.5-coder:3b
+      api_base: http://127.0.0.1:11434/v1
+      api_key: sk-ollama-local
+      weight: 1
+
+  # Direct local Phi alias for explicit tests or manual forcing.
+  - model_name: codex-phi-local
+    litellm_params:
+      model: openai/phi4-mini
+      api_base: http://127.0.0.1:11434/v1
+      api_key: sk-ollama-local
+      weight: 1
 
   - model_name: codex-deep
     litellm_params:
@@ -172,8 +208,22 @@ router_settings:
     gpt-5.4-mini: codex-light
     gemini-3.5-pro: codex-long
     gemini-3.5-flash: codex-light
+    phi4-mini: codex-small-local
     qwen2.5-coder:3b: codex-qwen-local
+    claude-sonnet: codex-claude-complex
   fallbacks:
+    - codex-small-local:
+        - codex-phi-local
+        - codex-qwen-local
+        - codex-light
+    - codex-phi-local:
+        - codex-small-local
+        - codex-qwen-local
+        - codex-light
+    - codex-claude-complex:
+        - codex-deep
+        - codex-default
+        - codex-long
     - codex-light:
         - codex-no-openai
         - codex-default
@@ -216,6 +266,8 @@ router_settings:
     - codex-qwen-local:
         - codex-light
   context_window_fallbacks:
+    - codex-small-local:
+        - codex-long
     - codex-light:
         - codex-long
     - codex-default:

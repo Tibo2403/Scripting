@@ -25,9 +25,39 @@ class CodexCostRouterTests(unittest.TestCase):
         self.assertEqual(ROUTER.compress_logs(text), "ERROR request failed")
 
     def test_route_model_uses_expected_aliases(self) -> None:
-        self.assertEqual(ROUTER.route_model("Corrige une typo dans le README")[0], "codex-light")
-        self.assertEqual(ROUTER.route_model("Refactor this Python API")[0], "codex-default")
-        self.assertEqual(ROUTER.route_model("Audit securite production Supabase RLS")[0], "codex-deep")
+        with (
+            patch.object(ROUTER, "phi_available", return_value=False),
+            patch.object(ROUTER, "claude_available", return_value=False),
+            patch.object(ROUTER, "proxy_available", return_value=False),
+        ):
+            self.assertEqual(ROUTER.route_model("Corrige une typo dans le README")[0], "codex-light")
+            self.assertEqual(ROUTER.route_model("Refactor this Python API")[0], "codex-default")
+            self.assertEqual(ROUTER.route_model("Audit securite production Supabase RLS")[0], "codex-deep")
+
+    def test_route_model_can_use_phi_for_small_local_tasks(self) -> None:
+        with patch.object(ROUTER, "phi_available", return_value=True):
+            model, reason = ROUTER.route_model("Corrige une typo dans le README", provider="local-small")
+        self.assertEqual(model, "codex-small-local")
+        self.assertIn("64 output tokens", reason)
+
+    def test_route_model_can_use_claude_for_complex_proxy_tasks(self) -> None:
+        with (
+            patch.object(ROUTER, "claude_available", return_value=True),
+            patch.object(ROUTER, "proxy_available", return_value=True),
+        ):
+            model, reason = ROUTER.route_model("Audit securite production Supabase RLS", provider="claude")
+        self.assertEqual(model, "codex-claude-complex")
+        self.assertIn("active LiteLLM proxy", reason)
+
+    def test_default_policy_routes_simple_local_and_complex_claude(self) -> None:
+        self.assertEqual(
+            ROUTER.provider_from_policy("Corrige une typo dans le README", None, ROUTER.DEFAULT_POLICY)[0],
+            "local-small",
+        )
+        self.assertEqual(
+            ROUTER.provider_from_policy("Audit securite production Supabase RLS", None, ROUTER.DEFAULT_POLICY)[0],
+            "claude",
+        )
 
     def test_route_model_matches_accented_french_keywords(self) -> None:
         self.assertEqual(ROUTER.route_model("Prepare un resume du README")[0], "codex-light")

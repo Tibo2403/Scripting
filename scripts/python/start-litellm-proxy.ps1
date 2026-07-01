@@ -12,7 +12,7 @@ $expectedLiteLLMVersion = '1.90.0'
 $launcher = Join-Path $root 'start_litellm_proxy.py'
 $baseConfig = Join-Path $root 'config.yaml'
 $runtimeConfig = Join-Path $root 'config.runtime.yaml'
-foreach ($name in @('GEMINI_API_KEY', 'GOOGLE_API_KEY', 'OPENAI_API_KEY', 'HF_TOKEN')) {
+foreach ($name in @('GEMINI_API_KEY', 'GOOGLE_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'HF_TOKEN')) {
   $value = [Environment]::GetEnvironmentVariable($name, 'Process')
   if ([string]::IsNullOrWhiteSpace($value)) {
     $value = [Environment]::GetEnvironmentVariable($name, 'User')
