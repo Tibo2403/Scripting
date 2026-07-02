@@ -1,0 +1,57 @@
+{
+  "company": {
+    "name": "MaPME",
+    "praOwner": "Responsable IT",
+    "emergencyContact": "+33 6 00 00 00 00"
+  },
+  "backup": {
+    "strategy": "3-2-1",
+    "primaryRepositoryHost": "nas-backup.local",
+    "offsiteLocation": "s3://bucket-backup-immutable",
+    "immutabilityEnabled": true,
+    "encryptionEnabled": true
+  },
+  "recoveryPriority": [
+    {
+      "order": 1,
+      "name": "ActiveDirectory",
+      "type": "identity",
+      "rto": "4h",
+      "rpo": "1h"
+    },
+    {
+      "order": 2,
+      "name": "FileServer_Critique",
+      "type": "files",
+      "rto": "4h",
+      "rpo": "1h"
+    },
+    {
+      "order": 3,
+      "name": "ERP_SQL",
+      "type": "database",
+      "rto": "4h",
+      "rpo": "1h"
+    },
+    {
+      "order": 4,
+      "name": "CRM_App",
+      "type": "application",
+      "rto": "8h",
+      "rpo": "4h"
+    }
+  ],
+  "validationTests": [
+    {
+      "name": "SQL listener",
+      "kind": "tcp",
+      "host": "sql01.local",
+      "port": 1433
+    },
+    {
+      "name": "Partage critique",
+      "kind": "path",
+      "path": "\\\\fileserver\\compta"
+    }
+  ]
+}
