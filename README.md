@@ -228,7 +228,7 @@ python .\scripts\python\mcp_server.py
 
 Connect an MCP client to `http://localhost:8000/mcp`. See [`scripts/python/README.md`](scripts/python/README.md) for setup and inspector instructions.
 
-The optional Codex cost router in `scripts/python/codex_cost_router.py` can compress one-shot prompts and route them through a self-hosted LiteLLM OSS proxy. See [`scripts/python/README_Codex_Cost_Routing.md`](scripts/python/README_Codex_Cost_Routing.md).
+The optional Codex cost router in `scripts/python/codex_cost_router.py` can compress one-shot prompts and route them through a self-hosted LiteLLM OSS proxy. See [`scripts/python/README_Codex_Cost_Routing.md`](scripts/python/README_Codex_Cost_Routing.md) and the short mode chooser in [`docs/codex-routing-modes.md`](docs/codex-routing-modes.md).
 
 The optional LLM review tool in `scripts/python/llm_bias_multi_agent.py` provides deterministic first-pass bias, fairness, and safeguard checks. See
 [`scripts/python/README_LLM_Bias_Multi_Agent.md`](scripts/python/README_LLM_Bias_Multi_Agent.md).

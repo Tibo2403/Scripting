@@ -2,6 +2,10 @@
 
 Optional routing for Codex CLI on Windows. The default path is the normal Codex CLI. LiteLLM is an opt-in proxy used when you want Gemini API dispatch or a shared gateway to local Qwen.
 
+For a short mode chooser covering Standard Codex, LiteLLM, Hugging Face, direct
+Ollama, dry-runs, and the sovereign WebUI stack, see
+[`../../docs/codex-routing-modes.md`](../../docs/codex-routing-modes.md).
+
 The local Python wrapper cleans prompts, compresses noisy logs, estimates tokens,
 applies budgets, and selects one of these LiteLLM aliases:
 

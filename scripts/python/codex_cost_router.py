@@ -18,7 +18,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from codex_cost_profiles import render_profiles
 
+
+SCRIPT_DIR = Path(__file__).resolve().parent
 CODEX_HOME = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
 CODEX_CONFIG = CODEX_HOME / "config.toml"
 COST_ROUTING_CONFIG = CODEX_HOME / "cost-routing.config.toml"
@@ -86,7 +89,7 @@ OLLAMA_CHAT_COMPLETIONS_URL = f"http://{OLLAMA_HOST}:{OLLAMA_PORT}/v1/chat/compl
 PHI_OLLAMA_MODEL = "phi4-mini"
 QWEN_OLLAMA_MODEL = "qwen2.5-coder:3b"
 WINDOWS_LITELLM_FALLBACK = Path(r"C:\tmp\litellm-oss\Scripts\litellm.exe")
-POLICY_FILE = Path(__file__).with_name("codex-routing-policy.yaml")
+POLICY_FILE = SCRIPT_DIR / "codex-routing-policy.yaml"
 DEFAULT_ADAPTIVE_ROUTER = {
     "enabled": False,
     "shadow_mode": True,
@@ -211,60 +214,10 @@ LONG_CONTEXT_TERMS = (
     "summarize",
     "compare documents",
 )
-PROFILE_BLOCK = f"""\
-# BEGIN CODEX COST ROUTER
-[model_providers.litellm]
-name = "LiteLLM OSS Cost Router"
-base_url = "http://localhost:4000/v1"
-env_key = "LITELLM_API_KEY"
-
-[model_providers.huggingface]
-name = "Hugging Face Inference Providers"
-base_url = "https://router.huggingface.co/v1"
-env_key = "HF_TOKEN"
-wire_api = "chat"
-
-[profiles.cost-routing]
-model = "{DEFAULT_MODEL}"
-model_provider = "litellm"
-model_reasoning_effort = "medium"
-model_verbosity = "low"
-model_auto_compact_token_limit = 64000
-tool_output_token_limit = 8000
-
-[profiles.cost-routing-hf]
-model = "{HF_DIRECT_MODEL}"
-model_provider = "huggingface"
-model_reasoning_effort = "low"
-# END CODEX COST ROUTER
-"""
-
-COST_ROUTING_PROFILE = f"""\
-model = "{DEFAULT_MODEL}"
-model_provider = "litellm"
-model_reasoning_effort = "medium"
-model_verbosity = "low"
-model_auto_compact_token_limit = 64000
-tool_output_token_limit = 8000
-
-[model_providers.litellm]
-name = "LiteLLM OSS Cost Router"
-base_url = "http://localhost:4000/v1"
-env_key = "LITELLM_API_KEY"
-wire_api = "chat"
-"""
-
-COST_ROUTING_HF_PROFILE = f"""\
-model = "{HF_DIRECT_MODEL}"
-model_provider = "huggingface"
-model_reasoning_effort = "low"
-
-[model_providers.huggingface]
-name = "Hugging Face Inference Providers"
-base_url = "https://router.huggingface.co/v1"
-env_key = "HF_TOKEN"
-wire_api = "chat"
-"""
+PROFILES = render_profiles(DEFAULT_MODEL, HF_DIRECT_MODEL)
+PROFILE_BLOCK = PROFILES.managed_block
+COST_ROUTING_PROFILE = PROFILES.litellm_profile
+COST_ROUTING_HF_PROFILE = PROFILES.huggingface_profile
 
 
 def utc_now() -> str:

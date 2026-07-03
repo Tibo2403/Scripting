@@ -1,6 +1,7 @@
 """Tests for the optional Codex cost-routing wrapper."""
 
 import importlib.util
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,6 +9,8 @@ from unittest.mock import patch
 
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "codex_cost_router.py"
+if str(MODULE_PATH.parent) not in sys.path:
+    sys.path.insert(0, str(MODULE_PATH.parent))
 SPEC = importlib.util.spec_from_file_location("codex_cost_router", MODULE_PATH)
 if SPEC is None or SPEC.loader is None:
     raise RuntimeError("Unable to load codex_cost_router.py")
@@ -135,6 +138,8 @@ class CodexCostRouterTests(unittest.TestCase):
     def test_profile_block_includes_optional_hugging_face_profile(self) -> None:
         self.assertIn("[model_providers.huggingface]", ROUTER.PROFILE_BLOCK)
         self.assertIn("[profiles.cost-routing-hf]", ROUTER.PROFILE_BLOCK)
+        self.assertIn('model = "codex-default"', ROUTER.COST_ROUTING_PROFILE)
+        self.assertIn('model = "openai/gpt-oss-120b:fastest"', ROUTER.COST_ROUTING_HF_PROFILE)
 
     def test_policy_file_can_override_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

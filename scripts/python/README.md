@@ -64,7 +64,9 @@ a local Ollama fallback through `qwen2.5-coder:3b`.
 editable without changing Python code.
 
 See [`README_Codex_Cost_Routing.md`](README_Codex_Cost_Routing.md) for setup,
-activation, LiteLLM configuration, and usage instructions.
+activation, LiteLLM configuration, and usage instructions. For a quick choice
+between Standard Codex, LiteLLM, Hugging Face, direct Ollama, and the sovereign
+WebUI stack, see [`../../docs/codex-routing-modes.md`](../../docs/codex-routing-modes.md).
 
 To enter OpenAI, Gemini, or Hugging Face keys through a local page for one
 session, run `Start-CodexKeySessionWeb.ps1` and open

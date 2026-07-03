@@ -193,10 +193,12 @@ pull_model_if_requested() {
 
 main() {
   parse_args "$@"
-  require_command docker
 
-  if [[ "$DRY_RUN" -eq 0 ]] && ! docker info >/dev/null 2>&1; then
-    fail "Docker is unavailable or the daemon is not running"
+  if [[ "$DRY_RUN" -eq 0 ]]; then
+    require_command docker
+    if ! docker info >/dev/null 2>&1; then
+      fail "Docker is unavailable or the daemon is not running"
+    fi
   fi
 
   start_container
