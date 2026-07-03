@@ -490,10 +490,43 @@ class CodexCostRouterTests(unittest.TestCase):
         with patch.object(ROUTER.socket, "create_connection", side_effect=OSError):
             self.assertFalse(ROUTER.proxy_available())
 
+    def test_litellm_disable_env_bypasses_proxy(self) -> None:
+        with (
+            patch.dict(ROUTER.os.environ, {"CODEX_ROUTER_DISABLE_LITELLM": "1"}, clear=False),
+            patch.object(ROUTER.socket, "create_connection") as create_connection,
+        ):
+            self.assertFalse(ROUTER.proxy_available())
+            provider, reason = ROUTER.codex_provider_from_policy("litellm", ROUTER.DEFAULT_POLICY)
+            ready, detail = ROUTER.codex_provider_ready("litellm")
+
+        create_connection.assert_not_called()
+        self.assertEqual(provider, "standard")
+        self.assertIn("bypassed", reason)
+        self.assertFalse(ready)
+        self.assertIn("disabled", detail)
+
     def test_find_litellm_uses_configured_existing_path(self) -> None:
         with tempfile.NamedTemporaryFile() as executable:
             with patch.dict(ROUTER.os.environ, {"LITELLM_CLI_PATH": executable.name}):
                 self.assertEqual(ROUTER.find_litellm(), executable.name)
+
+    def test_find_codex_prefers_configured_existing_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            executable = home / "codex.exe"
+            executable.write_text("", encoding="utf-8")
+            config = home / "config.toml"
+            config.write_text(
+                "[mcp_servers.node_repl.env]\n"
+                f"CODEX_CLI_PATH = '{executable}'\n",
+                encoding="utf-8",
+            )
+            with (
+                patch.dict(ROUTER.os.environ, {}, clear=True),
+                patch.object(ROUTER, "CODEX_CONFIG", config),
+                patch.object(ROUTER.shutil, "which", return_value="blocked-windowsapps-codex"),
+            ):
+                self.assertEqual(ROUTER.find_codex(), str(executable))
 
     def test_enable_disable_restores_original_config_bytes(self) -> None:
         initial = b"[features]\r\njs_repl = false\r\n"
@@ -508,6 +541,8 @@ class CodexCostRouterTests(unittest.TestCase):
                 patch.object(ROUTER, "LOG_FILE", home / "logs" / "cost_router.jsonl"),
                 patch.object(ROUTER, "STATE_FILE", home / "logs" / "cost_router_state.json"),
                 patch.object(ROUTER, "CONFIG_BACKUP", home / "logs" / "config.toml.cost_router_backup"),
+                patch.object(ROUTER, "COST_ROUTING_CONFIG", home / "cost-routing.config.toml"),
+                patch.object(ROUTER, "COST_ROUTING_HF_CONFIG", home / "cost-routing-hf.config.toml"),
             ):
                 ROUTER.enable_router()
                 ROUTER.disable_router()

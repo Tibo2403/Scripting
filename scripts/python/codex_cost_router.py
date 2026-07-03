@@ -21,6 +21,8 @@ from typing import Any
 
 CODEX_HOME = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
 CODEX_CONFIG = CODEX_HOME / "config.toml"
+COST_ROUTING_CONFIG = CODEX_HOME / "cost-routing.config.toml"
+COST_ROUTING_HF_CONFIG = CODEX_HOME / "cost-routing-hf.config.toml"
 LOG_DIR = CODEX_HOME / "logs"
 LOG_FILE = LOG_DIR / "cost_router.jsonl"
 STATE_FILE = LOG_DIR / "cost_router_state.json"
@@ -235,6 +237,33 @@ model = "{HF_DIRECT_MODEL}"
 model_provider = "huggingface"
 model_reasoning_effort = "low"
 # END CODEX COST ROUTER
+"""
+
+COST_ROUTING_PROFILE = f"""\
+model = "{DEFAULT_MODEL}"
+model_provider = "litellm"
+model_reasoning_effort = "medium"
+model_verbosity = "low"
+model_auto_compact_token_limit = 64000
+tool_output_token_limit = 8000
+
+[model_providers.litellm]
+name = "LiteLLM OSS Cost Router"
+base_url = "http://localhost:4000/v1"
+env_key = "LITELLM_API_KEY"
+wire_api = "chat"
+"""
+
+COST_ROUTING_HF_PROFILE = f"""\
+model = "{HF_DIRECT_MODEL}"
+model_provider = "huggingface"
+model_reasoning_effort = "low"
+
+[model_providers.huggingface]
+name = "Hugging Face Inference Providers"
+base_url = "https://router.huggingface.co/v1"
+env_key = "HF_TOKEN"
+wire_api = "chat"
 """
 
 
@@ -520,6 +549,16 @@ def default_codex_provider() -> str:
     return provider if provider in CODEX_PROVIDERS else "auto"
 
 
+def litellm_disabled() -> bool:
+    """Return whether the local LiteLLM path is explicitly bypassed."""
+    return os.environ.get("CODEX_ROUTER_DISABLE_LITELLM", "").strip().casefold() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 def normalize_provider(provider: Any, fallback: str = "auto") -> str:
     """Normalize a LiteLLM-side provider preference."""
     value = str(provider or fallback).casefold()
@@ -534,6 +573,8 @@ def normalize_codex_provider(provider: Any, fallback: str = "auto") -> str:
 
 def resolve_auto_codex_provider() -> tuple[str, str]:
     """Choose the live Codex path: LiteLLM when active, otherwise normal Codex."""
+    if litellm_disabled():
+        return "standard", "LiteLLM bypassed by CODEX_ROUTER_DISABLE_LITELLM"
     if proxy_available():
         return "litellm", "LiteLLM proxy detected for Gemini/Qwen aliases"
     return "standard", "standard Codex path; LiteLLM proxy is inactive"
@@ -542,6 +583,8 @@ def resolve_auto_codex_provider() -> tuple[str, str]:
 def resolve_codex_provider_choice(provider: Any, source: str) -> tuple[str, str]:
     """Resolve explicit or auto Codex provider choices into an executable path."""
     normalized = normalize_codex_provider(provider)
+    if normalized == "litellm" and litellm_disabled():
+        return "standard", f"{source}: LiteLLM bypassed by CODEX_ROUTER_DISABLE_LITELLM"
     if normalized == "auto":
         resolved, reason = resolve_auto_codex_provider()
         return resolved, f"{source}: {reason}"
@@ -961,6 +1004,8 @@ def codex_provider_ready(provider: str) -> tuple[bool, str]:
         return True, "standard Codex path is always available when Codex CLI exists."
     if provider == "huggingface":
         return hf_available(), "HF_TOKEN is required for the cost-routing-hf Codex profile."
+    if litellm_disabled():
+        return False, "LiteLLM is disabled by CODEX_ROUTER_DISABLE_LITELLM."
     return proxy_available(), "LiteLLM OSS proxy is not listening on http://localhost:4000."
 
 
@@ -1125,8 +1170,9 @@ def enable_router() -> int:
     if BEGIN_MARKER not in config and CODEX_CONFIG.exists():
         shutil.copyfile(CODEX_CONFIG, CONFIG_BACKUP)
     config = remove_profile_block(config)
-    updated = config.rstrip() + ("\n\n" if config.strip() else "") + PROFILE_BLOCK
-    write_text(CODEX_CONFIG, updated)
+    write_text(CODEX_CONFIG, config)
+    write_text(COST_ROUTING_CONFIG, COST_ROUTING_PROFILE)
+    write_text(COST_ROUTING_HF_CONFIG, COST_ROUTING_HF_PROFILE)
     save_state(enabled=True, enabled_at=utc_now(), current_model=DEFAULT_MODEL)
     print("Cost routing enabled.")
     print("LiteLLM OSS profile installed: cost-routing")
@@ -1147,6 +1193,8 @@ def disable_router() -> int:
         CONFIG_BACKUP.unlink()
     else:
         write_text(CODEX_CONFIG, remove_profile_block(read_text(CODEX_CONFIG)))
+    COST_ROUTING_CONFIG.unlink(missing_ok=True)
+    COST_ROUTING_HF_CONFIG.unlink(missing_ok=True)
     save_state(enabled=False, disabled_at=utc_now())
     print("Cost routing disabled. Existing Codex configuration was preserved.")
     return 0
@@ -1154,8 +1202,7 @@ def disable_router() -> int:
 
 def router_enabled() -> bool:
     """Check that both managed profile markers exist."""
-    config = read_text(CODEX_CONFIG)
-    return BEGIN_MARKER in config and END_MARKER in config
+    return COST_ROUTING_CONFIG.exists()
 
 
 def print_status() -> int:
@@ -1222,7 +1269,20 @@ def print_stats() -> int:
 
 def find_codex() -> str | None:
     """Locate Codex CLI without assuming a specific Windows installation path."""
-    return shutil.which("codex") or os.environ.get("CODEX_CLI_PATH")
+    configured = os.environ.get("CODEX_CLI_PATH")
+    if configured and Path(configured).is_file():
+        return configured
+
+    match = re.search(
+        r"""(?m)^\s*CODEX_CLI_PATH\s*=\s*['"]([^'"]+)['"]""",
+        read_text(CODEX_CONFIG),
+    )
+    if match:
+        configured = match.group(1)
+        if Path(configured).is_file():
+            return configured
+
+    return shutil.which("codex")
 
 
 def find_litellm() -> str | None:
@@ -1240,6 +1300,8 @@ def find_litellm() -> str | None:
 
 def proxy_available() -> bool:
     """Check whether the local LiteLLM OSS proxy is accepting TCP connections."""
+    if litellm_disabled():
+        return False
     try:
         with socket.create_connection((LITELLM_HOST, LITELLM_PORT), timeout=1):
             return True

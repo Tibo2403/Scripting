@@ -75,10 +75,6 @@ provider key to make one minimal dispatch request.
 
 ## LLM Review Tools
 
-`finance_bias_evaluator.py` is a deterministic first-pass checker for finance
-security, fairness, auditability, and governance controls. See
-[`README_Finance_Bias_Evaluator.md`](README_Finance_Bias_Evaluator.md).
-
 `llm_bias_multi_agent.py` is a provider-agnostic multi-agent manager for
 reviewing and revising LLM answers without calling an LLM provider. See
 [`README_LLM_Bias_Multi_Agent.md`](README_LLM_Bias_Multi_Agent.md).

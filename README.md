@@ -55,11 +55,9 @@ The scripts in `scripts/linux/pentest_*.sh`, `scan_wifi.sh`, and `stealth_post.s
 |   |   |-- Manage-CodexCostRouting.ps1
 |   |   |-- README.md
 |   |   |-- README_Codex_Cost_Routing.md
-|   |   |-- README_Finance_Bias_Evaluator.md
 |   |   |-- README_LLM_Bias_Multi_Agent.md
 |   |   |-- codex-cost-routing.cmd
 |   |   |-- codex_cost_router.py
-|   |   |-- finance_bias_evaluator.py
 |   |   |-- litellm-cost-routing.yaml
 |   |   |-- mcp_server.py
 |   |   `-- requirements.txt
@@ -232,11 +230,7 @@ Connect an MCP client to `http://localhost:8000/mcp`. See [`scripts/python/READM
 
 The optional Codex cost router in `scripts/python/codex_cost_router.py` can compress one-shot prompts and route them through a self-hosted LiteLLM OSS proxy. See [`scripts/python/README_Codex_Cost_Routing.md`](scripts/python/README_Codex_Cost_Routing.md).
 
-The optional LLM review tools in `scripts/python/finance_bias_evaluator.py` and
-`scripts/python/llm_bias_multi_agent.py` provide deterministic first-pass bias,
-fairness, and safeguard checks. See
-[`scripts/python/README_Finance_Bias_Evaluator.md`](scripts/python/README_Finance_Bias_Evaluator.md)
-and
+The optional LLM review tool in `scripts/python/llm_bias_multi_agent.py` provides deterministic first-pass bias, fairness, and safeguard checks. See
 [`scripts/python/README_LLM_Bias_Multi_Agent.md`](scripts/python/README_LLM_Bias_Multi_Agent.md).
 
 ## CI

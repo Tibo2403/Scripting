@@ -86,7 +86,7 @@ jobs:
             -d "$body" \
             | jq -r '.output_text // ""' > ai.patch
 
-          if [ -s ai.patch ] && head -n1 ai.patch | grep -q '^--- '; then
+          if [ -s ai.patch ] && grep -Eq '^(diff --git |--- )' ai.patch; then
             git apply --check ai.patch
             echo "has_patch=true" >> "$GITHUB_OUTPUT"
           else
@@ -104,13 +104,41 @@ jobs:
         if: steps.generate.outputs.has_patch == 'true'
         run: |
           set -euo pipefail
-          python -m py_compile scripts/python/codex_cost_router.py scripts/python/mcp_server.py
+          python -m compileall .
           python -m unittest discover -s scripts/python/tests -v
 
       - name: Validate PowerShell syntax
         if: steps.generate.outputs.has_patch == 'true'
         shell: pwsh
         run: ./scripts/powershell/Test-ScriptSyntax.ps1 -Path ./scripts
+
+      - name: Install PSScriptAnalyzer
+        if: steps.generate.outputs.has_patch == 'true'
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          foreach ($attempt in 1..3) {
+            try {
+              Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force -ErrorAction Stop
+              break
+            } catch {
+              if ($attempt -eq 3) {
+                throw
+              }
+              Write-Warning "PSScriptAnalyzer installation attempt $attempt failed. Retrying..."
+              Start-Sleep -Seconds 10
+            }
+          }
+
+      - name: Run PSScriptAnalyzer
+        if: steps.generate.outputs.has_patch == 'true'
+        shell: pwsh
+        run: |
+          $results = Invoke-ScriptAnalyzer -Path ./scripts -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
+          $results | Format-Table -AutoSize
+          if ($results) {
+            exit 1
+          }
 
       - name: Validate shell scripts
         if: steps.generate.outputs.has_patch == 'true'
