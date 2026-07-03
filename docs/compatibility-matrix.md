@@ -2,6 +2,7 @@
 
 | Script | OS | Privileges | Required tools/modules | Risk | Dry-run |
 | --- | --- | --- | --- | --- | --- |
+| `scripts/bash/install_ia_souveraine.sh` | Linux/macOS/WSL/Git Bash with Docker | Docker access | `docker`, optional NVIDIA runtime | Medium | Yes |
 | `scripts/linux/check_dependencies.sh` | Linux | Optional sudo for `--install` | package manager, optional `pwsh` | Low | Not needed |
 | `scripts/linux/setup_api.sh` | Debian/Ubuntu Linux | root | `apt-get`, `curl`, `python3`, network | Medium | `--offline` |
 | `scripts/linux/pentest_discovery.sh` | Linux | root recommended | `nmap` | High | Yes |

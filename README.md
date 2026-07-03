@@ -23,9 +23,12 @@ The scripts in `scripts/linux/pentest_*.sh`, `scan_wifi.sh`, and `stealth_post.s
 |   |-- compatibility-matrix.md
 |   |-- demo-media.md
 |   |-- issue-backlog.md
-|   `-- portfolio.md
+|   |-- portfolio.md
+|   `-- self-hosted-llm.md
 |-- examples/
 |-- scripts/
+|   |-- bash/
+|   |   `-- install_ia_souveraine.sh
 |   |-- linux/
 |   |   |-- check_dependencies.sh
 |   |   |-- dependencies.conf
@@ -81,6 +84,7 @@ Portfolio and maintenance docs:
 - `docs/demo-media.md` lists screenshots and GIFs to capture.
 - `docs/issue-backlog.md` contains ready-to-create GitHub issues.
 - `docs/codex-workspace-doctor.md` documents `Optimize-CodexWorkspace.ps1`.
+- `docs/self-hosted-llm.md` documents the local Open WebUI + Ollama installer.
 - `CHANGELOG.md` tracks release notes.
 
 ## Prerequisites
@@ -110,13 +114,13 @@ Invoke-ScriptAnalyzer -Path .\scripts\powershell -Recurse -Settings .\PSScriptAn
 Validate Bash syntax from Linux, WSL, Git Bash, or CI:
 
 ```bash
-find scripts/linux -name "*.sh" -print0 | xargs -0 -n1 bash -n
+find scripts -name "*.sh" -print0 | xargs -0 -n1 bash -n
 ```
 
 Run Bash static analysis:
 
 ```bash
-find scripts/linux -name "*.sh" -print0 | xargs -0 shellcheck --severity=error
+find scripts -name "*.sh" -print0 | xargs -0 shellcheck --severity=error
 ```
 
 Check Linux dependencies:
@@ -208,6 +212,12 @@ bash scripts/linux/stealth_post.sh --dry-run --yes-i-am-authorized
 Sensitive Linux scripts require either an interactive `AUTHORIZED` confirmation or the explicit `--yes-i-am-authorized` flag. Use `--dry-run` first to review planned scans, captures, or transfers.
 
 Use the safe placeholders in `examples/` for lab demos and documentation. Do not commit real targets, credentials, tenant identifiers, scan output, packet captures, or customer data.
+
+`install_ia_souveraine.sh` starts a local Open WebUI + Ollama stack in Docker.
+It keeps model and WebUI data in Docker volumes and supports conservative
+dry-run checks before installation. See
+[`docs/self-hosted-llm.md`](docs/self-hosted-llm.md) for usage, persistence,
+GPU behavior, and troubleshooting.
 
 ## MCP Server
 
