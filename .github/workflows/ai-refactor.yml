@@ -47,8 +47,21 @@ jobs:
           fi
 
           tmpctx="$(mktemp)"
-          find . -type f \( -name "*.ps1" -o -name "*.sh" -o -name "*.md" -o -name "*.yml" -o -name "*.yaml" \) \
+          find . -type f \( \
+              -name "*.py" -o \
+              -name "*.ps1" -o \
+              -name "*.psd1" -o \
+              -name "*.psm1" -o \
+              -name "*.cmd" -o \
+              -name "*.sh" -o \
+              -name "*.md" -o \
+              -name "*.yml" -o \
+              -name "*.yaml" \
+            \) \
             -not -path "./.git/*" \
+            -not -path "./.pytest_cache/*" \
+            -not -path "./__pycache__/*" \
+            -not -path "./.venv/*" \
             -not -path "./.github/workflows/ai-refactor.yml" \
             -size -200k \
             | sort \
