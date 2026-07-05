@@ -49,8 +49,7 @@ print(result.attempts)
 ## Run tests
 
 ```bash
-PYTHONPATH=. pip install pytest litellm
-PYTHONPATH=. pytest -q tests/test_scaleway_glm_dispatcher.py
+python -m unittest discover -s scripts/python/tests -v
 ```
 
 The tests mock the LiteLLM completion function, so they validate payload construction, retry, fallback and metrics behavior without consuming tokens.
