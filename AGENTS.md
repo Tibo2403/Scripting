@@ -20,4 +20,27 @@ Detected stack: Python, PowerShell
 - Never commit credentials, local environment files, or generated secrets.
 <!-- END CODEX WORKSPACE DOCTOR -->
 
+## Pull Request, Merge, and Push Summaries
 
+For every PR description, merge proposal, push summary, or release validation note, use this structure:
+
+### What Problem This Solves
+
+Explain the concrete bug, gap, or maintenance issue. Include the root cause when known.
+
+### Why This Change Was Made
+
+Explain the technical change and why this approach was chosen.
+
+### User Impact
+
+State whether runtime, product, user, maintainer, or developer behavior changes. If there is no behavior change, say so explicitly.
+
+### Evidence
+
+- Before: failing run, error message, limitation, or previous behavior
+- Tests: targeted tests and results
+- Checks: CI, lint, smoke tests, or manual validation
+- Autoreview: clean, findings addressed, or not run
+
+Keep the Evidence section factual. Prefer concrete commands, run links, failure messages, and pass/fail results over vague statements.
