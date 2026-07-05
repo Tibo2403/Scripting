@@ -2,7 +2,7 @@
 
 [![Script Validation](https://github.com/Tibo2403/Scripting/actions/workflows/script-validation.yml/badge.svg)](https://github.com/Tibo2403/Scripting/actions/workflows/script-validation.yml)
 
-Collection of PowerShell, Bash, and Python scripts for system administration, security checks, Microsoft 365 operations, Linux dependency checks, MCP integrations, and authorized lab or pentest workflows.
+Collection of PowerShell, Bash, and Python scripts for system administration, security checks, Microsoft 365 operations, Linux dependency checks, MCP integrations, Codex/LiteLLM routing experiments, and authorized lab or pentest workflows.
 
 ## Legal Notice
 
@@ -14,56 +14,27 @@ The scripts in `scripts/linux/pentest_*.sh`, `scan_wifi.sh`, and `stealth_post.s
 
 ```text
 .
-|-- .github/
-|   `-- workflows/
-|       |-- ai-refactor.yml
-|       `-- script-validation.yml
+|-- .github/workflows/
+|   |-- ai-refactor.yml
+|   `-- script-validation.yml
 |-- docs/
-|   |-- codex-workspace-doctor.md
-|   |-- compatibility-matrix.md
-|   |-- demo-media.md
-|   |-- issue-backlog.md
-|   |-- portfolio.md
-|   `-- self-hosted-llm.md
 |-- examples/
 |-- scripts/
 |   |-- bash/
-|   |   `-- install_ia_souveraine.sh
 |   |-- linux/
-|   |   |-- check_dependencies.sh
-|   |   |-- dependencies.conf
-|   |   |-- pentest_discovery.sh
-|   |   |-- pentest_exploitation.sh
-|   |   |-- pentest_verification.sh
-|   |   |-- scan_wifi.sh
-|   |   |-- setup_api.sh
-|   |   `-- stealth_post.sh
 |   |-- powershell/
-|   |   |-- DiskUsageReport.ps1
-|   |   |-- ExchangeOnlineManagement.ps1
-|   |   |-- Get-SystemInfo.ps1
-|   |   |-- LinkCrawler.ps1
-|   |   |-- ManageServices.ps1
-|   |   |-- Optimize-CodexWorkspace.ps1
-|   |   |-- SecurityCheck.ps1
-|   |   |-- SharePointManagement.ps1
-|   |   |-- TeamsManagement.ps1
-|   |   |-- Test-ScriptSyntax.ps1
-|   |   |-- UserManagement.ps1
-|   |   `-- VMManagement.ps1
 |   |-- python/
-|   |   |-- Manage-CodexCostRouting.ps1
 |   |   |-- README.md
 |   |   |-- README_Codex_Cost_Routing.md
 |   |   |-- README_LLM_Bias_Multi_Agent.md
-|   |   |-- codex-cost-routing.cmd
 |   |   |-- codex_cost_router.py
+|   |   |-- codex_cost_profiles.py
 |   |   |-- litellm-cost-routing.yaml
 |   |   |-- mcp_server.py
-|   |   `-- requirements.txt
+|   |   |-- risk_adjusted_router.py
+|   |   |-- requirements.txt
+|   |   `-- tests/
 |   `-- tests/
-|       |-- Test-Optimize-CodexWorkspace.ps1
-|       `-- test-linux-safety.sh
 |-- AGENTS.md
 |-- CHANGELOG.md
 |-- LICENSE
@@ -89,8 +60,9 @@ Portfolio and maintenance docs:
 
 - PowerShell 5.1+ or PowerShell 7+ for Windows scripts.
 - Linux shell tools for Bash scripts.
-- Python 3.10+ and the optional `mcp[cli]` package for the MCP server.
-- Optional tools depending on the script: `nmap`, `gvm-cli`, `curl`, `gpg`, `pwsh`.
+- Python 3.10+ for Python utilities.
+- Python dependencies from `scripts/python/requirements.txt` for MCP, YAML policy parsing, and Python tests.
+- Optional tools depending on the script: `nmap`, `gvm-cli`, `curl`, `gpg`, `pwsh`, Docker, Ollama, Codex CLI, and LiteLLM.
 - Optional PowerShell modules: Hyper-V, ExchangeOnlineManagement, MicrosoftTeams, PnP.PowerShell.
 - Administrator or root privileges for scripts that manage services, users, VMs, network scans, or security settings.
 
@@ -99,14 +71,14 @@ Portfolio and maintenance docs:
 Validate PowerShell syntax:
 
 ```powershell
-.\scripts\powershell\Test-ScriptSyntax.ps1 -Path .\scripts\powershell
+.\scripts\powershell\Test-ScriptSyntax.ps1 -Path .\scripts
 ```
 
 Run PowerShell static analysis:
 
 ```powershell
 Install-Module -Name PSScriptAnalyzer -Scope CurrentUser
-Invoke-ScriptAnalyzer -Path .\scripts\powershell -Recurse -Settings .\PSScriptAnalyzerSettings.psd1
+Invoke-ScriptAnalyzer -Path .\scripts -Recurse -Settings .\PSScriptAnalyzerSettings.psd1
 ```
 
 Validate Bash syntax from Linux, WSL, Git Bash, or CI:
@@ -119,6 +91,14 @@ Run Bash static analysis:
 
 ```bash
 find scripts -name "*.sh" -print0 | xargs -0 shellcheck --severity=error
+```
+
+Validate Python syntax and tests:
+
+```powershell
+python -m pip install -r .\scripts\python\requirements.txt
+Get-ChildItem .\scripts\python -Filter *.py -Recurse | ForEach-Object { python -m py_compile $_.FullName }
+python -m unittest discover -s .\scripts\python\tests -v
 ```
 
 Check Linux dependencies:
@@ -165,12 +145,9 @@ bash scripts/linux/pentest_verification.sh --dry-run --yes-i-am-authorized
 bash scripts/linux/pentest_exploitation.sh --dry-run --yes-i-am-authorized
 ```
 
-Compatibility wrappers are also available at `scripts/pentest_discovery.sh`,
-`scripts/pentest_verification.sh`, and `scripts/pentest_exploitation.sh`. They
-forward arguments to the guarded implementations in `scripts/linux/`.
+Compatibility wrappers are also available at `scripts/pentest_discovery.sh`, `scripts/pentest_verification.sh`, and `scripts/pentest_exploitation.sh`. They forward arguments to the guarded implementations in `scripts/linux/`.
 
-Authorized pentest discovery can be run with explicit target, output, pacing,
-and parallelism controls:
+Authorized pentest discovery can be run with explicit target, output, pacing, and parallelism controls:
 
 ```bash
 bash scripts/linux/pentest_discovery.sh \
@@ -181,20 +158,7 @@ bash scripts/linux/pentest_discovery.sh \
   --yes-i-am-authorized
 ```
 
-The discovery script writes `discovery_summary.tsv` in the run directory and
-updates `pentest_results/latest` when the platform allows symlinks. Verification
-uses that latest run by default, preserves the original target values from the
-summary, can target a subset of hosts, and can skip heavier integrations when the
-lab does not have OpenVAS or Metasploit installed:
-
-```bash
-bash scripts/linux/pentest_verification.sh \
-  --results pentest_results/lab-run \
-  --host 192.0.2.10 \
-  --skip-openvas \
-  --skip-metasploit \
-  --yes-i-am-authorized
-```
+The discovery script writes `discovery_summary.tsv` in the run directory and updates `pentest_results/latest` when the platform allows symlinks. Verification uses that latest run by default, preserves the original target values from the summary, can target a subset of hosts, and can skip heavier integrations when the lab does not have OpenVAS or Metasploit installed.
 
 For `stealth_post.sh`, pass credentials through environment variables or a local config file that is never committed:
 
@@ -211,13 +175,9 @@ Sensitive Linux scripts require either an interactive `AUTHORIZED` confirmation 
 
 Use the safe placeholders in `examples/` for lab demos and documentation. Do not commit real targets, credentials, tenant identifiers, scan output, packet captures, or customer data.
 
-`install_ia_souveraine.sh` starts a local Open WebUI + Ollama stack in Docker.
-It keeps model and WebUI data in Docker volumes and supports conservative
-dry-run checks before installation. See
-[`docs/self-hosted-llm.md`](docs/self-hosted-llm.md) for usage, persistence,
-GPU behavior, and troubleshooting.
+`install_ia_souveraine.sh` starts a local Open WebUI + Ollama stack in Docker. It keeps model and WebUI data in Docker volumes and supports conservative dry-run checks before installation. See [`docs/self-hosted-llm.md`](docs/self-hosted-llm.md) for usage, persistence, GPU behavior, and troubleshooting.
 
-## MCP Server
+## Python Tools
 
 The read-only Python MCP server exposes tools to list, search, inspect, and validate scripts without executing them. It can also browse documentation and return a repository summary:
 
@@ -230,8 +190,9 @@ Connect an MCP client to `http://localhost:8000/mcp`. See [`scripts/python/READM
 
 The optional Codex cost router in `scripts/python/codex_cost_router.py` can compress one-shot prompts and route them through a self-hosted LiteLLM OSS proxy. See [`scripts/python/README_Codex_Cost_Routing.md`](scripts/python/README_Codex_Cost_Routing.md) and the short mode chooser in [`docs/codex-routing-modes.md`](docs/codex-routing-modes.md).
 
-The optional LLM review tool in `scripts/python/llm_bias_multi_agent.py` provides deterministic first-pass bias, fairness, and safeguard checks. See
-[`scripts/python/README_LLM_Bias_Multi_Agent.md`](scripts/python/README_LLM_Bias_Multi_Agent.md).
+The optional risk-adjusted router in `scripts/python/risk_adjusted_router.py` is experimental. It should stay bound to `127.0.0.1` and should not be exposed directly on a network without authentication and TLS.
+
+The optional LLM review tool in `scripts/python/llm_bias_multi_agent.py` provides deterministic first-pass bias, fairness, and safeguard checks. See [`scripts/python/README_LLM_Bias_Multi_Agent.md`](scripts/python/README_LLM_Bias_Multi_Agent.md).
 
 ## CI
 
@@ -242,6 +203,7 @@ The `script-validation.yml` workflow checks:
 - Bash syntax for every Linux shell script.
 - ShellCheck error-level findings.
 - Linux `--help` and `--dry-run` safety smoke tests.
+- Python dependencies, syntax for every Python file under `scripts/python`, and Python unit tests.
 - Dedicated script smoke tests in `scripts/tests/`.
 
 The AI refactor workflow is manual-only to avoid surprise API usage and automatic hourly write attempts.
