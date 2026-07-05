@@ -22,7 +22,7 @@ from urllib.parse import urlparse
 
 try:  # LiteLLM is optional during unit tests because calls are injected.
     import litellm
-except Exception:  # pragma: no cover - handled by dependency injection/tests
+except ImportError:  # pragma: no cover - handled by dependency injection/tests
     litellm = None  # type: ignore[assignment]
 
 
