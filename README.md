@@ -18,23 +18,50 @@ The scripts in `scripts/linux/pentest_*.sh`, `scan_wifi.sh`, and `stealth_post.s
 |   |-- ai-refactor.yml
 |   `-- script-validation.yml
 |-- docs/
+|   |-- codex-routing-modes.md
+|   |-- codex-workspace-doctor.md
+|   |-- compatibility-matrix.md
+|   |-- demo-media.md
+|   |-- issue-backlog.md
+|   |-- portfolio.md
+|   `-- self-hosted-llm.md
 |-- examples/
 |-- scripts/
 |   |-- bash/
+|   |   `-- install_ia_souveraine.sh
 |   |-- linux/
+|   |   |-- check_dependencies.sh
+|   |   |-- dependencies.conf
+|   |   |-- install_ollama_private_server.sh
+|   |   |-- pentest_discovery.sh
+|   |   |-- pentest_exploitation.sh
+|   |   |-- pentest_verification.sh
+|   |   |-- README.md
+|   |   |-- scan_wifi.sh
+|   |   |-- setup_api.sh
+|   |   `-- stealth_post.sh
 |   |-- powershell/
 |   |-- python/
 |   |   |-- README.md
 |   |   |-- README_Codex_Cost_Routing.md
 |   |   |-- README_LLM_Bias_Multi_Agent.md
-|   |   |-- codex_cost_router.py
+|   |   |-- codex-cost-routing.cmd
+|   |   |-- codex-routing-policy.yaml
 |   |   |-- codex_cost_profiles.py
+|   |   |-- codex_cost_router.py
+|   |   |-- codex_key_session_web.py
+|   |   |-- healthcheck-litellm-routes.ps1
 |   |   |-- litellm-cost-routing.yaml
 |   |   |-- mcp_server.py
-|   |   |-- risk_adjusted_router.py
 |   |   |-- requirements.txt
-|   |   `-- tests/
+|   |   |-- risk_adjusted_router.py
+|   |   |-- start_litellm_proxy.py
+|   |   |-- Test-CodexLiteLLMDispatch.ps1
+|   |   `-- Switch-CodexLiteLLM.ps1
 |   `-- tests/
+|       |-- Test-Optimize-CodexWorkspace.ps1
+|       |-- Test-Switch-CodexLiteLLM.ps1
+|       `-- test-linux-safety.sh
 |-- AGENTS.md
 |-- CHANGELOG.md
 |-- LICENSE
@@ -54,6 +81,8 @@ Portfolio and maintenance docs:
 - `docs/issue-backlog.md` contains ready-to-create GitHub issues.
 - `docs/codex-workspace-doctor.md` documents `Optimize-CodexWorkspace.ps1`.
 - `docs/self-hosted-llm.md` documents the local Open WebUI + Ollama installer.
+- `docs/codex-routing-modes.md` compares direct Codex, LiteLLM proxy, and
+  risk-adjusted router modes.
 - `CHANGELOG.md` tracks release notes.
 
 ## Prerequisites
@@ -117,6 +146,12 @@ Run the Codex Workspace Doctor smoke test:
 
 ```powershell
 .\scripts\tests\Test-Optimize-CodexWorkspace.ps1
+```
+
+Run the LiteLLM routing smoke test:
+
+```powershell
+.\scripts\tests\Test-Switch-CodexLiteLLM.ps1
 ```
 
 ## PowerShell Examples
@@ -188,7 +223,7 @@ python .\scripts\python\mcp_server.py
 
 Connect an MCP client to `http://localhost:8000/mcp`. See [`scripts/python/README.md`](scripts/python/README.md) for setup and inspector instructions.
 
-The optional Codex cost router in `scripts/python/codex_cost_router.py` can compress one-shot prompts and route them through a self-hosted LiteLLM OSS proxy. See [`scripts/python/README_Codex_Cost_Routing.md`](scripts/python/README_Codex_Cost_Routing.md) and the short mode chooser in [`docs/codex-routing-modes.md`](docs/codex-routing-modes.md).
+The optional Codex cost router in `scripts/python/codex_cost_router.py` can compress one-shot prompts and route them through a self-hosted LiteLLM OSS proxy. The surrounding tools manage session keys, local proxy status, route health checks, and risk-adjusted dispatch experiments. See [`scripts/python/README_Codex_Cost_Routing.md`](scripts/python/README_Codex_Cost_Routing.md), [`scripts/python/PRODUCTION_SECURITY_GOVERNANCE.md`](scripts/python/PRODUCTION_SECURITY_GOVERNANCE.md), and the short mode chooser in [`docs/codex-routing-modes.md`](docs/codex-routing-modes.md).
 
 The optional risk-adjusted router in `scripts/python/risk_adjusted_router.py` is experimental. It should stay bound to `127.0.0.1` and should not be exposed directly on a network without authentication and TLS.
 
@@ -207,6 +242,9 @@ The `script-validation.yml` workflow checks:
 - Dedicated script smoke tests in `scripts/tests/`.
 
 The AI refactor workflow is manual-only to avoid surprise API usage and automatic hourly write attempts.
+When a patch is generated, it must pass compile checks, Python unit discovery,
+PowerShell syntax validation, PSScriptAnalyzer, Bash syntax checks, and
+ShellCheck before a pull request is opened.
 
 ## License
 
