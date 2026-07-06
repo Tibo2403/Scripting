@@ -10,6 +10,8 @@ Use the pentest scripts only on systems where you have explicit written authoriz
 
 The scripts in `scripts/linux/pentest_*.sh`, `scan_wifi.sh`, and `stealth_post.sh` are intended for controlled labs, training environments, or sanctioned security assessments.
 
+For client deployments of self-hosted AI, LiteLLM, Ollama, Open WebUI, or LLM gateways, complete the pre-installation audit checklist before touching the customer environment: [`docs/client-preinstallation-audit.md`](docs/client-preinstallation-audit.md).
+
 ## Repository Structure
 
 ```text
@@ -18,6 +20,7 @@ The scripts in `scripts/linux/pentest_*.sh`, `scan_wifi.sh`, and `stealth_post.s
 |   |-- ai-refactor.yml
 |   `-- script-validation.yml
 |-- docs/
+|   |-- client-preinstallation-audit.md
 |   |-- codex-routing-modes.md
 |   |-- codex-workspace-doctor.md
 |   |-- compatibility-matrix.md
@@ -74,9 +77,10 @@ The scripts in `scripts/linux/pentest_*.sh`, `scan_wifi.sh`, and `stealth_post.s
 
 See `docs/compatibility-matrix.md` for OS support, privilege requirements, dependencies, risk level, and dry-run availability per script.
 
-Portfolio and maintenance docs:
+Portfolio, client-readiness, and maintenance docs:
 
 - `docs/portfolio.md` explains the repository in recruiter/client terms.
+- `docs/client-preinstallation-audit.md` is the standard client audit checklist to complete before installing a self-hosted AI, LiteLLM, Ollama, Open WebUI, or LLM gateway stack in a Belgian customer environment.
 - `docs/demo-media.md` lists screenshots and GIFs to capture.
 - `docs/issue-backlog.md` contains ready-to-create GitHub issues.
 - `docs/codex-workspace-doctor.md` documents `Optimize-CodexWorkspace.ps1`.
@@ -209,6 +213,8 @@ bash scripts/linux/stealth_post.sh --dry-run --yes-i-am-authorized
 Sensitive Linux scripts require either an interactive `AUTHORIZED` confirmation or the explicit `--yes-i-am-authorized` flag. Use `--dry-run` first to review planned scans, captures, or transfers.
 
 Use the safe placeholders in `examples/` for lab demos and documentation. Do not commit real targets, credentials, tenant identifiers, scan output, packet captures, or customer data.
+
+Before running a self-hosted AI installation for a customer, complete [`docs/client-preinstallation-audit.md`](docs/client-preinstallation-audit.md). The checklist helps confirm scope, RGPD constraints, security controls, infrastructure readiness, monitoring, rollback, and the final go/no-go decision.
 
 `install_ia_souveraine.sh` starts a local Open WebUI + Ollama stack in Docker. It keeps model and WebUI data in Docker volumes and supports conservative dry-run checks before installation. See [`docs/self-hosted-llm.md`](docs/self-hosted-llm.md) for usage, persistence, GPU behavior, and troubleshooting.
 
