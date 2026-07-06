@@ -208,8 +208,11 @@ requests approximate TTFT as total latency because the buffered upstream
 response does not expose the first generated token.
 
 Codex-facing aliases can retry remaining candidates on retryable provider
-failures. Direct probes such as `gemini-flash-direct` remain strict so API-key,
-model-name, and quota problems are visible instead of hidden by fallback.
+failures. For live validation, `healthcheck-litellm-routes.ps1` checks the
+current public Codex aliases: `codex-light`, `codex-default`,
+`codex-no-openai`, and `codex-qwen-local`. The local Qwen alias remains useful
+as a strict probe of the Ollama path so local availability problems are visible
+instead of hidden by remote fallback.
 
 Useful diagnostics:
 
@@ -458,6 +461,16 @@ Validate the local proxy aliases without making a paid/model call:
 .\scripts\python\Test-CodexLiteLLMDispatch.ps1
 ```
 
+Run a live authenticated route healthcheck while the proxy is running:
+
+```powershell
+.\scripts\python\healthcheck-litellm-routes.ps1
+```
+
+The live healthcheck reads the local proxy key from `LITELLM_API_KEY` or
+`%TEMP%\codex-litellm-proxy.key`, sends the bearer token to the local proxy, and
+prints only compact route status.
+
 Run a real minimal provider call after entering the relevant key in the local
 web page:
 
@@ -502,11 +515,13 @@ single proxy gateway to local Qwen, then stop it when the session is done:
 ```powershell
 .\scripts\python\Manage-CodexCostRouting.ps1 -Action Start -CodexProvider LiteLLM
 .\scripts\python\Test-CodexLiteLLMDispatch.ps1 -Model codex-qwen-local -Call
+.\scripts\python\healthcheck-litellm-routes.ps1
 .\scripts\python\Manage-CodexCostRouting.ps1 -Action Stop
 ```
 
 The normal final state for daily Codex work is `LiteLLM OSS : arrete` and
-`Codex profile : standard`.
+`Codex profile : standard`. After live tests, the proxy should be stopped and
+`%TEMP%\codex-litellm-proxy.key` should be absent.
 
 ## Optimized One-Shot Requests
 
@@ -553,8 +568,11 @@ Prompts and API keys are not logged.
 - `codex_key_session_web.py`: local-only web form for session keys.
 - `Start-CodexKeySessionWeb.ps1`: PowerShell launcher for the local key page.
 - `Test-CodexLiteLLMDispatch.ps1`: local proxy alias and optional call test.
+- `healthcheck-litellm-routes.ps1`: authenticated live healthcheck for the
+  current LiteLLM aliases and local Qwen fallback.
 - `start-litellm-proxy.ps1`: local LiteLLM starter with native strategy
   selection and optional risk-router startup.
+- `measure-litellm-dispatch.ps1`: repeated LiteLLM dispatch timing probe.
 - `risk_adjusted_router.py`: optional TTFT/tokens-per-second/in-flight-aware
   risk-adjusted front router.
 - `measure-risk-adjusted-dispatch.ps1`: non-streaming risk-router benchmark.

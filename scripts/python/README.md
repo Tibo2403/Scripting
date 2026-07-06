@@ -71,9 +71,12 @@ WebUI stack, see [`../../docs/codex-routing-modes.md`](../../docs/codex-routing-
 To enter OpenAI, Gemini, or Hugging Face keys through a local page for one
 session, run `Start-CodexKeySessionWeb.ps1` and open
 `http://127.0.0.1:8787/`. Keys are kept in memory for the LiteLLM subprocess
-and are not written to disk. Use `Test-CodexLiteLLMDispatch.ps1` to verify the
-local proxy aliases, or add `-Call -Model codex-hf-cheap` after entering a
-provider key to make one minimal dispatch request.
+and are not written to disk. Use `Test-CodexLiteLLMDispatch.ps1` for a quick
+proxy check, or `healthcheck-litellm-routes.ps1` for a live authenticated check
+of the current Codex aliases. Both scripts read the local proxy key from
+`LITELLM_API_KEY` or `%TEMP%\codex-litellm-proxy.key` and never print provider
+tokens. Add `-Call -Model codex-hf-cheap` after entering a provider key to make
+one minimal dispatch request.
 
 ## LLM Review Tools
 
