@@ -1,15 +1,42 @@
 $ErrorActionPreference = 'Stop'
 
 $baseUrl = 'http://127.0.0.1:4000'
+$apiKeyPath = Join-Path $env:TEMP 'codex-litellm-proxy.key'
 $ollamaUrl = 'http://127.0.0.1:11434/api/tags'
 $failures = 0
 
 function Pass($Message) { Write-Host "PASS $Message" }
 function Fail($Message) { $script:failures += 1; Write-Host "FAIL $Message" }
 
-function Invoke-JsonPost($Uri, $Body) {
-  Invoke-RestMethod -Method Post -Uri $Uri -ContentType 'application/json' -Body ($Body | ConvertTo-Json -Depth 8) -TimeoutSec 120
+function Get-LiteLlmApiKey {
+  if ($env:LITELLM_API_KEY) {
+    return $env:LITELLM_API_KEY
+  }
+  if (Test-Path -LiteralPath $apiKeyPath) {
+    return (Get-Content -LiteralPath $apiKeyPath -Raw).Trim()
+  }
+  return 'sk-local-codex'
 }
+
+function ConvertTo-ShortError {
+  param([object]$ErrorRecord)
+
+  $message = $ErrorRecord.Exception.Message
+  if ($ErrorRecord.ErrorDetails -and $ErrorRecord.ErrorDetails.Message) {
+    $message = $ErrorRecord.ErrorDetails.Message
+  }
+  if ($message.Length -gt 900) {
+    return $message.Substring(0, 900) + '...'
+  }
+  return $message
+}
+
+function Invoke-JsonPost($Uri, $Body) {
+  $headers = @{ Authorization = "Bearer $script:apiKey" }
+  Invoke-RestMethod -Method Post -Uri $Uri -Headers $headers -ContentType 'application/json' -Body ($Body | ConvertTo-Json -Depth 8) -TimeoutSec 120
+}
+
+$script:apiKey = Get-LiteLlmApiKey
 
 if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable('GEMINI_API_KEY', 'User'))) {
   Fail 'GEMINI_API_KEY missing from User environment'
@@ -38,9 +65,9 @@ try {
 
 $tests = @(
   @{ name = 'codex-light'; model = 'codex-light'; strictProvider = '' },
-  @{ name = 'gemini-flash-direct'; model = 'gemini-flash-direct'; strictProvider = 'gemini' },
-  @{ name = 'codex-qwen-local'; model = 'codex-qwen-local'; strictProvider = 'qwen' },
-  @{ name = 'codex-local-only'; model = 'codex-local-only'; strictProvider = 'qwen' }
+  @{ name = 'codex-default'; model = 'codex-default'; strictProvider = '' },
+  @{ name = 'codex-no-openai'; model = 'codex-no-openai'; strictProvider = '' },
+  @{ name = 'codex-qwen-local'; model = 'codex-qwen-local'; strictProvider = 'qwen' }
 )
 
 foreach ($test in $tests) {
@@ -59,13 +86,13 @@ foreach ($test in $tests) {
 
     if ($test.strictProvider -eq 'gemini' -and $returned -notmatch 'gemini') {
       Fail "$($test.name) expected Gemini provider returned=$returned seconds=$([math]::Round($sw.Elapsed.TotalSeconds, 2)) response=$text"
-    } elseif ($test.strictProvider -eq 'qwen' -and $returned -notmatch 'qwen|codex-qwen-local|codex-local-only') {
+    } elseif ($test.strictProvider -eq 'qwen' -and $returned -notmatch 'qwen|codex-qwen-local') {
       Fail "$($test.name) expected Qwen/local provider returned=$returned seconds=$([math]::Round($sw.Elapsed.TotalSeconds, 2)) response=$text"
     } else {
       Pass "$($test.name) model=$($test.model) returned=$returned seconds=$([math]::Round($sw.Elapsed.TotalSeconds, 2)) response=$text"
     }
   } catch {
-    Fail "$($test.name) error=$($_.Exception.Message)"
+    Fail "$($test.name) error=$(ConvertTo-ShortError $_)"
   }
 }
 
