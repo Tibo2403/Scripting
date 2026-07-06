@@ -4,6 +4,7 @@ param(
     [string]$ApiKey = "",
     [string]$Model = "codex-default",
     [switch]$Call,
+    [switch]$AllowDefaultKey,
     [int]$TimeoutSec = 90
 )
 
@@ -26,6 +27,16 @@ if (-not $ApiKey) {
     }
 }
 
+if ($Call -and $apiKeySource -eq "default" -and -not $AllowDefaultKey) {
+    [pscustomobject]@{
+        ok = $false
+        base_url = $BaseUrl
+        api_key_source = $apiKeySource
+        error = "Live calls require LITELLM_API_KEY, %TEMP%\codex-litellm-proxy.key, -ApiKey, or explicit -AllowDefaultKey."
+    } | ConvertTo-Json -Depth 4
+    exit 2
+}
+
 $headers = @{
     "Authorization" = "Bearer $ApiKey"
     "Content-Type" = "application/json"
@@ -42,6 +53,24 @@ function ConvertTo-ShortError {
         return $message.Substring(0, 900) + "..."
     }
     return $message
+}
+
+function Get-DispatchErrorKind {
+    param([string]$Message)
+
+    if ($Message -match 'RESOURCE_EXHAUSTED|RateLimitError|quota|429') {
+        return 'provider_rate_limited'
+    }
+    if ($Message -match 'AuthenticationError|401|403|invalid.*key|api.?key') {
+        return 'provider_auth_failed'
+    }
+    if ($Message -match 'Connection error|Unable to connect|No connection could be made|connection refused') {
+        return 'provider_unreachable'
+    }
+    if ($Message -match 'Not allowed to POST|BadRequestError') {
+        return 'provider_incompatible'
+    }
+    return 'provider_error'
 }
 
 $models = Invoke-RestMethod -Uri "$BaseUrl/models" -Headers $headers -Method Get -TimeoutSec 10
@@ -93,17 +122,26 @@ if ($Call) {
         }
     }
     catch {
+        $shortError = ConvertTo-ShortError $_
         $callResult = [pscustomobject]@{
             ok = $false
-            error = ConvertTo-ShortError $_
+            kind = Get-DispatchErrorKind -Message $shortError
+            error = $shortError
         }
     }
 }
 
+$proxyOk = ($missingAliases.Count -eq 0 -and -not $health.health_error)
+$providersOk = (-not $Call -or ($callResult -and $callResult.ok))
+
 [pscustomobject]@{
-    ok = ($missingAliases.Count -eq 0 -and (-not $Call -or ($callResult -and $callResult.ok)))
+    ok = ($proxyOk -and $providersOk)
+    proxy_ok = $proxyOk
+    providers_ok = $providersOk
+    timestamp_utc = (Get-Date).ToUniversalTime().ToString("o")
     base_url = $BaseUrl
     api_key_source = $apiKeySource
+    live_call_enabled = [bool]$Call
     aliases_present = @($requiredAliases | Where-Object { $modelIds -contains $_ })
     aliases_missing = $missingAliases
     healthy_count = $health.healthy_count

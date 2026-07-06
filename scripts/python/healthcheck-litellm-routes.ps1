@@ -1,3 +1,8 @@
+[CmdletBinding()]
+param(
+  [switch]$AllowDefaultKey
+)
+
 $ErrorActionPreference = 'Stop'
 
 $baseUrl = 'http://127.0.0.1:4000'
@@ -14,6 +19,9 @@ function Get-LiteLlmApiKey {
   }
   if (Test-Path -LiteralPath $apiKeyPath) {
     return (Get-Content -LiteralPath $apiKeyPath -Raw).Trim()
+  }
+  if (-not $AllowDefaultKey) {
+    throw 'Live healthcheck requires LITELLM_API_KEY, %TEMP%\codex-litellm-proxy.key, or explicit -AllowDefaultKey.'
   }
   return 'sk-local-codex'
 }

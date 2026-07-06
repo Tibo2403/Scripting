@@ -480,7 +480,34 @@ web page:
 .\scripts\python\Test-CodexLiteLLMDispatch.ps1 -Model codex-default -Call
 ```
 
-The test prints a compact JSON result and never prints provider tokens.
+The test prints a compact JSON result and never prints provider tokens. Live
+calls now require a session proxy key from `LITELLM_API_KEY`,
+`%TEMP%\codex-litellm-proxy.key`, or `-ApiKey`. Use `-AllowDefaultKey` only for
+a deliberately unsecured local dev proxy.
+
+Read `proxy_ok` as the local proxy and alias-dispatch result. Read
+`providers_ok` as the live backend result; it can be false when a provider is
+rate-limited, unavailable, or incompatible even though the local proxy is fine.
+The live route healthcheck follows the same key rule; pass `-AllowDefaultKey`
+only when intentionally testing an unsecured local dev proxy.
+
+Minimal live dispatch loop:
+
+```powershell
+.\scripts\python\Manage-CodexCostRouting.ps1 -Action Start -CodexProvider LiteLLM
+.\scripts\python\Test-CodexLiteLLMDispatch.ps1
+.\scripts\python\Test-CodexLiteLLMDispatch.ps1 -Model codex-default -Call
+.\scripts\python\healthcheck-litellm-routes.ps1
+.\scripts\python\Manage-CodexCostRouting.ps1 -Action Stop
+```
+
+Expected final state after testing:
+
+```text
+LiteLLM OSS : arrete
+Codex profile : standard
+%TEMP%\codex-litellm-proxy.key absent
+```
 
 ## Verification Checklist
 
