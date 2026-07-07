@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 
 $root = 'C:\Users\user\.codex\litellm-proxy'
 $python = 'C:\Users\user\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe'
-$expectedLiteLLMVersion = '1.90.0'
+$expectedLiteLLMVersion = '1.91.0'
 $launcher = Join-Path $root 'start_litellm_proxy.py'
 $baseConfig = Join-Path $root 'config.yaml'
 $runtimeConfig = Join-Path $root 'config.runtime.yaml'

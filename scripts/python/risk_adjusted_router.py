@@ -11,6 +11,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from adaptive_token_pressure_router import (
+    choose_adaptive_route,
+    estimate_prompt_tokens as estimate_pressure_tokens,
+    markov_overload_risk,
+    update_pressure_state,
+)
+
 
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "risk-router-state.json"
@@ -37,6 +44,7 @@ MODEL_PROFILE = {
         "ttft": 900.0,
         "tokens_per_second": 45.0,
         "tpm_limit": 250_000,
+        "rpm_limit": 60,
         "max_in_flight": 2,
     },
     "gemini-pro-direct": {
@@ -45,6 +53,7 @@ MODEL_PROFILE = {
         "ttft": 1600.0,
         "tokens_per_second": 28.0,
         "tpm_limit": 100_000,
+        "rpm_limit": 30,
         "max_in_flight": 1,
     },
     "codex-qwen-local": {
@@ -53,6 +62,7 @@ MODEL_PROFILE = {
         "ttft": 1400.0,
         "tokens_per_second": 18.0,
         "tpm_limit": 1_000_000,
+        "rpm_limit": 120,
         "max_in_flight": 1,
     },
     "codex-local-only": {
@@ -61,6 +71,7 @@ MODEL_PROFILE = {
         "ttft": 1400.0,
         "tokens_per_second": 18.0,
         "tpm_limit": 1_000_000,
+        "rpm_limit": 120,
         "max_in_flight": 1,
     },
 }
@@ -146,6 +157,7 @@ def profile_for(model: str) -> dict[str, float]:
             "ttft": 1500.0,
             "tokens_per_second": 25.0,
             "tpm_limit": 250_000,
+            "rpm_limit": 60,
             "max_in_flight": 1,
         },
     )
@@ -164,7 +176,11 @@ def ensure_model_state(state: dict[str, Any], model: str) -> dict[str, Any]:
             "ewma_queue_depth": 0.0,
             "ewma_error_rate": 0.0,
             "ewma_token_pressure": 0.0,
+            "ewma_rpm_pressure": 0.0,
+            "ewma_tpm": 0.0,
+            "ewma_rpm": 0.0,
             "ewma_response_tokens": 0.0,
+            "markov_overloaded": 0.0,
             "hard_limited_until": 0.0,
             "hard_limit_reason": None,
             "last_status": None,
@@ -260,10 +276,33 @@ def soft_risks_for(state: dict[str, Any], candidates: list[str]) -> dict[str, fl
     return out
 
 
-def choose_model(state: dict[str, Any], requested_model: str) -> tuple[str, list[Choice]]:
+def adaptive_metrics_for(state: dict[str, Any], candidates: list[str]) -> dict[str, dict[str, float]]:
+    out = {}
+    for model in candidates:
+        profile = profile_for(model)
+        metrics = ensure_model_state(state, model)
+        out[model] = {
+            **profile,
+            **metrics,
+            "in_flight": get_in_flight(model),
+        }
+    return out
+
+
+def choose_model(
+    state: dict[str, Any],
+    requested_model: str,
+    prompt_token_estimate: int,
+    dry_run: bool = False,
+) -> tuple[str, list[Choice], dict[str, Any]]:
     candidates = ROUTE_CANDIDATES.get(requested_model)
     if not candidates:
-        return requested_model, []
+        return requested_model, [], {
+            "dry_run": dry_run,
+            "selected_model": requested_model,
+            "scores": [],
+            "reason": "direct-model",
+        }
 
     hard_reasons = {model: hard_limit_for(state, model) for model in candidates}
     eligible = [model for model in candidates if not hard_reasons[model]]
@@ -297,14 +336,21 @@ def choose_model(state: dict[str, Any], requested_model: str) -> tuple[str, list
             )
         )
     choices.sort(key=lambda item: (item.hard_limited, item.risk))
-    return selected, choices
+
+    pressure_decision = choose_adaptive_route(
+        scoring_candidates,
+        adaptive_metrics_for(state, scoring_candidates),
+        prompt_tokens=prompt_token_estimate,
+        response_tokens=0,
+        in_flight={model: get_in_flight(model) for model in scoring_candidates},
+        dry_run=dry_run,
+    )
+    selected = str(pressure_decision.get("selected_model") or selected)
+    return selected, choices, pressure_decision
 
 
 def estimate_prompt_tokens(payload: dict[str, Any]) -> int:
-    text = ""
-    for message in payload.get("messages", []):
-        text += str(message.get("content", "")) + " "
-    return max(1, len(text) // 4 + int(payload.get("max_tokens") or 0))
+    return estimate_pressure_tokens(payload)
 
 
 def extract_completion_tokens(body: bytes) -> int:
@@ -337,7 +383,6 @@ def update_metrics(
     error: str | None,
 ) -> None:
     metrics = ensure_model_state(state, model)
-    profile = profile_for(model)
     metrics["calls"] += 1
     metrics["successes"] += 1 if ok else 0
     metrics["failures"] += 0 if ok else 1
@@ -357,10 +402,14 @@ def update_metrics(
     if ok and response_tokens > 0:
         metrics["ewma_response_tokens"] = ewma(float(metrics.get("ewma_response_tokens", 0.0)), response_tokens)
 
-    pressure_sample = min(1.0, prompt_token_estimate / max(float(profile["tpm_limit"]), 1.0))
-    if status == 429:
-        pressure_sample = 1.0
-    metrics["ewma_token_pressure"] = ewma(float(metrics["ewma_token_pressure"]), pressure_sample)
+    update_pressure_state(
+        metrics,
+        prompt_tokens=prompt_token_estimate,
+        response_tokens=response_tokens,
+        status=status,
+        queue_depth=queue_depth,
+    )
+    metrics["markov_overloaded"] = markov_overload_risk(metrics)
 
     if status in HARD_LIMIT_STATUS_SECONDS:
         metrics["hard_limited_until"] = now() + HARD_LIMIT_STATUS_SECONDS[status]
@@ -429,18 +478,33 @@ class Handler(BaseHTTPRequestHandler):
             return
         self.handle_json_chat(payload)
 
-    def route_order(self, payload: dict[str, Any]) -> tuple[str, str, list[Choice], list[str]]:
+    def route_order(self, payload: dict[str, Any]) -> tuple[str, str, list[Choice], list[str], dict[str, Any], int]:
         requested = str(payload.get("model", "codex-default"))
+        prompt_token_estimate = estimate_prompt_tokens(payload)
+        dry_run = bool(payload.get("dry_run"))
         state = load_state()
-        selected, choices = choose_model(state, requested)
+        selected, choices, pressure_decision = choose_model(state, requested, prompt_token_estimate, dry_run=dry_run)
         ordered = [selected] + [choice.model for choice in choices if choice.model != selected and not choice.hard_limited]
         if not choices:
             ordered = [selected]
-        return requested, selected, choices, ordered[:3]
+        return requested, selected, choices, ordered[:3], pressure_decision, prompt_token_estimate
 
     def handle_json_chat(self, payload: dict[str, Any]) -> None:
-        requested, selected, choices, ordered = self.route_order(payload)
-        prompt_token_estimate = estimate_prompt_tokens(payload)
+        requested, selected, choices, ordered, pressure_decision, prompt_token_estimate = self.route_order(payload)
+        if payload.get("dry_run") is True:
+            self.record_request(requested, selected, [], choices, pressure_decision)
+            self.send_json(
+                200,
+                {
+                    "dry_run": True,
+                    "requested_model": requested,
+                    "selected_model": selected,
+                    "route_order": ordered,
+                    "prompt_token_estimate": prompt_token_estimate,
+                    "adaptive_token_pressure": pressure_decision,
+                },
+            )
+            return
 
         last_body = b""
         last_status = 502
@@ -494,12 +558,11 @@ class Handler(BaseHTTPRequestHandler):
             last_status = status
             last_headers = headers
 
-        self.record_request(requested, selected, attempts, choices)
+        self.record_request(requested, selected, attempts, choices, pressure_decision)
         self.write_proxy_response(last_status, last_headers, last_body, requested, selected, attempts)
 
     def handle_streaming_chat(self, payload: dict[str, Any]) -> None:
-        requested, selected, choices, ordered = self.route_order(payload)
-        prompt_token_estimate = estimate_prompt_tokens(payload)
+        requested, selected, choices, ordered, pressure_decision, prompt_token_estimate = self.route_order(payload)
         attempts = []
         last_status = 502
         last_headers: list[tuple[str, str]] = []
@@ -555,7 +618,7 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 if candidate != ordered[-1] and last_status in RETRYABLE_STATUSES:
                     continue
-                self.record_request(requested, selected, attempts, choices)
+                self.record_request(requested, selected, attempts, choices, pressure_decision)
                 self.write_proxy_response(last_status, last_headers, last_body, requested, selected, attempts)
                 return
 
@@ -614,7 +677,7 @@ class Handler(BaseHTTPRequestHandler):
                         None,
                     )
                 )
-                self.record_request(requested, selected, attempts, choices)
+                self.record_request(requested, selected, attempts, choices, pressure_decision)
                 return
             finally:
                 response.close()
@@ -626,6 +689,7 @@ class Handler(BaseHTTPRequestHandler):
         selected: str,
         attempts: list[dict[str, Any]],
         choices: list[Choice],
+        pressure_decision: dict[str, Any] | None = None,
     ) -> None:
         update_state(
             lambda state: append_request(
@@ -636,6 +700,7 @@ class Handler(BaseHTTPRequestHandler):
                     "selected_model": selected,
                     "attempts": attempts,
                     "choices": [choice.__dict__ for choice in choices],
+                    "adaptive_token_pressure": pressure_decision or {},
                 },
             )
         )
@@ -718,6 +783,10 @@ def summarize_state(state: dict[str, Any]) -> dict[str, Any]:
             "in_flight": get_in_flight(model),
             "ewma_error_rate": round(float(metrics.get("ewma_error_rate", 0)), 4),
             "ewma_token_pressure": round(float(metrics.get("ewma_token_pressure", 0)), 4),
+            "ewma_rpm_pressure": round(float(metrics.get("ewma_rpm_pressure", 0)), 4),
+            "ewma_tpm": round(float(metrics.get("ewma_tpm", 0)), 2),
+            "ewma_rpm": round(float(metrics.get("ewma_rpm", 0)), 2),
+            "markov_overloaded": round(float(metrics.get("markov_overloaded", 0)), 4),
             "ewma_response_tokens": round(float(metrics.get("ewma_response_tokens", 0)), 2),
             "hard_limited": hard_limited_until > now(),
             "hard_limited_remaining_s": max(0, int(hard_limited_until - now())),
@@ -726,7 +795,7 @@ def summarize_state(state: dict[str, Any]) -> dict[str, Any]:
             "last_error": metrics.get("last_error"),
         }
     return {
-        "strategy": "hard-limits + softmax(-soft_risk/tau)",
+        "strategy": "hard-limits + adaptive token pressure score",
         "soft_score_weights": SOFT_WEIGHTS,
         "temperature": TEMPERATURE,
         "hard_limits": {

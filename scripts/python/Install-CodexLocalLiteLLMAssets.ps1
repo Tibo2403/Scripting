@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$LiteLLMVersion = '1.90.0',
+    [string]$LiteLLMVersion = '1.91.0',
     [switch]$SkipLiteLLMInstall
 )
 
@@ -34,6 +34,7 @@ $files = @(
     'status-litellm-proxy.ps1',
     'healthcheck-litellm-routes.ps1',
     'measure-litellm-dispatch.ps1',
+    'adaptive_token_pressure_router.py',
     'risk_adjusted_router.py',
     'start-risk-adjusted-router.ps1',
     'stop-risk-adjusted-router.ps1',

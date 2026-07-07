@@ -236,8 +236,59 @@ Key metrics:
 - `ewma_total_latency_ms`: full request duration.
 - `ewma_tokens_per_second`: generation speed after TTFT.
 - `ewma_queue_depth` and `in_flight`: current load pressure.
+- `ewma_token_pressure`, `ewma_rpm_pressure`, `ewma_tpm`, and `ewma_rpm`:
+  estimated token/minute and request/minute pressure.
+- `markov_overloaded`: lightweight overload probability inferred from recent
+  EWMA pressure and failures.
 - `hard_limited_remaining_s` and `hard_limit_reason`: temporary exclusions.
 - `soft_score_weights`: active scoring weights.
+
+### Adaptive token-pressure routing
+
+`adaptive_token_pressure_router.py` is a small, LiteLLM-independent scoring
+module used by the optional front router. It does not import or patch LiteLLM
+internals. The module estimates prompt size, TPM/RPM pressure, queue pressure,
+recent 429/error pressure, and cost. It then selects the candidate with the
+lowest combined score before the request is sent to the local LiteLLM proxy.
+
+This improves LiteLLM routing when several aliases are technically healthy but
+one provider is close to a free-tier or account-level token/request limit. The
+native proxy still owns model execution and provider compatibility; the front
+router only changes which existing LiteLLM alias is tried first, and keeps the
+remaining aliases as retry fallbacks.
+
+Enable it by starting the local proxy with the risk router:
+
+```powershell
+.\scripts\python\Install-CodexLocalLiteLLMAssets.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File `
+  $env:USERPROFILE\.codex\litellm-proxy\start-litellm-proxy.ps1 `
+  -EnableRiskRouter
+```
+
+Send OpenAI-compatible chat requests to `http://127.0.0.1:4001/v1/chat/completions`
+with one of the Codex aliases such as `codex-default`, `codex-light`, or
+`codex-no-openai`. For a no-call routing preview, add `dry_run: true` to the
+JSON body:
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:4001/v1/chat/completions `
+  -ContentType 'application/json' `
+  -Body (@{
+    model = 'codex-default'
+    dry_run = $true
+    messages = @(@{ role = 'user'; content = 'Preview the cheapest safe route' })
+  } | ConvertTo-Json -Depth 5)
+```
+
+Measure cost savings by comparing the selected model mix and provider billing
+before and after enabling the router. Locally, use
+`measure-risk-adjusted-dispatch.ps1`, `/dispatch/metrics`, and
+`/dispatch/state` to track selected aliases, EWMA cost, and fallback attempts.
+Measure avoided `429` errors by counting failed attempts with status `429` in
+`/dispatch/state` before and after enabling adaptive routing. A healthy change
+should show fewer 429 attempts, lower use of high-cost aliases for low-risk
+prompts, and stable or improved success rate.
 
 ## Optional Markov Adaptive Router
 
@@ -376,11 +427,12 @@ codex --profile cost-routing
 ```
 
 Install or update the local LiteLLM OSS proxy to the currently pinned stable
-PyPI release. As of 2026-06-29 this repository pins `litellm==1.90.0`:
+PyPI release. As of 2026-07-07 this repository pins `litellm[proxy]==1.91.0`
+and explicitly excludes `1.82.7` and `1.82.8`:
 
 ```powershell
 .\scripts\python\Install-CodexLocalLiteLLMAssets.ps1
-.\scripts\python\Manage-CodexCostRouting.ps1 -Action Update -LiteLLMVersion 1.90.0
+.\scripts\python\Manage-CodexCostRouting.ps1 -Action Update -LiteLLMVersion 1.91.0
 .\scripts\python\Manage-CodexCostRouting.ps1 -Action Status
 ```
 
@@ -390,7 +442,7 @@ the pinned stable version after checking PyPI/release notes.
 You can also update while starting the proxy:
 
 ```powershell
-.\scripts\python\Manage-CodexCostRouting.ps1 -Action Start -CodexProvider LiteLLM -UpdateLiteLLM -LiteLLMVersion 1.90.0
+.\scripts\python\Manage-CodexCostRouting.ps1 -Action Start -CodexProvider LiteLLM -UpdateLiteLLM -LiteLLMVersion 1.91.0
 ```
 
 The launcher automatically bypasses restrictive PowerShell execution policies
@@ -600,6 +652,8 @@ Prompts and API keys are not logged.
 - `start-litellm-proxy.ps1`: local LiteLLM starter with native strategy
   selection and optional risk-router startup.
 - `measure-litellm-dispatch.ps1`: repeated LiteLLM dispatch timing probe.
+- `adaptive_token_pressure_router.py`: LiteLLM-independent TPM/RPM, EWMA,
+  Markov overload, cost-aware scoring, and dry-run helper.
 - `risk_adjusted_router.py`: optional TTFT/tokens-per-second/in-flight-aware
   risk-adjusted front router.
 - `measure-risk-adjusted-dispatch.ps1`: non-streaming risk-router benchmark.
