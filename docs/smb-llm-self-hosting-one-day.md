@@ -317,7 +317,8 @@ temporary proxy key absent
 
 ## Day-One Deliverables
 
-Create these artifacts for the SMB:
+Create these artifacts for the SMB. Ready-to-copy templates are available in
+`docs/smb-llm-pilot/`:
 
 - `LLM_ALLOWED_USE.md`: allowed, review-first, and blocked use cases;
 - `LLM_OPERATIONS.md`: start, stop, status, healthcheck, and rollback commands;

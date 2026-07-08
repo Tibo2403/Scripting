@@ -86,6 +86,8 @@ Portfolio, client-readiness, and maintenance docs:
 - `docs/issue-backlog.md` contains ready-to-create GitHub issues.
 - `docs/codex-workspace-doctor.md` documents `Optimize-CodexWorkspace.ps1`.
 - `docs/self-hosted-llm.md` documents the local Open WebUI + Ollama installer.
+- `docs/smb-llm-self-hosting-one-day.md` and `docs/smb-llm-pilot/` provide a
+  one-day SMB LiteLLM/Ollama setup runbook with fill-in pilot templates.
 - `docs/codex-routing-modes.md` compares direct Codex, LiteLLM proxy, and
   risk-adjusted router modes.
 - `CHANGELOG.md` tracks release notes.
