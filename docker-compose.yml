@@ -1,0 +1,40 @@
+services:
+  litellm-gateway:
+    image: ghcr.io/berriai/litellm:main-latest
+    profiles:
+      - app-stack
+    env_file:
+      - .env
+    ports:
+      - "4000:4000"
+    command: ["--host", "0.0.0.0", "--port", "4000"]
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    profiles:
+      - local-llm
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    profiles:
+      - app-stack
+    ports:
+      - "3000:8080"
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+    volumes:
+      - open-webui-data:/app/backend/data
+    depends_on:
+      - ollama
+    restart: unless-stopped
+
+volumes:
+  ollama-data:
+  open-webui-data:
+

@@ -1,0 +1,11 @@
+---
+- name: Prepare existing server for the 1 Day Implementation stack
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Show placeholder purpose
+      ansible.builtin.debug:
+        msg: "Placeholder playbook: extend with reviewed Docker, firewall, logging, and validation tasks."
+

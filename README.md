@@ -115,6 +115,20 @@ Fast path without Codex:
 .\1-day-implementation\scripts\validate_installation.ps1
 ```
 
+Deployment modes can be selected without making OpenClaw permanent:
+
+- `Local` for the quickest manual host setup.
+- `DockerCompose` for the portable app stack in [`docker-compose.yml`](docker-compose.yml).
+- `Ansible` for existing OVH, Hetzner, or customer Linux servers in [`ansible/`](ansible/).
+- `AWS` for automatic cloud provisioning notes in [`infra/aws/`](infra/aws/).
+- `Azure` for automatic cloud provisioning notes in [`infra/azure/`](infra/azure/).
+
+Example:
+
+```powershell
+.\1-day-implementation\scripts\install.ps1 -Mode DockerCompose -NoCodex
+```
+
 ## Prerequisites
 
 - PowerShell 5.1+ or PowerShell 7+ for Windows scripts.

@@ -34,6 +34,28 @@ The fast path is:
 .\1-day-implementation\scripts\validate_installation.ps1
 ```
 
+## Deployment Method Options
+
+OpenClaw may choose a deployment method for the day-one workflow, then hand off
+to normal repository scripts and documentation:
+
+- `Local`: quick manual setup on the current host.
+- `DockerCompose`: portable application stack from `docker-compose.yml`.
+- `Ansible`: existing Linux server such as OVH, Hetzner, or a customer VM.
+- `AWS`: automatic cloud provisioning under `infra/aws/`.
+- `Azure`: automatic cloud provisioning under `infra/azure/`.
+
+Use the router prompt in
+`1-day-implementation/prompts/deployment-method-router.md` to pick the smallest
+method that fits the customer context. AWS and Azure should be selected only
+when cloud infrastructure must be provisioned automatically.
+
+Example:
+
+```powershell
+.\1-day-implementation\scripts\install.ps1 -Mode DockerCompose -NoCodex
+```
+
 ## Boundaries
 
 OpenClaw must not:
@@ -61,3 +83,10 @@ OpenClaw can be removed from the workflow when:
 - validation scripts run cleanly;
 - the final report is complete;
 - the client or operator can repeat the installation using repository files only.
+
+## Resume Tomorrow
+
+If the installation work continues later, restart from
+`1-day-implementation/reports/installation-report.md`. The "Tomorrow Resume
+Checkpoint" section lists the current deployment options, the quickest commands
+to rerun, and the next recommended implementation steps.
