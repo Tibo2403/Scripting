@@ -35,6 +35,32 @@ function Get-PythonPath {
     throw 'Python 3.10+ est introuvable.'
 }
 
+function Invoke-PythonCommand {
+    param(
+        [Parameter(Mandatory)]
+        [string]$PythonExecutable,
+
+        [Parameter(ValueFromRemainingArguments)]
+        [string[]]$Arguments
+    )
+
+    $previousUtf8 = $env:PYTHONUTF8
+    $resetUtf8 = $false
+    if ($previousUtf8 -and ($previousUtf8 -notmatch '^(0|1)$')) {
+        $env:PYTHONUTF8 = '1'
+        $resetUtf8 = $true
+    }
+
+    try {
+        & $PythonExecutable @Arguments
+    }
+    finally {
+        if ($resetUtf8) {
+            $env:PYTHONUTF8 = $previousUtf8
+        }
+    }
+}
+
 function Test-ProxyPort {
     $client = [System.Net.Sockets.TcpClient]::new()
     try {
@@ -102,7 +128,7 @@ function Get-LiteLLMVersion {
         return $null
     }
 
-    $showOutput = & $pythonPath -m pip show litellm 2>$null
+    $showOutput = Invoke-PythonCommand $pythonPath -m pip show litellm 2>$null
     if ($LASTEXITCODE -ne 0) {
         return $null
     }
@@ -124,7 +150,7 @@ function Install-LiteLLM {
 
     $venvHealthy = $false
     if (Test-Path -LiteralPath $pythonPath) {
-        & $pythonPath -c "print('ok')" 1>$null 2>$null
+        Invoke-PythonCommand $pythonPath -c "print('ok')" 1>$null 2>$null
         $venvHealthy = ($LASTEXITCODE -eq 0)
     }
 
@@ -135,7 +161,7 @@ function Install-LiteLLM {
         }
         Write-Host "Installation locale de LiteLLM OSS dans $venvPath..."
         New-Item -ItemType Directory -Path (Split-Path -Parent $venvPath) -Force | Out-Null
-        & (Get-PythonPath) -m venv $venvPath
+        Invoke-PythonCommand (Get-PythonPath) -m venv $venvPath
         if ($LASTEXITCODE -ne 0) {
             throw 'Echec de creation du venv LiteLLM OSS.'
         }
@@ -151,7 +177,7 @@ function Install-LiteLLM {
         "litellm[proxy]==$LiteLLMVersion"
     }
 
-    & $pythonPath -m pip install --upgrade $packageSpec
+    Invoke-PythonCommand $pythonPath -m pip install --upgrade $packageSpec
     if ($LASTEXITCODE -ne 0) {
         throw 'Echec de installation ou de mise a jour de LiteLLM OSS.'
     }
@@ -228,7 +254,7 @@ function Stop-Router {
     }
 
     Remove-ProxyFiles
-    & (Get-PythonPath) $routerPath disable | Out-Host
+    Invoke-PythonCommand (Get-PythonPath) $routerPath disable | Out-Host
     Remove-SessionSecrets
 }
 
@@ -262,7 +288,7 @@ function Start-Router {
                 throw "LiteLLM s'est arrete pendant le demarrage. Consultez $stderrPath."
             }
             if (Test-ProxyPort) {
-                & (Get-PythonPath) $routerPath enable | Out-Host
+                Invoke-PythonCommand (Get-PythonPath) $routerPath enable | Out-Host
                 if ($LASTEXITCODE -ne 0) {
                     throw 'Le profil Codex cost-routing ne peut pas etre active.'
                 }
@@ -298,7 +324,7 @@ function Show-Status {
     else {
         Write-Host 'LiteLLM version : non installe'
     }
-    & (Get-PythonPath) $routerPath status
+    Invoke-PythonCommand (Get-PythonPath) $routerPath status
 }
 
 switch ($Action) {
@@ -311,13 +337,13 @@ switch ($Action) {
         }
         elseif ($CodexProvider -eq 'HuggingFace') {
             Set-HuggingFaceSessionSecrets
-            & (Get-PythonPath) $routerPath enable | Out-Host
+            Invoke-PythonCommand (Get-PythonPath) $routerPath enable | Out-Host
             try {
                 Write-Host 'Lancement de Codex avec le profil cost-routing-hf...'
                 & $CodexPath --profile cost-routing-hf
             }
             finally {
-                & (Get-PythonPath) $routerPath disable | Out-Host
+                Invoke-PythonCommand (Get-PythonPath) $routerPath disable | Out-Host
                 Remove-SessionSecrets
             }
         }
@@ -341,7 +367,7 @@ switch ($Action) {
         }
         elseif ($CodexProvider -eq 'HuggingFace') {
             Set-HuggingFaceSessionSecrets
-            & (Get-PythonPath) $routerPath enable | Out-Host
+            Invoke-PythonCommand (Get-PythonPath) $routerPath enable | Out-Host
             Write-Host 'Profil cost-routing-hf active.'
             Write-Host 'Lancez Codex avec: codex --profile cost-routing-hf'
             Write-Host "Arret: .\scripts\python\Manage-CodexCostRouting.ps1 -Action Stop"
