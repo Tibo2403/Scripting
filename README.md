@@ -95,6 +95,26 @@ Portfolio, client-readiness, and maintenance docs:
   risk-adjusted router modes.
 - `CHANGELOG.md` tracks release notes.
 
+## Temporary OpenClaw Orchestration
+
+OpenClaw can be used during the 1 Day Implementation setup only to coordinate
+the workflow: split tasks, call Codex for implementation, run validation
+scripts, check test results, and prepare the final report. It is documented in
+[`OPENCLAW_TEMP_ORCHESTRATOR.md`](OPENCLAW_TEMP_ORCHESTRATOR.md), with prompts
+and placeholders under [`1-day-implementation/`](1-day-implementation/).
+
+After installation, the project must remain usable without OpenClaw. Do not add
+OpenClaw as a permanent runtime dependency or architecture requirement.
+
+Fast path without Codex:
+
+```powershell
+.\1-day-implementation\scripts\audit_repo.ps1
+.\1-day-implementation\scripts\install.ps1 -NoCodex
+.\1-day-implementation\scripts\run_tests.ps1
+.\1-day-implementation\scripts\validate_installation.ps1
+```
+
 ## Prerequisites
 
 - PowerShell 5.1+ or PowerShell 7+ for Windows scripts.
