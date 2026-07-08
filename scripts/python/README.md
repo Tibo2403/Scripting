@@ -92,6 +92,12 @@ API, such as the local LiteLLM proxy, for a defensive remediation plan. It
 checks selected TCP ports, basic HTTP security headers, and TLS certificate
 metadata. It does not exploit services or brute-force credentials.
 
+The scanner now includes local AI-style triage even when `--no-ai` is used:
+each finding receives a `priority_score`, triage tags, a day-one action, and a
+verification step. Use `--business-context`, `--data-class`, and `--exposure`
+to make the report easier to use during a client audit without hardcoding a
+specific cloud provider or LiteLLM deployment.
+
 Preview a scan without network activity:
 
 ```powershell
@@ -99,6 +105,9 @@ python .\scripts\python\ai_server_security_scan.py `
   --target example.com `
   --ports 80,443,8080 `
   --dry-run `
+  --business-context production-smb `
+  --data-class personal-data `
+  --exposure internet `
   --no-ai
 ```
 
@@ -110,6 +119,9 @@ python .\scripts\python\ai_server_security_scan.py `
   --ports 22,80,443,3389 `
   --yes-i-am-authorized `
   --markdown `
+  --business-context production-smb `
+  --data-class personal-data `
+  --exposure internet `
   --no-ai
 ```
 
@@ -122,10 +134,23 @@ python .\scripts\python\ai_server_security_scan.py `
   --ports 22,80,443 `
   --yes-i-am-authorized `
   --markdown `
+  --business-context production-smb `
+  --data-class personal-data `
+  --exposure internet `
   --ai-endpoint http://127.0.0.1:4000/v1 `
   --ai-model codex-default `
   --ai-api-key-env LITELLM_API_KEY
 ```
+
+Recommended 1-day audit flow:
+
+1. Start with `--dry-run --no-ai` to validate scope and ports with the client.
+2. Run the authorized scan with `--markdown --no-ai` to get a stable baseline
+   that does not depend on an external model.
+3. If LiteLLM or another OpenAI-compatible endpoint is available, rerun without
+   `--no-ai` to add the model-generated remediation plan.
+4. After firewall, header, or TLS changes, rerun the same command and compare
+   `priority_score`, open ports, and the before/after Markdown reports.
 
 ## Client Cloud EU Audit
 

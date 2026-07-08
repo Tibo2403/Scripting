@@ -56,6 +56,10 @@ SECURITY_HEADERS = {
     "x-frame-options": "Add clickjacking protection or CSP frame-ancestors.",
     "referrer-policy": "Add Referrer-Policy.",
 }
+SEVERITY_SCORE = {"info": 10, "low": 25, "medium": 50, "high": 75, "critical": 95}
+ADMIN_PORTS = {22, 2375, 2376, 3389, 5900}
+DATASTORE_PORTS = {1433, 1521, 3306, 5432, 6379, 9200, 9300, 11211, 27017}
+MAIL_PORTS = {25, 110, 143, 465, 587, 993, 995}
 
 
 @dataclass
@@ -263,6 +267,112 @@ def local_findings(
     return findings
 
 
+def classify_finding(finding: dict[str, str], exposure: str) -> dict[str, Any]:
+    title = finding.get("title", "")
+    evidence = finding.get("evidence", "")
+    severity = finding.get("severity", "info")
+    score = SEVERITY_SCORE.get(severity, 10)
+    tags: list[str] = []
+
+    port_match = re.search(r"\bport (\d+)\b", title, flags=re.IGNORECASE)
+    port = int(port_match.group(1)) if port_match else None
+    if port in ADMIN_PORTS:
+        tags.append("remote-admin")
+        score += 12
+    if port in DATASTORE_PORTS:
+        tags.append("data-store")
+        score += 15
+    if port in MAIL_PORTS:
+        tags.append("mail-service")
+        score += 6
+    if "missing http security header" in title.lower():
+        tags.append("web-hardening")
+    if "tls" in title.lower():
+        tags.append("tls")
+    if exposure == "internet":
+        score += 10
+        tags.append("internet-exposed")
+    elif exposure == "internal":
+        score -= 8
+        tags.append("internal-only")
+    if "unknown" in evidence.lower():
+        tags.append("needs-owner-confirmation")
+
+    score = max(0, min(100, score))
+    if score >= 85:
+        effort = "same-day containment"
+        first_day_action = "Restrict exposure immediately, then validate service ownership."
+    elif score >= 65:
+        effort = "same-day fix"
+        first_day_action = "Apply firewall or configuration hardening before expanding the pilot."
+    elif score >= 40:
+        effort = "planned quick win"
+        first_day_action = "Schedule a short hardening task and capture before/after evidence."
+    else:
+        effort = "monitor"
+        first_day_action = "Confirm the service is expected and keep it in the evidence log."
+
+    enriched = dict(finding)
+    enriched.update(
+        {
+            "priority_score": score,
+            "triage_tags": sorted(set(tags)),
+            "day_one_action": first_day_action,
+            "estimated_effort": effort,
+            "verification": "Re-run this scanner and compare the JSON/Markdown output after remediation.",
+        }
+    )
+    return enriched
+
+
+def enrich_findings(findings: list[dict[str, str]], exposure: str) -> list[dict[str, Any]]:
+    enriched = [classify_finding(finding, exposure) for finding in findings]
+    return sorted(enriched, key=lambda item: (-int(item["priority_score"]), item["title"]))
+
+
+def build_ai_triage(report: dict[str, Any]) -> dict[str, Any]:
+    findings = report.get("findings", [])
+    critical_or_high = [
+        finding
+        for finding in findings
+        if finding.get("severity") in {"critical", "high"} or finding.get("priority_score", 0) >= 75
+    ]
+    quick_wins = [
+        finding
+        for finding in findings
+        if finding.get("estimated_effort") in {"same-day fix", "planned quick win"}
+    ][:5]
+    open_ports = [item["port"] for item in report.get("ports", []) if item.get("status") == "open"]
+    return {
+        "risk_posture": "needs immediate containment" if critical_or_high else "manageable with hardening",
+        "open_port_count": len(open_ports),
+        "open_ports": open_ports,
+        "top_risks": critical_or_high[:5],
+        "quick_wins": quick_wins,
+        "recommended_next_scan": "Run again after firewall/header/TLS changes and compare priority_score deltas.",
+    }
+
+
+def build_local_remediation_plan(report: dict[str, Any]) -> str:
+    triage = report.get("ai_triage", {})
+    findings = report.get("findings", [])
+    if not findings:
+        return "No local findings from the selected checks. Keep the evidence and rerun after any infrastructure change."
+
+    lines = [
+        f"Local AI-style triage: {triage.get('risk_posture', 'unknown')}.",
+        "Day-one remediation order:",
+    ]
+    for index, finding in enumerate(findings[:7], start=1):
+        tags = ", ".join(finding.get("triage_tags", [])) or "general"
+        lines.append(
+            f"{index}. [{finding.get('priority_score', 0)}/100] "
+            f"{finding['title']} ({tags}) - {finding['day_one_action']}"
+        )
+    lines.append("Verification: rerun the scanner with the same ports and attach the before/after reports.")
+    return "\n".join(lines)
+
+
 def build_ai_prompt(report: dict[str, Any]) -> str:
     compact = json.dumps(report, indent=2, sort_keys=True)[:12000]
     return textwrap.dedent(
@@ -275,6 +385,10 @@ def build_ai_prompt(report: dict[str, Any]) -> str:
         - Prioritize business risk, quick wins, and verification steps.
         - Mention assumptions and missing evidence.
         - Keep recommendations practical for an SMB.
+        - Use the local priority_score and triage_tags, but correct them if the
+          evidence suggests a safer interpretation.
+        - Output sections: Executive summary, Day-one fixes, Follow-up backlog,
+          Evidence to collect, Verification commands.
 
         Scan JSON:
         {compact}
@@ -309,7 +423,11 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         f"- Generated: {report['generated_at']}",
         f"- Authorization confirmed: {report['authorization_confirmed']}",
+        f"- Exposure: {report.get('context', {}).get('exposure', 'unknown')}",
+        f"- Business context: {report.get('context', {}).get('business_context', 'unknown')}",
+        f"- Data class: {report.get('context', {}).get('data_class', 'unknown')}",
         f"- AI analysis: {'enabled' if report.get('ai_analysis') else 'disabled'}",
+        f"- Local triage: {report.get('ai_triage', {}).get('risk_posture', 'not available')}",
         "",
         "## Open Ports",
         "",
@@ -328,6 +446,19 @@ def render_markdown(report: dict[str, Any]) -> str:
 
     lines.extend(["", "## Findings", ""])
     if findings:
+        lines.extend(
+            [
+                "| Score | Severity | Finding | Tags | Day-one action |",
+                "| ---: | --- | --- | --- | --- |",
+            ]
+        )
+        for finding in findings:
+            tags = ", ".join(finding.get("triage_tags", []))
+            lines.append(
+                f"| {finding.get('priority_score', '')} | {finding['severity']} | "
+                f"{finding['title']} | {tags} | {finding.get('day_one_action', '')} |"
+            )
+        lines.append("")
         for finding in findings:
             lines.extend(
                 [
@@ -335,11 +466,15 @@ def render_markdown(report: dict[str, Any]) -> str:
                     "",
                     f"- Evidence: {finding['evidence']}",
                     f"- Recommendation: {finding['recommendation']}",
+                    f"- Verification: {finding.get('verification', 'Re-run the scanner.')}",
                     "",
                 ]
             )
     else:
         lines.append("No findings from the selected checks.")
+
+    if report.get("local_remediation_plan"):
+        lines.extend(["", "## Local Remediation Plan", "", report["local_remediation_plan"], ""])
 
     if report.get("ai_analysis"):
         lines.extend(["", "## AI Remediation Plan", "", report["ai_analysis"], ""])
@@ -356,6 +491,11 @@ def run_scan(args: argparse.Namespace) -> dict[str, Any]:
         return {
             "generated_at": dt.datetime.now(dt.UTC).isoformat(),
             "target": {"host": host, "input": args.target, "scheme": scheme},
+            "context": {
+                "business_context": args.business_context,
+                "data_class": args.data_class,
+                "exposure": args.exposure,
+            },
             "authorization_confirmed": bool(args.yes_i_am_authorized),
             "dry_run": True,
             "planned_ports": ports,
@@ -376,13 +516,23 @@ def run_scan(args: argparse.Namespace) -> dict[str, Any]:
     report: dict[str, Any] = {
         "generated_at": dt.datetime.now(dt.UTC).isoformat(),
         "target": {"host": host, "input": args.target, "scheme": scheme},
+        "context": {
+            "business_context": args.business_context,
+            "data_class": args.data_class,
+            "exposure": args.exposure,
+        },
         "authorization_confirmed": bool(args.yes_i_am_authorized),
         "dry_run": False,
         "ports": [observation.__dict__ for observation in observations],
         "http": http_results + https_results,
         "tls": tls_results,
     }
-    report["findings"] = local_findings(observations, report["http"], tls_results)
+    report["findings"] = enrich_findings(
+        local_findings(observations, report["http"], tls_results),
+        exposure=args.exposure,
+    )
+    report["ai_triage"] = build_ai_triage(report)
+    report["local_remediation_plan"] = build_local_remediation_plan(report)
 
     if not args.no_ai:
         api_key = os.getenv(args.ai_api_key_env) if args.ai_api_key_env else None
@@ -422,6 +572,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--outdir", default="security_scan_results", help="Output directory.")
     parser.add_argument("--markdown", action="store_true", help="Also write a Markdown report.")
     parser.add_argument("--dry-run", action="store_true", help="Show planned checks without scanning.")
+    parser.add_argument(
+        "--business-context",
+        default="smb",
+        help="Short context for the AI/local triage, for example smb, production, pilot, or lab.",
+    )
+    parser.add_argument(
+        "--data-class",
+        default="unknown",
+        help="Data class handled by the server, for example public, internal, confidential, personal-data.",
+    )
+    parser.add_argument(
+        "--exposure",
+        choices=("internet", "private", "internal"),
+        default="internet",
+        help="Network exposure used to adjust local AI-style risk scoring.",
+    )
     parser.add_argument(
         "--yes-i-am-authorized",
         action="store_true",
