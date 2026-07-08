@@ -232,6 +232,10 @@ Connect an MCP client to `http://localhost:8000/mcp`. See [`scripts/python/READM
 
 The optional Codex cost router in `scripts/python/codex_cost_router.py` can compress one-shot prompts and route them through a self-hosted LiteLLM OSS proxy. The surrounding tools manage session keys, local proxy status, route health checks, and adaptive token-pressure dispatch experiments. See [`scripts/python/README_Codex_Cost_Routing.md`](scripts/python/README_Codex_Cost_Routing.md), [`scripts/python/PRODUCTION_SECURITY_GOVERNANCE.md`](scripts/python/PRODUCTION_SECURITY_GOVERNANCE.md), and the short mode chooser in [`docs/codex-routing-modes.md`](docs/codex-routing-modes.md).
 
+For a one-day SMB implementation plan that combines the LiteLLM proxy, local
+Ollama fallback, adaptive routing, measurements, security checks, and operating
+handoff, see [`docs/smb-llm-self-hosting-one-day.md`](docs/smb-llm-self-hosting-one-day.md).
+
 The optional risk-adjusted router in `scripts/python/risk_adjusted_router.py` uses the LiteLLM-independent scoring helper in `scripts/python/adaptive_token_pressure_router.py`. It should stay bound to `127.0.0.1` and should not be exposed directly on a network without authentication and TLS.
 
 The optional LLM review tool in `scripts/python/llm_bias_multi_agent.py` provides deterministic first-pass bias, fairness, and safeguard checks. See [`scripts/python/README_LLM_Bias_Multi_Agent.md`](scripts/python/README_LLM_Bias_Multi_Agent.md).
