@@ -24,6 +24,17 @@ Capture this before users start the pilot.
 ## Cost Formula
 
 Use provider pricing from the approved billing source.
+For repeatable client reporting, put the assumptions in
+`cost-savings-input.example.json` or a dated client copy, then run:
+
+```powershell
+python .\scripts\python\client_cost_savings.py `
+  --input .\docs\smb-llm-pilot\cost-savings-input.example.json `
+  --format markdown
+```
+
+This keeps price updates separate from the formula and makes the report stable
+even when OVHcloud, Hetzner, AWS, Azure, or model-provider prices change.
 
 ```text
 estimated_cost =

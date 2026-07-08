@@ -1,0 +1,52 @@
+{
+  "currency": "EUR",
+  "pricing_date": "2026-07-08",
+  "period": {
+    "users": 25,
+    "requests_per_user_per_day": 20,
+    "working_days_per_month": 20
+  },
+  "tokens": {
+    "input_per_request": 2000,
+    "output_per_request": 800
+  },
+  "baseline": {
+    "model": "baseline-premium-cloud",
+    "input_price_per_1m": 5.0,
+    "output_price_per_1m": 15.0
+  },
+  "routes": [
+    {
+      "name": "self-hosted-local",
+      "share": 0.45,
+      "input_price_per_1m": 0.0,
+      "output_price_per_1m": 0.0
+    },
+    {
+      "name": "cost-optimized-cloud",
+      "share": 0.35,
+      "input_price_per_1m": 1.0,
+      "output_price_per_1m": 4.0
+    },
+    {
+      "name": "premium-fallback-cloud",
+      "share": 0.2,
+      "input_price_per_1m": 5.0,
+      "output_price_per_1m": 15.0
+    }
+  ],
+  "fixed_monthly_costs": [
+    {
+      "name": "Azure or AWS gateway runtime",
+      "amount": 90.0
+    },
+    {
+      "name": "Operations and monitoring",
+      "amount": 100.0
+    }
+  ],
+  "rate_limits": {
+    "baseline_429_count": 20,
+    "pilot_429_count": 5
+  }
+}

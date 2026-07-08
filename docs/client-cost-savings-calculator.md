@@ -35,6 +35,12 @@ the extra hosting and operations cost.
 ## Required Inputs
 
 Collect these values during the one-day pilot and the first production week.
+Keep prices in
+[`docs/smb-llm-pilot/cost-savings-input.example.json`](smb-llm-pilot/cost-savings-input.example.json)
+or in a client-specific copy of that file. The formulas stay in
+[`scripts/python/client_cost_savings.py`](../scripts/python/client_cost_savings.py),
+so a pricing change only requires updating JSON values and rerunning the
+calculator.
 
 | Input | Source | Value |
 | --- | --- | ---: |
@@ -53,6 +59,39 @@ Collect these values during the one-day pilot and the first production week.
 | Azure or AWS monthly infrastructure cost | Cloud cost estimate or invoice | TBD |
 | Operations hours per month | Client estimate | TBD |
 | Internal hourly cost | Client estimate | TBD |
+
+## Dynamic Calculator
+
+Use the calculator instead of editing formulas by hand:
+
+```powershell
+cd C:\Users\user\Documents\Scripting
+python .\scripts\python\client_cost_savings.py `
+  --input .\docs\smb-llm-pilot\cost-savings-input.example.json `
+  --format markdown
+```
+
+For a client engagement, copy the example JSON to a dated client file, update
+only the assumptions, and keep the output with the pilot evidence.
+
+```powershell
+Copy-Item `
+  .\docs\smb-llm-pilot\cost-savings-input.example.json `
+  .\docs\smb-llm-pilot\client-cost-savings-YYYY-MM-DD.json
+```
+
+The JSON fields that normally change are:
+
+- `pricing_date`;
+- baseline and route `input_price_per_1m`;
+- baseline and route `output_price_per_1m`;
+- route `share` values from router metrics;
+- fixed monthly costs for OVHcloud, Hetzner, AWS, Azure, or local hardware;
+- observed `baseline_429_count` and `pilot_429_count`.
+
+Do not auto-fetch public pricing during a client report unless the source and
+timestamp are preserved. Provider invoices, contract terms, and cloud cost
+calculator exports are more stable evidence than live pricing pages.
 
 ## Token Cost Formula
 
@@ -193,20 +232,21 @@ Formula:
 
 ## Cloud Hosting Cost
 
-For Azure or AWS, include the recurring components that exist in the selected
-architecture.
+For OVHcloud, Hetzner, AWS, Azure, or a local server, include the recurring
+components that exist in the selected architecture. Keep provider names in the
+input JSON as labels; the calculator does not need provider-specific code.
 
-| Component | Azure example | AWS example | Monthly estimate |
-| --- | --- | --- | ---: |
-| CPU VM or container | VM, Container Apps, AKS node | EC2, ECS, EKS node | TBD |
-| Optional GPU | NC-family VM | g5/g6 instance | TBD |
-| Disk or volume | Managed Disk | EBS | TBD |
-| Load balancer or reverse proxy | Application Gateway, Load Balancer | ALB, NLB | TBD |
-| Secrets | Key Vault | Secrets Manager, KMS | TBD |
-| Logs and monitoring | Monitor, Log Analytics | CloudWatch | TBD |
-| Security services | Defender for Cloud | GuardDuty, Security Hub | TBD |
-| Backups | Backup vault | AWS Backup | TBD |
-| Network egress | Bandwidth | Data transfer | TBD |
+| Component | Azure example | AWS example | OVHcloud / Hetzner example | Monthly estimate |
+| --- | --- | --- | --- | ---: |
+| CPU VM or container | VM, Container Apps, AKS node | EC2, ECS, EKS node | VPS, dedicated server, cloud VM | TBD |
+| Optional GPU | NC-family VM | g5/g6 instance | GPU server or GPU cloud instance | TBD |
+| Disk or volume | Managed Disk | EBS | Block storage or local NVMe | TBD |
+| Load balancer or reverse proxy | Application Gateway, Load Balancer | ALB, NLB | Nginx, HAProxy, managed LB | TBD |
+| Secrets | Key Vault | Secrets Manager, KMS | Vault, sealed env file, provider secrets | TBD |
+| Logs and monitoring | Monitor, Log Analytics | CloudWatch | Netdata, Grafana, provider logs | TBD |
+| Security services | Defender for Cloud | GuardDuty, Security Hub | Firewall, IDS, backup monitoring | TBD |
+| Backups | Backup vault | AWS Backup | Snapshots, backup storage | TBD |
+| Network egress | Bandwidth | Data transfer | Included quota or metered egress | TBD |
 
 For a one-day pilot, prefer a small CPU gateway unless local model inference
 quality is part of the test. GPU cost can dominate the economics quickly.
@@ -221,6 +261,9 @@ cd C:\Users\user\Documents\Scripting
 .\scripts\python\Test-CodexLiteLLMDispatch.ps1
 .\scripts\python\healthcheck-litellm-routes.ps1
 .\scripts\python\measure-litellm-dispatch.ps1 -Iterations 5
+python .\scripts\python\client_cost_savings.py `
+  --input .\docs\smb-llm-pilot\cost-savings-input.example.json `
+  --format markdown
 ```
 
 If the adaptive front router is enabled:

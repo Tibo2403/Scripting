@@ -41,6 +41,7 @@ PURGE_DATA="false"
 BACKUP="false"
 BACKUP_DIR=""
 BLOCK_OLLAMA_PUBLIC="false"
+AUTO_BLOCK_OLLAMA_PUBLIC="false"
 WEBUI_CUDA="auto"
 GPU_AVAILABLE="false"
 TEST_GENERATION="true"
@@ -294,6 +295,10 @@ fi
 
 if [[ "$INSTALL_OPENWEBUI" == "true" && "$OLLAMA_HOST_WAS_DEFAULT" == "true" ]]; then
   HOST="0.0.0.0"
+  if [[ "$OPEN_FIREWALL" != "true" && "$BLOCK_OLLAMA_PUBLIC" != "true" ]]; then
+    BLOCK_OLLAMA_PUBLIC="true"
+    AUTO_BLOCK_OLLAMA_PUBLIC="true"
+  fi
 fi
 
 if [[ "$DRY_RUN" == "true" ]]; then
@@ -316,7 +321,11 @@ fi
 
 if [[ "$INSTALL_OPENWEBUI" == "true" && "$OLLAMA_HOST_WAS_DEFAULT" == "true" ]]; then
   log "Open WebUI requested: setting Ollama bind to 0.0.0.0 so the Docker container can reach it."
-  log "The script will not open Ollama's firewall port unless --open-firewall is also set."
+  if [[ "$AUTO_BLOCK_OLLAMA_PUBLIC" == "true" ]]; then
+    log "The script will also add a defensive firewall block for Ollama's API port."
+  else
+    log "The script will not open Ollama's firewall port unless --open-firewall is also set."
+  fi
 fi
 
 install_prereqs() {

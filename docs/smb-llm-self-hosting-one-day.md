@@ -86,7 +86,68 @@ business.
 | Dispatch timing measurement | `scripts/python/measure-litellm-dispatch.ps1` |
 | Adaptive router benchmarks | `scripts/python/measure-risk-adjusted-dispatch.ps1` |
 | Simple return to normal routing | `scripts/python/Switch-CodexLiteLLM.ps1` |
+| Dynamic client savings calculation | `scripts/python/client_cost_savings.py` |
 | Microsoft 365 operational scripting examples | `scripts/powershell/` |
+
+## Preflight To Avoid Day-One Script Blocks
+
+Run these checks before leaving for the client or before opening the shared
+implementation window. They do not require provider API calls.
+
+```powershell
+cd C:\Users\user\Documents\Scripting
+
+# Validate Python scripts and unit tests.
+python -m unittest discover -s .\scripts\python\tests
+
+# Validate PowerShell scripts.
+$ErrorActionPreference='Stop'
+Get-ChildItem -Path .\scripts -Recurse -Filter *.ps1 | ForEach-Object {
+  $tokens=$null
+  $errors=$null
+  [System.Management.Automation.Language.Parser]::ParseFile(
+    $_.FullName,
+    [ref]$tokens,
+    [ref]$errors
+  ) > $null
+  if ($errors) { throw "PowerShell parse error in $($_.FullName): $($errors[0].Message)" }
+}
+
+# Validate Bash scripts on Windows with Git Bash when WSL is not installed.
+& 'C:\Program Files\Git\bin\bash.exe' -lc `
+  "find scripts -name '*.sh' -print0 | xargs -0 -n1 bash -n"
+
+# Check proxy aliases without making a live model call.
+.\scripts\python\Test-CodexLiteLLMDispatch.ps1
+
+# Check the dynamic savings calculator.
+python .\scripts\python\client_cost_savings.py `
+  --input .\docs\smb-llm-pilot\cost-savings-input.example.json `
+  --format markdown
+```
+
+If Git Bash is unavailable on Windows, run the Bash validation directly on the
+target Linux server after cloning the repository:
+
+```bash
+find scripts -name '*.sh' -print0 | xargs -0 -n1 bash -n
+```
+
+For OVHcloud, Hetzner, AWS, Azure, or a local server, always do a dry-run first
+when the script supports it. Example for the private Ollama server installer:
+
+```bash
+sudo bash scripts/linux/install_ollama_private_server.sh \
+  --dry-run \
+  --install-openwebui \
+  --model-profile small \
+  --no-pull
+```
+
+With `--install-openwebui`, Docker needs to reach Ollama from its container. If
+the script keeps the default Ollama host, it will make Ollama reachable to the
+container and automatically enable a defensive block on the Ollama API port
+unless `--open-firewall` is explicitly set.
 
 ## One-Day Schedule
 
@@ -118,6 +179,8 @@ Use a Windows workstation or small server with:
 For Azure or AWS, use the same software checklist on the VM. Add a private DNS
 name, firewall rules, secret storage, monitoring, budget alerts, and a documented
 shutdown command before inviting users.
+For OVHcloud or Hetzner, use the same pattern with provider firewalls, SSH key
+access only, snapshots, and a documented reverse proxy or VPN entry point.
 
 Recommended local models for an SMB pilot:
 
@@ -217,6 +280,9 @@ Capture baseline metrics before pilot users start:
 
 ```powershell
 .\scripts\python\measure-litellm-dispatch.ps1 -Iterations 5
+python .\scripts\python\client_cost_savings.py `
+  --input .\docs\smb-llm-pilot\cost-savings-input.example.json `
+  --format markdown
 ```
 
 If the adaptive front router is enabled:

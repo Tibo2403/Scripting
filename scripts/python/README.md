@@ -134,3 +134,20 @@ use [`audit/CLIENT_CLOUD_EU_AUDIT.md`](audit/CLIENT_CLOUD_EU_AUDIT.md). It
 adds a 1-day audit flow for EU-region deployment, GDPR/RGPD triage, AI Act
 classification, NIS2/DORA relevance, secret management, redacted logging,
 adaptive-routing evidence, cost measurement, and avoided `429` tracking.
+
+## Client Cost Savings Calculator
+
+`client_cost_savings.py` calculates monthly savings and avoided `429` errors
+from an editable JSON assumptions file. Prices are not hardcoded in the script,
+so OVHcloud, Hetzner, AWS, Azure, and model-provider price changes can be
+handled by updating the JSON and rerunning the same formula.
+
+```powershell
+python .\scripts\python\client_cost_savings.py `
+  --input .\docs\smb-llm-pilot\cost-savings-input.example.json `
+  --format markdown
+```
+
+See
+[`../../docs/client-cost-savings-calculator.md`](../../docs/client-cost-savings-calculator.md)
+for the client-facing calculation method.
