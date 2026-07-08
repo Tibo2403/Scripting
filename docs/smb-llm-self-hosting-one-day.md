@@ -33,6 +33,43 @@ Use local models first for cheap, repeatable, or sensitive low-risk tasks. Use
 cloud providers only when the task needs stronger reasoning, larger context, or
 business-approved external processing.
 
+## Azure or AWS Deployment Option
+
+The same one-day pilot can run on a small Azure or AWS instance when the SMB
+needs shared access, better uptime, or GPU capacity that is not available on a
+local workstation. Keep the design private by default: expose the service only
+through a VPN, private subnet, bastion, or zero-trust access layer.
+
+Recommended day-one shapes:
+
+- Azure CPU pilot: a small B-series or D-series VM for LiteLLM, routing, and
+  cloud-provider fallback only.
+- Azure GPU pilot: an NC-family VM only if local inference quality or latency is
+  part of the test.
+- AWS CPU pilot: a small t3/t4g/m7i-style instance for LiteLLM, routing, and
+  cloud-provider fallback only.
+- AWS GPU pilot: a g5/g6-style instance only when the business explicitly wants
+  hosted local inference.
+
+Minimum cloud controls:
+
+- place the instance in a private subnet when possible;
+- restrict inbound access to administrator IPs, VPN clients, or a zero-trust
+  connector;
+- terminate TLS at a managed load balancer or reverse proxy before any shared
+  access;
+- store API keys in Azure Key Vault, AWS Secrets Manager, or the platform's
+  instance secret mechanism;
+- send logs to Azure Monitor, CloudWatch, or a private SIEM location;
+- tag the resources with owner, pilot end date, cost center, and data class;
+- set a daily budget alert before enabling GPU or high-throughput cloud routes.
+
+Cloud deployment is still "self-hosted" for the gateway because LiteLLM,
+routing policy, logs, and access controls remain under the SMB's account. It is
+not the same as fully local processing. Treat prompts sent to external model
+providers according to the provider and data-handling policy approved by the
+business.
+
 ## Repository Building Blocks
 
 | Capability | File |
@@ -77,6 +114,10 @@ Use a Windows workstation or small server with:
 - Git;
 - optional Docker for Open WebUI or other local UI layers;
 - optional Ollama for local models.
+
+For Azure or AWS, use the same software checklist on the VM. Add a private DNS
+name, firewall rules, secret storage, monitoring, budget alerts, and a documented
+shutdown command before inviting users.
 
 Recommended local models for an SMB pilot:
 
@@ -302,15 +343,26 @@ cd C:\Users\user\Documents\Scripting
 .\scripts\python\Manage-CodexCostRouting.ps1 -Action Stop
 ```
 
-## Next 30 Days
+## Memento
 
-After the one-day pilot, improve in this order:
+Keep this short checklist next to the first pilot workstation.
 
-1. Add a private web UI for approved users.
-2. Add SSO and TLS before any network exposure.
-3. Add prompt redaction for secrets and personal data.
-4. Add per-workflow routing policies.
-5. Add dashboards for cost, latency, and avoided 429s.
-6. Expand local models only after measuring real workload quality.
-7. Document incident response for leaked prompts, keys, or wrong outputs.
+- Start local model: `.\scripts\python\Start-CodexQwenOllama.ps1`
+- Start managed routing: `.\scripts\python\Manage-CodexCostRouting.ps1 -Action Start -CodexProvider LiteLLM`
+- Check proxy status: `.\scripts\python\status-litellm-proxy.ps1`
+- Smoke-test routing: `.\scripts\python\Test-CodexLiteLLMDispatch.ps1`
+- Check route health: `.\scripts\python\healthcheck-litellm-routes.ps1`
+- Measure latency and cost: `.\scripts\python\measure-litellm-dispatch.ps1 -Iterations 5`
+- Stop routing: `.\scripts\python\Manage-CodexCostRouting.ps1 -Action Stop`
+- Restore direct Codex behavior: `.\scripts\python\Switch-CodexLiteLLM.ps1 -Provider OpenAI`
 
+Day-one rules:
+
+- Local first for low-risk, repeatable, or sensitive prompts.
+- Cloud fallback only for approved tasks that need stronger reasoning or larger context.
+- Never paste secrets, raw credentials, private keys, or regulated records into a pilot prompt.
+- Do not expose `127.0.0.1` proxy ports on the network without TLS, authentication, and a named owner.
+- On Azure or AWS, keep the gateway private, tag every resource, and set budget alerts before GPU use.
+- Treat every 429, timeout, and fallback as a measurement event, not as noise.
+- Keep cost, latency, fallback count, and avoided 429 count in the pilot notes.
+- Change one routing variable at a time so savings can be attributed cleanly.
