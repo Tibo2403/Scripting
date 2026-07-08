@@ -326,6 +326,11 @@ Create these artifacts for the SMB. Ready-to-copy templates are available in
 - `LLM_KEYS.md`: where keys are stored, who can rotate them, and expiry dates;
 - `LLM_PILOT_RESULTS.md`: workflows tested, issues, and next actions.
 
+For a client-ready financial summary, complete
+[`docs/client-cost-savings-calculator.md`](client-cost-savings-calculator.md)
+with the measured route mix, provider prices, hosting cost, operations cost,
+and avoided `429` count.
+
 These can live outside the public repo if they contain company-specific
 architecture, names, billing, or security details.
 

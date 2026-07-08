@@ -21,6 +21,7 @@ For client deployments of self-hosted AI, LiteLLM, Ollama, Open WebUI, or LLM ga
 |   `-- script-validation.yml
 |-- docs/
 |   |-- client-preinstallation-audit.md
+|   |-- client-cost-savings-calculator.md
 |   |-- codex-routing-modes.md
 |   |-- codex-workspace-doctor.md
 |   |-- compatibility-matrix.md
@@ -82,6 +83,8 @@ Portfolio, client-readiness, and maintenance docs:
 
 - `docs/portfolio.md` explains the repository in recruiter/client terms.
 - `docs/client-preinstallation-audit.md` is the standard client audit checklist to complete before installing a self-hosted AI, LiteLLM, Ollama, Open WebUI, or LLM gateway stack in a Belgian customer environment.
+- `docs/client-cost-savings-calculator.md` provides a client-facing cost
+  savings and avoided-429 calculation document for the pilot.
 - `docs/demo-media.md` lists screenshots and GIFs to capture.
 - `docs/issue-backlog.md` contains ready-to-create GitHub issues.
 - `docs/codex-workspace-doctor.md` documents `Optimize-CodexWorkspace.ps1`.
@@ -242,6 +245,10 @@ The optional Codex cost router in `scripts/python/codex_cost_router.py` can comp
 For a one-day SMB implementation plan that combines the LiteLLM proxy, local
 Ollama fallback, adaptive routing, measurements, security checks, and operating
 handoff, see [`docs/smb-llm-self-hosting-one-day.md`](docs/smb-llm-self-hosting-one-day.md).
+For the client cost report, use
+[`docs/client-cost-savings-calculator.md`](docs/client-cost-savings-calculator.md)
+with the metrics template in
+[`docs/smb-llm-pilot/LLM_METRICS.md`](docs/smb-llm-pilot/LLM_METRICS.md).
 
 The optional risk-adjusted router in `scripts/python/risk_adjusted_router.py` uses the LiteLLM-independent scoring helper in `scripts/python/adaptive_token_pressure_router.py`. It should stay bound to `127.0.0.1` and should not be exposed directly on a network without authentication and TLS.
 
