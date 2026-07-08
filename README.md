@@ -232,6 +232,11 @@ python .\scripts\python\mcp_server.py
 
 Connect an MCP client to `http://localhost:8000/mcp`. See [`scripts/python/README.md`](scripts/python/README.md) for setup and inspector instructions.
 
+`scripts/python/ai_server_security_scan.py` provides an authorized,
+non-destructive server security scan with optional AI-assisted remediation via
+an OpenAI-compatible API such as LiteLLM. Use `--dry-run` first and
+`--yes-i-am-authorized` before any live scan.
+
 The optional Codex cost router in `scripts/python/codex_cost_router.py` can compress one-shot prompts and route them through a self-hosted LiteLLM OSS proxy. The surrounding tools manage session keys, local proxy status, route health checks, and adaptive token-pressure dispatch experiments. See [`scripts/python/README_Codex_Cost_Routing.md`](scripts/python/README_Codex_Cost_Routing.md), [`scripts/python/PRODUCTION_SECURITY_GOVERNANCE.md`](scripts/python/PRODUCTION_SECURITY_GOVERNANCE.md), and the short mode chooser in [`docs/codex-routing-modes.md`](docs/codex-routing-modes.md).
 
 For a one-day SMB implementation plan that combines the LiteLLM proxy, local

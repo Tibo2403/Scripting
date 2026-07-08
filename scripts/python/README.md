@@ -83,3 +83,46 @@ one minimal dispatch request.
 `llm_bias_multi_agent.py` is a provider-agnostic multi-agent manager for
 reviewing and revising LLM answers without calling an LLM provider. See
 [`README_LLM_Bias_Multi_Agent.md`](README_LLM_Bias_Multi_Agent.md).
+
+## AI-Assisted Security Scan
+
+`ai_server_security_scan.py` performs an authorized, non-destructive server
+security scan and can send the structured findings to an OpenAI-compatible AI
+API, such as the local LiteLLM proxy, for a defensive remediation plan. It
+checks selected TCP ports, basic HTTP security headers, and TLS certificate
+metadata. It does not exploit services or brute-force credentials.
+
+Preview a scan without network activity:
+
+```powershell
+python .\scripts\python\ai_server_security_scan.py `
+  --target example.com `
+  --ports 80,443,8080 `
+  --dry-run `
+  --no-ai
+```
+
+Run an authorized scan and write JSON plus Markdown:
+
+```powershell
+python .\scripts\python\ai_server_security_scan.py `
+  --target example.com `
+  --ports 22,80,443,3389 `
+  --yes-i-am-authorized `
+  --markdown `
+  --no-ai
+```
+
+Use an AI API through LiteLLM or another OpenAI-compatible endpoint:
+
+```powershell
+$env:LITELLM_API_KEY = "local-proxy-key"
+python .\scripts\python\ai_server_security_scan.py `
+  --target example.com `
+  --ports 22,80,443 `
+  --yes-i-am-authorized `
+  --markdown `
+  --ai-endpoint http://127.0.0.1:4000/v1 `
+  --ai-model codex-default `
+  --ai-api-key-env LITELLM_API_KEY
+```
