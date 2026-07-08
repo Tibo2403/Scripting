@@ -126,3 +126,11 @@ python .\scripts\python\ai_server_security_scan.py `
   --ai-model codex-default `
   --ai-api-key-env LITELLM_API_KEY
 ```
+
+## Client Cloud EU Audit
+
+Before installing the LiteLLM/Codex routing stack for a client on Azure or AWS,
+use [`audit/CLIENT_CLOUD_EU_AUDIT.md`](audit/CLIENT_CLOUD_EU_AUDIT.md). It
+adds a 1-day audit flow for EU-region deployment, GDPR/RGPD triage, AI Act
+classification, NIS2/DORA relevance, secret management, redacted logging,
+adaptive-routing evidence, cost measurement, and avoided `429` tracking.

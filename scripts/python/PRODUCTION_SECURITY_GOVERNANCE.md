@@ -2,6 +2,10 @@
 
 Scope: this file applies to the local LiteLLM proxy in `C:\Users\user\.codex\litellm-proxy`, exposed only on `127.0.0.1:4000` for Codex and local tests.
 
+For client cloud deployments on Azure or AWS, complete
+[`audit/CLIENT_CLOUD_EU_AUDIT.md`](audit/CLIENT_CLOUD_EU_AUDIT.md) before
+exposing the proxy outside a local workstation.
+
 ## Enforced Locally
 
 - Local Codex route: no LiteLLM bearer token is required while the proxy is bound to `127.0.0.1`; provider API keys still come only from environment variables.
@@ -40,7 +44,8 @@ Scope: this file applies to the local LiteLLM proxy in `C:\Users\user\.codex\lit
 
 ## If This Moves To Containers Or Kubernetes
 
-Before exposing this outside localhost, add the platform controls from the production guide:
+Before exposing this outside localhost, add the platform controls from the
+production guide and keep client evidence in the audit pack:
 
 - Pin container images by digest and scan them in CI.
 - Run as non-root with read-only filesystem, dropped capabilities, and `no-new-privileges`.
@@ -48,4 +53,7 @@ Before exposing this outside localhost, add the platform controls from the produ
 - Add ingress allow-lists, egress controls, and network policies for provider endpoints.
 - Enable centralized metrics and audit logging with redaction for secrets, prompts, and PII.
 - Define circuit-breaker states and alerts for provider error rates, latency, budget exhaustion, and fallback surges.
+- Record EU region, provider allow-list, retention, AI Act/GDPR triage, dry-run
+  routing decisions, and 429/cost metrics in
+  `audit/CLIENT_CLOUD_EU_AUDIT.md`.
 
