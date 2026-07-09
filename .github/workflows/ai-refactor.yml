@@ -168,6 +168,10 @@ jobs:
         shell: pwsh
         run: ./scripts/tests/Test-Manage-CodexCostRouting.ps1
 
+      - name: Lint GitHub Actions workflows
+        if: steps.generate.outputs.has_patch == 'true'
+        uses: rhysd/actionlint@v1
+
       - name: Validate shell scripts
         if: steps.generate.outputs.has_patch == 'true'
         run: |
