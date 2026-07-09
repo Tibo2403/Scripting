@@ -163,6 +163,11 @@ jobs:
         shell: pwsh
         run: ./scripts/tests/Test-Switch-CodexLiteLLM.ps1
 
+      - name: Run Codex cost routing smoke test
+        if: steps.generate.outputs.has_patch == 'true'
+        shell: pwsh
+        run: ./scripts/tests/Test-Manage-CodexCostRouting.ps1
+
       - name: Validate shell scripts
         if: steps.generate.outputs.has_patch == 'true'
         run: |
@@ -181,3 +186,5 @@ jobs:
           branch: ai/refactor-${{ github.run_id }}
           commit-message: "AI refactor: automated suggestions"
           delete-branch: true
+
+

@@ -67,6 +67,10 @@ jobs:
         shell: pwsh
         run: ./scripts/tests/Test-Switch-CodexLiteLLM.ps1
 
+      - name: Run Codex cost routing smoke test
+        shell: pwsh
+        run: ./scripts/tests/Test-Manage-CodexCostRouting.ps1
+
   bash:
     name: Bash validation
     runs-on: ubuntu-latest
@@ -122,3 +126,5 @@ jobs:
 
       - name: Run Python tests
         run: python -m unittest discover -s scripts/python/tests -v
+
+
