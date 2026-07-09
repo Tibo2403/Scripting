@@ -62,3 +62,5 @@ Then decide the next implementation step:
 2. Extend `ansible/site.yml` for existing Linux servers.
 3. Add Terraform or Bicep only if AWS or Azure provisioning is required.
 4. Commit and push after validation passes.
+
+Detailed restart notes are in `1-day-implementation/reports/tomorrow-handoff.md`.
