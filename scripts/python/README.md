@@ -135,7 +135,9 @@ python .\scripts\python\ai_server_security_scan.py `
   --no-ai
 ```
 
-Use an AI API through LiteLLM or another OpenAI-compatible endpoint:
+The canonical scan architecture and quick-start guide is
+[`../../docs/security-scanning.md`](../../docs/security-scanning.md). Use an AI
+API through LiteLLM or another OpenAI-compatible endpoint:
 
 ```powershell
 $env:LITELLM_API_KEY = "local-proxy-key"

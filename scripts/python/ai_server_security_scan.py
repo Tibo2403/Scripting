@@ -27,21 +27,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ai_scan_engine import AI_PROVIDER_DEFAULTS, call_ai, resolve_ai_engine
+
 
 DEFAULT_PORTS = "22,25,53,80,110,143,443,445,465,587,993,995,1433,1521,2375,2376,3306,3389,5432,5601,5900,6379,8000,8080,8443,9200,9300,11211,27017"
 FAST_PORTS = "22,80,443,445,2375,3306,3389,5432,6379,8080,8443,9200,27017"
-AI_PROVIDER_DEFAULTS = {
-    "openai-compatible": {
-        "endpoint": "http://127.0.0.1:4000/v1",
-        "model": "codex-default",
-        "api_key_env": "LITELLM_API_KEY",
-    },
-    "glm": {
-        "endpoint": "https://api.z.ai/api/paas/v4",
-        "model": "glm-4.5-air",
-        "api_key_env": "ZAI_API_KEY",
-    },
-}
 COMMON_SERVICE_RISKS = {
     21: ("medium", "FTP is often cleartext. Prefer SFTP or disable if unused."),
     22: ("info", "SSH is exposed. Enforce keys, MFA where available, and fail2ban or equivalent."),
@@ -603,42 +593,6 @@ def validate_ai_review(raw: str, report: dict[str, Any]) -> dict[str, Any]:
         "review_summary": _bounded_text(review["review_summary"], 1000),
         "rejected_finding_ids": rejected,
         "quality_flags": [_bounded_text(item, 300) for item in flags],
-    }
-
-
-def call_ai(endpoint: str, api_key: str | None, model: str, prompt: str, timeout: float) -> str:
-    base = endpoint.rstrip("/")
-    url = base if base.endswith("/chat/completions") else f"{base}/chat/completions"
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": "You write defensive security remediation plans."},
-            {"role": "user", "content": prompt},
-        ],
-        "temperature": 0.2,
-    }
-    headers = {"Content-Type": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-    request = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        body = json.loads(response.read().decode("utf-8"))
-    return body["choices"][0]["message"]["content"].strip()
-
-
-def resolve_ai_engine(
-    provider: str,
-    endpoint: str | None,
-    model: str | None,
-    api_key_env: str | None,
-) -> dict[str, str]:
-    """Resolve a provider preset while keeping every connection setting overrideable."""
-    defaults = AI_PROVIDER_DEFAULTS[provider]
-    return {
-        "provider": provider,
-        "endpoint": endpoint or os.getenv("AI_SECURITY_API_BASE") or defaults["endpoint"],
-        "model": model or os.getenv("AI_SECURITY_MODEL") or defaults["model"],
-        "api_key_env": api_key_env or defaults["api_key_env"],
     }
 
 
