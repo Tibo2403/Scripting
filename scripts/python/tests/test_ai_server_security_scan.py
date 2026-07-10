@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import sys
 import unittest
 from pathlib import Path
@@ -233,6 +234,73 @@ class AiServerSecurityScanTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "introduced a CVE"):
             scanner.validate_ai_analysis(raw, report)
+
+    def test_validate_ai_analysis_rejects_extra_fields_duplicates_and_oversize(self):
+        report = {"findings": [{"finding_id": "F001"}]}
+        action = {
+            "finding_id": "F001",
+            "action": "Restrict access.",
+            "rationale": "The service is exposed.",
+            "verification": "Rescan the service.",
+        }
+        base = {
+            "executive_summary": "Restrict exposed services.",
+            "actions": [action],
+            "assumptions": [],
+            "evidence_gaps": [],
+        }
+        with self.assertRaisesRegex(ValueError, "required schema"):
+            scanner.validate_ai_analysis(scanner.json.dumps({**base, "unexpected": True}), report)
+        with self.assertRaisesRegex(ValueError, "more than once"):
+            scanner.validate_ai_analysis(
+                scanner.json.dumps({**base, "actions": [action, action]}), report
+            )
+        with self.assertRaisesRegex(ValueError, "100 KB"):
+            scanner.validate_ai_analysis(" " * 100_001, report)
+
+    def test_ai_audit_is_reproducible_and_contains_no_endpoint_or_key(self):
+        report = {
+            "target": {"host": "example.com"},
+            "context": {
+                "business_context": "smb",
+                "data_class": "internal",
+                "exposure": "private",
+            },
+            "findings": [{"finding_id": "F001", "severity": "high", "priority_score": 75}],
+        }
+        analysis = {"actions": [{"finding_id": "F001"}]}
+        audit = scanner.build_ai_audit(report, "security-model", analysis)
+        expected = scanner.json.dumps(
+            scanner.build_ai_context(report), sort_keys=True, separators=(",", ":")
+        )
+        self.assertEqual(audit["context_sha256"], hashlib.sha256(expected.encode()).hexdigest())
+        self.assertEqual(audit["action_coverage_percent"], 100.0)
+        self.assertEqual(audit["validation_policy"], "grounded-json-v2")
+        self.assertNotIn("endpoint", audit)
+        self.assertNotIn("api_key", audit)
+
+    def test_ai_review_is_grounded_and_strict(self):
+        report = {"findings": [{"finding_id": "F001"}]}
+        valid = {
+            "approved": True,
+            "review_summary": "The action is grounded and verifiable.",
+            "rejected_finding_ids": [],
+            "quality_flags": [],
+        }
+        self.assertTrue(scanner.validate_ai_review(scanner.json.dumps(valid), report)["approved"])
+        with self.assertRaisesRegex(ValueError, "unknown finding_id"):
+            scanner.validate_ai_review(
+                scanner.json.dumps({**valid, "rejected_finding_ids": ["F999"]}), report
+            )
+        with self.assertRaisesRegex(ValueError, "required schema"):
+            scanner.validate_ai_review(scanner.json.dumps({**valid, "extra": True}), report)
+
+    def test_ai_review_prompt_contains_evidence_and_candidate(self):
+        report = {"target": {"host": "example.com"}, "context": {}, "findings": []}
+        prompt = scanner.build_ai_review_prompt(report, {"actions": []})
+        self.assertIn('"candidate_analysis"', prompt)
+        self.assertIn('"evidence"', prompt)
+        self.assertIn("independent defensive-security reviewer", prompt)
 
     def test_ai_prompt_keeps_large_context_as_valid_json(self):
         findings = scanner.enrich_findings(

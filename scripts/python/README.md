@@ -103,7 +103,10 @@ than raw banners, HTTP headers, certificate subjects, or probe errors. Findings
 receive deterministic report-scoped IDs (`F001`, `F002`, ...), and the model
 must return validated JSON that references only those IDs. Invalid JSON or an
 invented finding is rejected; the deterministic local triage remains available
-in the report.
+in the report. Responses are capped at 100 KB, must match the exact schema, and
+cannot repeat a finding ID. Each accepted analysis also records a SHA-256 hash
+of its minimized context, model name, validation policy, and action coverage so
+the decision can be audited without storing API keys or raw sensitive evidence.
 
 Preview a scan without network activity:
 
