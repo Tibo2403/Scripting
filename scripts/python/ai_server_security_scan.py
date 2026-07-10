@@ -22,12 +22,14 @@ import textwrap
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 
 DEFAULT_PORTS = "22,25,53,80,110,143,443,445,465,587,993,995,1433,1521,2375,2376,3306,3389,5432,5601,5900,6379,8000,8080,8443,9200,9300,11211,27017"
+FAST_PORTS = "22,80,443,445,2375,3306,3389,5432,6379,8080,8443,9200,27017"
 COMMON_SERVICE_RISKS = {
     21: ("medium", "FTP is often cleartext. Prefer SFTP or disable if unused."),
     22: ("info", "SSH is exposed. Enforce keys, MFA where available, and fail2ban or equivalent."),
@@ -703,7 +705,14 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 def run_scan(args: argparse.Namespace) -> dict[str, Any]:
     host, scheme = normalize_target(args.target)
-    ports = parse_ports(args.ports)
+    fast_mode = bool(getattr(args, "fast", False))
+    port_spec = FAST_PORTS if fast_mode and args.ports == DEFAULT_PORTS else args.ports
+    ports = parse_ports(port_spec)
+    configured_timeout = getattr(args, "timeout", 2.0)
+    timeout = min(configured_timeout, 0.75) if fast_mode else configured_timeout
+    workers = min(max(getattr(args, "workers", 1), 1), 64)
+    if fast_mode:
+        workers = max(workers, min(32, len(ports)))
     if args.dry_run:
         return {
             "generated_at": dt.datetime.now(dt.UTC).isoformat(),
@@ -717,19 +726,24 @@ def run_scan(args: argparse.Namespace) -> dict[str, Any]:
             "dry_run": True,
             "planned_ports": ports,
             "planned_ai": not args.no_ai,
+            "scan_profile": {"mode": "fast" if fast_mode else "standard", "workers": workers, "timeout": timeout},
         }
 
-    observations = [connect_port(host, port, args.timeout) for port in ports]
+    if workers == 1:
+        observations = [connect_port(host, port, timeout) for port in ports]
+    else:
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="security-scan") as pool:
+            observations = list(pool.map(lambda port: connect_port(host, port, timeout), ports))
     open_ports = {observation.port for observation in observations if observation.status == "open"}
     http_results = [
-        fetch_http_headers(host, port, tls=False, timeout=args.timeout)
+        fetch_http_headers(host, port, tls=False, timeout=timeout)
         for port in sorted(open_ports & HTTP_PORTS)
     ]
     https_results = [
-        fetch_http_headers(host, port, tls=True, timeout=args.timeout)
+        fetch_http_headers(host, port, tls=True, timeout=timeout)
         for port in sorted(open_ports & HTTPS_PORTS)
     ]
-    tls_results = [inspect_tls(host, port, args.timeout) for port in sorted(open_ports & HTTPS_PORTS)]
+    tls_results = [inspect_tls(host, port, timeout) for port in sorted(open_ports & HTTPS_PORTS)]
     report: dict[str, Any] = {
         "generated_at": dt.datetime.now(dt.UTC).isoformat(),
         "target": {"host": host, "input": args.target, "scheme": scheme},
@@ -740,6 +754,7 @@ def run_scan(args: argparse.Namespace) -> dict[str, Any]:
         },
         "authorization_confirmed": bool(args.yes_i_am_authorized),
         "dry_run": False,
+        "scan_profile": {"mode": "fast" if fast_mode else "standard", "workers": workers, "timeout": timeout},
         "ports": [observation.__dict__ for observation in observations],
         "http": http_results + https_results,
         "tls": tls_results,
@@ -802,6 +817,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--target", required=True, help="Single authorized host, IP, or URL to scan.")
     parser.add_argument("--ports", default=DEFAULT_PORTS, help="Comma-separated ports or ranges.")
     parser.add_argument("--timeout", type=float, default=2.0, help="Network timeout in seconds.")
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        help="Quick verification profile: priority ports, 0.75s maximum timeout, and parallel checks.",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="Concurrent TCP checks (1-64); --fast automatically uses up to 32.",
+    )
     parser.add_argument("--outdir", default="security_scan_results", help="Output directory.")
     parser.add_argument("--markdown", action="store_true", help="Also write a Markdown report.")
     parser.add_argument("--dry-run", action="store_true", help="Show planned checks without scanning.")
