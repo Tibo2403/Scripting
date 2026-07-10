@@ -98,6 +98,13 @@ verification step. Use `--business-context`, `--data-class`, and `--exposure`
 to make the report easier to use during a client audit without hardcoding a
 specific cloud provider or LiteLLM deployment.
 
+When AI analysis is enabled, the scanner sends a minimized evidence set rather
+than raw banners, HTTP headers, certificate subjects, or probe errors. Findings
+receive deterministic report-scoped IDs (`F001`, `F002`, ...), and the model
+must return validated JSON that references only those IDs. Invalid JSON or an
+invented finding is rejected; the deterministic local triage remains available
+in the report.
+
 Preview a scan without network activity:
 
 ```powershell
