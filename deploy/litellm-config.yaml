@@ -1,0 +1,13 @@
+model_list:
+  - model_name: self-hosted-coder
+    litellm_params:
+      model: openai/qwen2.5-coder:3b
+      api_base: http://ollama:11434/v1
+      api_key: local-ollama
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+
+litellm_settings:
+  request_timeout: 120
+  num_retries: 2

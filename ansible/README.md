@@ -1,16 +1,15 @@
-# Ansible Existing-Server Deployment
+# Existing-server deployment
 
-Use this path when the target server already exists, for example OVH, Hetzner, or a customer-owned Linux VM.
+This playbook deploys the repository's Docker Compose LLM stack. It does not install OpenClaw itself.
 
-OpenClaw may select this method, but Ansible remains optional and external to the runtime application.
+```powershell
+Copy-Item ansible/inventory.example.ini ansible/inventory.ini
+ansible-playbook -i ansible/inventory.ini ansible/site.yml --syntax-check
+ansible-playbook -i ansible/inventory.ini ansible/site.yml
+$env:LITELLM_MASTER_KEY = '<at-least-32-random-characters>'
+ansible-playbook -i ansible/inventory.ini ansible/site.yml -e deployment_apply=true
+```
 
-Suggested day-one flow:
-
-1. Confirm written authorization and target inventory.
-2. Run the repository audit scripts.
-3. Review `ansible/site.yml`.
-4. Execute Ansible from an operator workstation.
-5. Run validation scripts and update `1-day-implementation/reports/installation-report.md`.
-
-Keep inventories, credentials, SSH keys, customer IPs, and secrets out of Git.
-
+The normal run is a non-mutating Docker preflight. Apply mode copies the stack,
+writes the secret with mode `0600`, validates Compose, and waits for health.
+Ports remain on localhost; use authenticated TLS or a VPN for remote access.

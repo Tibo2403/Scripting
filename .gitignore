@@ -8,6 +8,9 @@ wifi_captures/
 *.log
 *.tmp
 logs/
+.env
+!.env.example
+.openclaw-deployment-agents/
 
 # Ignore Python cache files
 __pycache__/

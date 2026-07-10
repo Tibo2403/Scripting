@@ -4,6 +4,26 @@ OpenClaw is used only as a temporary orchestration layer for the "1 Day Implemen
 
 It is not a runtime dependency, not a required deployment component, and not a permanent architecture layer for this project. After the installation day, the project must remain usable with its normal scripts, documentation, tests, and GitHub workflow without OpenClaw.
 
+## Ephemeral Deployment Agents
+
+Each run uses three short-lived roles: `planner`, `runner`, and `verifier`.
+Preview the exact OpenClaw operations without creating anything:
+
+```powershell
+.\1-day-implementation\scripts\Manage-OpenClawDeploymentAgents.ps1 `
+  -Action Plan -Mode DockerCompose -RunId change-123
+```
+
+After review, use `-Action Create -Apply`, perform the approved deployment,
+then use `-Action Delete -Apply` with the same run id. Workspaces default to the
+OS temporary directory and contain role-specific guardrails. Never mount the
+Docker socket into an OpenClaw sandbox; operator-side commands own deployment.
+
+`install.ps1` is non-mutating without `-Apply`. Docker Compose validates before
+starting. Ansible runs a Docker preflight by default and applies only with
+`deployment_apply=true`. AWS and Azure remain plan-only until network, identity,
+secret-store, and rollback choices are explicitly reviewed.
+
 ## Temporary Role
 
 During the implementation day, OpenClaw may coordinate the workflow by:

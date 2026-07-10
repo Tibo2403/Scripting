@@ -1,11 +1,82 @@
 ---
-- name: Prepare existing server for the 1 Day Implementation stack
-  hosts: all
+- name: Deploy the self-hosted LLM stack on an existing Docker server
+  hosts: llm_hosts
   become: true
   gather_facts: true
+  vars:
+    deployment_root: /opt/scripting-llm
+    deployment_apply: false
+    deployment_compose_profile: app-stack
+    litellm_master_key: "{{ lookup('ansible.builtin.env', 'LITELLM_MASTER_KEY') }}"
+
+  pre_tasks:
+    - name: Require an explicit secret for apply mode
+      ansible.builtin.assert:
+        that:
+          - litellm_master_key | length >= 32
+          - litellm_master_key != 'replace-with-at-least-32-random-characters'
+        fail_msg: Set LITELLM_MASTER_KEY to a secret of at least 32 characters.
+      when: deployment_apply | bool
+      no_log: true
+    - name: Check Docker Engine
+      ansible.builtin.command:
+        argv: [docker, version]
+      changed_when: false
+    - name: Check Docker Compose
+      ansible.builtin.command:
+        argv: [docker, compose, version]
+      changed_when: false
 
   tasks:
-    - name: Show placeholder purpose
+    - name: Create the deployment directory
+      ansible.builtin.file:
+        path: "{{ deployment_root }}/deploy"
+        state: directory
+        owner: root
+        group: root
+        mode: "0750"
+      when: deployment_apply | bool
+    - name: Install the Compose definition
+      ansible.builtin.copy:
+        src: ../docker-compose.yml
+        dest: "{{ deployment_root }}/docker-compose.yml"
+        owner: root
+        group: root
+        mode: "0640"
+      when: deployment_apply | bool
+    - name: Install the LiteLLM configuration
+      ansible.builtin.copy:
+        src: ../deploy/litellm-config.yaml
+        dest: "{{ deployment_root }}/deploy/litellm-config.yaml"
+        owner: root
+        group: root
+        mode: "0640"
+      when: deployment_apply | bool
+    - name: Install deployment environment
+      ansible.builtin.copy:
+        content: |
+          LITELLM_MASTER_KEY={{ litellm_master_key }}
+          DEPLOY_BIND_ADDRESS=127.0.0.1
+        dest: "{{ deployment_root }}/.env"
+        owner: root
+        group: root
+        mode: "0600"
+      when: deployment_apply | bool
+      no_log: true
+    - name: Validate the rendered Compose configuration
+      ansible.builtin.command:
+        argv: [docker, compose, --profile, "{{ deployment_compose_profile }}", config, --quiet]
+        chdir: "{{ deployment_root }}"
+      changed_when: false
+      when: deployment_apply | bool
+    - name: Start and health-check the stack
+      ansible.builtin.command:
+        argv: [docker, compose, --profile, "{{ deployment_compose_profile }}", up, -d, --wait]
+        chdir: "{{ deployment_root }}"
+      register: compose_up
+      changed_when: "'Started' in compose_up.stdout or 'Created' in compose_up.stdout"
+      when: deployment_apply | bool
+    - name: Report preflight-only mode
       ansible.builtin.debug:
-        msg: "Placeholder playbook: extend with reviewed Docker, firewall, logging, and validation tasks."
-
+        msg: Docker is available. Re-run with deployment_apply=true after reviewing inventory and secrets.
+      when: not (deployment_apply | bool)

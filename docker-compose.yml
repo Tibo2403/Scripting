@@ -1,40 +1,55 @@
 services:
   litellm-gateway:
-    image: ghcr.io/berriai/litellm:main-latest
+    image: ${LITELLM_IMAGE:-ghcr.io/berriai/litellm:main-latest}
     profiles:
       - app-stack
-    env_file:
-      - .env
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-change-me-before-deploy}
     ports:
-      - "4000:4000"
-    command: ["--host", "0.0.0.0", "--port", "4000"]
+      - "${DEPLOY_BIND_ADDRESS:-127.0.0.1}:${LITELLM_PORT:-4000}:4000"
+    volumes:
+      - ./deploy/litellm-config.yaml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--host", "0.0.0.0", "--port", "4000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
     restart: unless-stopped
 
   ollama:
-    image: ollama/ollama:latest
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
     profiles:
       - local-llm
+      - app-stack
     ports:
-      - "11434:11434"
+      - "${DEPLOY_BIND_ADDRESS:-127.0.0.1}:${OLLAMA_PORT:-11434}:11434"
     volumes:
       - ollama-data:/root/.ollama
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 10s
 
   open-webui:
-    image: ghcr.io/open-webui/open-webui:main
+    image: ${OPEN_WEBUI_IMAGE:-ghcr.io/open-webui/open-webui:main}
     profiles:
       - app-stack
     ports:
-      - "3000:8080"
+      - "${DEPLOY_BIND_ADDRESS:-127.0.0.1}:${OPEN_WEBUI_PORT:-3000}:8080"
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
     volumes:
       - open-webui-data:/app/backend/data
     depends_on:
-      - ollama
+      ollama:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
   ollama-data:
   open-webui-data:
-
