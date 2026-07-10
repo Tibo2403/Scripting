@@ -30,6 +30,18 @@ from typing import Any
 
 DEFAULT_PORTS = "22,25,53,80,110,143,443,445,465,587,993,995,1433,1521,2375,2376,3306,3389,5432,5601,5900,6379,8000,8080,8443,9200,9300,11211,27017"
 FAST_PORTS = "22,80,443,445,2375,3306,3389,5432,6379,8080,8443,9200,27017"
+AI_PROVIDER_DEFAULTS = {
+    "openai-compatible": {
+        "endpoint": "http://127.0.0.1:4000/v1",
+        "model": "codex-default",
+        "api_key_env": "LITELLM_API_KEY",
+    },
+    "glm": {
+        "endpoint": "https://api.z.ai/api/paas/v4",
+        "model": "glm-4.5-air",
+        "api_key_env": "ZAI_API_KEY",
+    },
+}
 COMMON_SERVICE_RISKS = {
     21: ("medium", "FTP is often cleartext. Prefer SFTP or disable if unused."),
     22: ("info", "SSH is exposed. Enforce keys, MFA where available, and fail2ban or equivalent."),
@@ -614,6 +626,22 @@ def call_ai(endpoint: str, api_key: str | None, model: str, prompt: str, timeout
     return body["choices"][0]["message"]["content"].strip()
 
 
+def resolve_ai_engine(
+    provider: str,
+    endpoint: str | None,
+    model: str | None,
+    api_key_env: str | None,
+) -> dict[str, str]:
+    """Resolve a provider preset while keeping every connection setting overrideable."""
+    defaults = AI_PROVIDER_DEFAULTS[provider]
+    return {
+        "provider": provider,
+        "endpoint": endpoint or os.getenv("AI_SECURITY_API_BASE") or defaults["endpoint"],
+        "model": model or os.getenv("AI_SECURITY_MODEL") or defaults["model"],
+        "api_key_env": api_key_env or defaults["api_key_env"],
+    }
+
+
 def render_ai_analysis(analysis: dict[str, Any]) -> str:
     lines = ["### Executive summary", "", analysis["executive_summary"]]
     if analysis.get("actions"):
@@ -767,28 +795,38 @@ def run_scan(args: argparse.Namespace) -> dict[str, Any]:
     report["local_remediation_plan"] = build_local_remediation_plan(report)
 
     if not args.no_ai:
-        api_key = os.getenv(args.ai_api_key_env) if args.ai_api_key_env else None
+        analyzer = resolve_ai_engine(
+            args.ai_provider, args.ai_endpoint, args.ai_model, args.ai_api_key_env
+        )
+        api_key = os.getenv(analyzer["api_key_env"])
         try:
             raw_analysis = call_ai(
-                endpoint=args.ai_endpoint,
+                endpoint=analyzer["endpoint"],
                 api_key=api_key,
-                model=args.ai_model,
+                model=analyzer["model"],
                 prompt=build_ai_prompt(report),
                 timeout=args.ai_timeout,
             )
             report["ai_analysis"] = validate_ai_analysis(raw_analysis, report)
-            report["ai_audit"] = build_ai_audit(report, args.ai_model, report["ai_analysis"])
+            report["ai_audit"] = build_ai_audit(report, analyzer["model"], report["ai_analysis"])
+            report["ai_audit"]["provider"] = analyzer["provider"]
             if not getattr(args, "no_ai_review", False):
-                reviewer_model = getattr(args, "ai_reviewer_model", None) or args.ai_model
+                reviewer = resolve_ai_engine(
+                    getattr(args, "ai_reviewer_provider", None) or analyzer["provider"],
+                    getattr(args, "ai_reviewer_endpoint", None) or analyzer["endpoint"],
+                    getattr(args, "ai_reviewer_model", None) or analyzer["model"],
+                    getattr(args, "ai_reviewer_api_key_env", None) or analyzer["api_key_env"],
+                )
                 raw_review = call_ai(
-                    endpoint=args.ai_endpoint,
-                    api_key=api_key,
-                    model=reviewer_model,
+                    endpoint=reviewer["endpoint"],
+                    api_key=os.getenv(reviewer["api_key_env"]),
+                    model=reviewer["model"],
                     prompt=build_ai_review_prompt(report, report["ai_analysis"]),
                     timeout=args.ai_timeout,
                 )
                 report["ai_review"] = validate_ai_review(raw_review, report)
-                report["ai_audit"]["reviewer_model"] = _bounded_text(reviewer_model, 200)
+                report["ai_audit"]["reviewer_model"] = _bounded_text(reviewer["model"], 200)
+                report["ai_audit"]["reviewer_provider"] = reviewer["provider"]
                 report["ai_audit"]["review_status"] = (
                     "approved" if report["ai_review"]["approved"] else "rejected"
                 )
@@ -854,25 +892,44 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--no-ai", action="store_true", help="Skip AI API analysis.")
     parser.add_argument(
+        "--ai-provider",
+        choices=tuple(AI_PROVIDER_DEFAULTS),
+        default=os.getenv("AI_SECURITY_PROVIDER", "openai-compatible"),
+        help="Analyzer preset. Use glm for Z.AI/GLM; endpoint, model, and key remain overrideable.",
+    )
+    parser.add_argument(
         "--ai-endpoint",
-        default=os.getenv("AI_SECURITY_API_BASE", "http://127.0.0.1:4000/v1"),
-        help="OpenAI-compatible API base URL or /chat/completions URL.",
+        default=None,
+        help="Override the analyzer API base URL or /chat/completions URL.",
     )
     parser.add_argument(
         "--ai-model",
-        default=os.getenv("AI_SECURITY_MODEL", "codex-default"),
-        help="Model name for the OpenAI-compatible API.",
+        default=None,
+        help="Override the analyzer model name.",
     )
     parser.add_argument(
         "--ai-api-key-env",
-        default="LITELLM_API_KEY",
-        help="Environment variable containing the AI API key.",
+        default=None,
+        help="Override the environment variable containing the analyzer API key.",
     )
     parser.add_argument("--ai-timeout", type=float, default=30.0, help="AI API timeout in seconds.")
     parser.add_argument(
         "--ai-reviewer-model",
         default=os.getenv("AI_SECURITY_REVIEWER_MODEL"),
         help="Optional independent reviewer model; defaults to --ai-model.",
+    )
+    parser.add_argument(
+        "--ai-reviewer-provider",
+        choices=tuple(AI_PROVIDER_DEFAULTS),
+        help="Optional reviewer preset; defaults to the analyzer provider.",
+    )
+    parser.add_argument(
+        "--ai-reviewer-endpoint",
+        help="Optional reviewer API base URL; defaults to the analyzer endpoint.",
+    )
+    parser.add_argument(
+        "--ai-reviewer-api-key-env",
+        help="Optional reviewer API-key environment variable; defaults to the analyzer key variable.",
     )
     parser.add_argument(
         "--no-ai-review",

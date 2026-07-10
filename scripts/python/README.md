@@ -152,6 +152,25 @@ python .\scripts\python\ai_server_security_scan.py `
   --ai-api-key-env LITELLM_API_KEY
 ```
 
+Use Z.AI's GLM API as the analyzer (the preset supplies the endpoint, default
+model, and `ZAI_API_KEY` variable):
+
+```powershell
+$env:ZAI_API_KEY = "your-z-ai-key"
+python .\scripts\python\ai_server_security_scan.py `
+  --target example.com `
+  --ports 22,80,443 `
+  --yes-i-am-authorized `
+  --markdown `
+  --ai-provider glm
+```
+
+The engine is interchangeable. Override `--ai-model`, `--ai-endpoint`, and
+`--ai-api-key-env` for another GLM deployment or any OpenAI-compatible gateway.
+An independent reviewer can use a different provider with
+`--ai-reviewer-provider`, `--ai-reviewer-endpoint`, `--ai-reviewer-model`, and
+`--ai-reviewer-api-key-env`.
+
 Recommended 1-day audit flow:
 
 1. Start with `--dry-run --no-ai` to validate scope and ports with the client.

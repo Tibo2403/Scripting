@@ -12,6 +12,33 @@ import ai_server_security_scan as scanner  # noqa: E402
 
 
 class AiServerSecurityScanTests(unittest.TestCase):
+    def test_glm_provider_defaults_and_explicit_overrides(self):
+        glm = scanner.resolve_ai_engine("glm", None, None, None)
+        self.assertEqual(glm["endpoint"], "https://api.z.ai/api/paas/v4")
+        self.assertEqual(glm["model"], "glm-4.5-air")
+        self.assertEqual(glm["api_key_env"], "ZAI_API_KEY")
+
+        custom = scanner.resolve_ai_engine(
+            "glm", "https://gateway.example/v1", "glm-custom", "PRIVATE_GLM_KEY"
+        )
+        self.assertEqual(custom["endpoint"], "https://gateway.example/v1")
+        self.assertEqual(custom["model"], "glm-custom")
+        self.assertEqual(custom["api_key_env"], "PRIVATE_GLM_KEY")
+
+    def test_parser_can_mix_glm_analyzer_and_separate_reviewer(self):
+        args = scanner.build_parser().parse_args(
+            [
+                "--target", "example.com", "--dry-run", "--ai-provider", "glm",
+                "--ai-model", "glm-4.5", "--ai-reviewer-provider", "openai-compatible",
+                "--ai-reviewer-endpoint", "https://review.example/v1",
+                "--ai-reviewer-model", "review-model",
+                "--ai-reviewer-api-key-env", "REVIEW_KEY",
+            ]
+        )
+        self.assertEqual(args.ai_provider, "glm")
+        self.assertEqual(args.ai_reviewer_provider, "openai-compatible")
+        self.assertEqual(args.ai_reviewer_model, "review-model")
+
     def test_parse_ports_accepts_ranges_and_sorts_unique_ports(self):
         self.assertEqual(scanner.parse_ports("443,80,80,8000-8002"), [80, 443, 8000, 8001, 8002])
 
