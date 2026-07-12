@@ -74,7 +74,7 @@ def snippet(text: str, start: int, end: int, max_len: int = 90) -> str:
 def strip_manager_notes(text: str) -> str:
     """Remove notes previously appended by this manager before a new revision."""
 
-    return re.split(r"\n\nBias-mitigation notes:\n", text, maxsplit=1)[0].strip()
+    return re.split(r"\r?\n\r?\nBias-mitigation notes:\r?\n", text, maxsplit=1)[0].strip()
 
 
 class ProtectedAttributeAgent(ReviewAgent):

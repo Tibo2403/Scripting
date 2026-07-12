@@ -99,5 +99,29 @@ class LLMBiasMultiAgentTests(unittest.TestCase):
         self.assertEqual(findings[0]["code"], "too_long")
 
 
+
+    def test_revise_replaces_existing_notes_with_windows_line_endings(self):
+        manager = llm_bias_multi_agent.MultiAgentPromptManager()
+        answer = (
+            "All young people are risky.\r\n\r\n"
+            "Bias-mitigation notes:\r\n"
+            "- Old note.\r\n"
+        )
+        findings = (
+            llm_bias_multi_agent.Finding(
+                "stereotype_agent",
+                "group_generalization",
+                0.82,
+                "All young people",
+                "Replace broad group claims with scoped, evidence-based language.",
+            ),
+        )
+
+        revised = manager.revise(answer, findings)
+
+        self.assertEqual(revised.count("Bias-mitigation notes:"), 1)
+        self.assertNotIn("Old note.", revised)
+        self.assertTrue(revised.startswith("some young people are risky."))
+
 if __name__ == "__main__":
     unittest.main()
