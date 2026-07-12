@@ -151,6 +151,53 @@ class KeySessionWebTests(unittest.TestCase):
         self.assertNotIn("QWEN_API_KEY", captured_env)
         self.assertIn("OpenAI", handler.state.message)
 
+    def test_start_proxy_does_not_inherit_shell_provider_keys(self) -> None:
+        handler = object.__new__(WEB.KeySessionHandler)
+        handler.state = WEB.SessionState()
+        handler.config_path = Path("config.yaml")
+        handler.litellm_path = Path("litellm.exe")
+        handler.proxy_host = "127.0.0.1"
+        handler.proxy_port = 4000
+        handler._read_form = MagicMock(  # type: ignore[method-assign]
+            return_value={
+                "OPENAI_API_KEY": "",
+                "GEMINI_API_KEY": "",
+                "HF_TOKEN": "",
+                "USE_LOCAL_QWEN": "1",
+            }
+        )
+        handler._stop_proxy = MagicMock()  # type: ignore[method-assign]
+        handler._send_page = MagicMock()  # type: ignore[method-assign]
+
+        process = MagicMock()
+        captured_env: dict[str, str] = {}
+
+        def fake_popen(*args: object, **kwargs: object) -> MagicMock:
+            captured_env.update(kwargs["env"])  # type: ignore[index]
+            return process
+
+        with (
+            patch.object(WEB.subprocess, "Popen", side_effect=fake_popen),
+            patch.object(WEB, "wait_for_port", return_value=True),
+            patch.dict(
+                os.environ,
+                {
+                    "OPENAI_API_KEY": "shell-openai",
+                    "GEMINI_API_KEY": "shell-gemini",
+                    "HF_TOKEN": "shell-hf",
+                    "HUGGINGFACE_API_KEY": "shell-hf",
+                },
+                clear=True,
+            ),
+        ):
+            handler._start_proxy()
+
+        self.assertNotIn("OPENAI_API_KEY", captured_env)
+        self.assertNotIn("GEMINI_API_KEY", captured_env)
+        self.assertNotIn("HF_TOKEN", captured_env)
+        self.assertNotIn("HUGGINGFACE_API_KEY", captured_env)
+        self.assertIn("Qwen local", handler.state.message)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -19,6 +19,12 @@ from typing import ClassVar
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_UI_PORT = 8787
 DEFAULT_PROXY_PORT = 4000
+SESSION_SECRET_ENV_VARS = (
+    "OPENAI_API_KEY",
+    "GEMINI_API_KEY",
+    "HF_TOKEN",
+    "HUGGINGFACE_API_KEY",
+)
 
 
 PAGE = """<!doctype html>
@@ -329,6 +335,8 @@ class KeySessionHandler(BaseHTTPRequestHandler):
 
         self._stop_proxy("Replacing previous session proxy.")
         env = os.environ.copy()
+        for variable in SESSION_SECRET_ENV_VARS:
+            env.pop(variable, None)
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
         env["LITELLM_API_KEY"] = "sk-local-" + secrets.token_hex(16)
