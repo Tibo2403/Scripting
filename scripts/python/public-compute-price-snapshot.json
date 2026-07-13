@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-13",
+  "warning": "Public list-price snapshot in USD. Check availability, region, storage, network, CPU/RAM, tax and current checkout price before use.",
+  "sources": [
+    {"provider": "runpod", "url": "https://www.runpod.io/pricing", "pricing_scope": "published GPU pod hourly price"},
+    {"provider": "aws", "url": "https://aws.amazon.com/ec2/capacityblocks/pricing/", "pricing_scope": "Capacity Blocks effective hourly instance price"},
+    {"provider": "google-cloud", "url": "https://cloud.google.com/products/compute/gpus-pricing", "pricing_scope": "GPU component only; VM, disk and network are extra"},
+    {"provider": "akash", "url": "https://akash.network/docs/learn/core-concepts/gpu-deployments/", "pricing_scope": "approximate dynamic bid ranges; use an accepted live bid instead"}
+  ],
+  "entries": [
+    {"id": "compute:runpod:h200", "name": "Runpod H200", "type": "rented_compute", "provider": "runpod", "accelerator": "H200", "currency": "USD", "hourly_price": 4.39, "source_url": "https://www.runpod.io/pricing", "price_scope": "GPU pod"},
+    {"id": "compute:runpod:h100-pcie", "name": "Runpod H100 PCIe", "type": "rented_compute", "provider": "runpod", "accelerator": "H100 PCIe", "currency": "USD", "hourly_price": 2.89, "source_url": "https://www.runpod.io/pricing", "price_scope": "GPU pod"},
+    {"id": "compute:runpod:h100-sxm", "name": "Runpod H100 SXM", "type": "rented_compute", "provider": "runpod", "accelerator": "H100 SXM", "currency": "USD", "hourly_price": 2.99, "source_url": "https://www.runpod.io/pricing", "price_scope": "GPU pod"},
+    {"id": "compute:runpod:a100-pcie-80gb", "name": "Runpod A100 PCIe 80GB", "type": "rented_compute", "provider": "runpod", "accelerator": "A100 PCIe 80GB", "currency": "USD", "hourly_price": 1.39, "source_url": "https://www.runpod.io/pricing", "price_scope": "GPU pod"},
+    {"id": "compute:runpod:a100-sxm-80gb", "name": "Runpod A100 SXM 80GB", "type": "rented_compute", "provider": "runpod", "accelerator": "A100 SXM 80GB", "currency": "USD", "hourly_price": 1.49, "source_url": "https://www.runpod.io/pricing", "price_scope": "GPU pod"},
+    {"id": "compute:runpod:l40s", "name": "Runpod L40S", "type": "rented_compute", "provider": "runpod", "accelerator": "L40S", "currency": "USD", "hourly_price": 0.99, "source_url": "https://www.runpod.io/pricing", "price_scope": "GPU pod"},
+    {"id": "compute:runpod:rtx-6000-ada", "name": "Runpod RTX 6000 Ada", "type": "rented_compute", "provider": "runpod", "accelerator": "RTX 6000 Ada", "currency": "USD", "hourly_price": 0.77, "source_url": "https://www.runpod.io/pricing", "price_scope": "GPU pod"},
+    {"id": "compute:runpod:a40", "name": "Runpod A40", "type": "rented_compute", "provider": "runpod", "accelerator": "A40", "currency": "USD", "hourly_price": 0.44, "source_url": "https://www.runpod.io/pricing", "price_scope": "GPU pod"},
+    {"id": "compute:runpod:l4", "name": "Runpod L4", "type": "rented_compute", "provider": "runpod", "accelerator": "L4", "currency": "USD", "hourly_price": 0.39, "source_url": "https://www.runpod.io/pricing", "price_scope": "GPU pod"},
+    {"id": "compute:runpod:rtx-4090", "name": "Runpod RTX 4090", "type": "rented_compute", "provider": "runpod", "accelerator": "RTX 4090", "currency": "USD", "hourly_price": 0.69, "source_url": "https://www.runpod.io/pricing", "price_scope": "GPU pod"},
+    {"id": "compute:runpod:rtx-3090", "name": "Runpod RTX 3090", "type": "rented_compute", "provider": "runpod", "accelerator": "RTX 3090", "currency": "USD", "hourly_price": 0.46, "source_url": "https://www.runpod.io/pricing", "price_scope": "GPU pod"},
+    {"id": "compute:runpod:a5000", "name": "Runpod A5000", "type": "rented_compute", "provider": "runpod", "accelerator": "A5000", "currency": "USD", "hourly_price": 0.27, "source_url": "https://www.runpod.io/pricing", "price_scope": "GPU pod"},
+    {"id": "compute:aws:p5.4xlarge-capacity-block-us-east-ohio", "name": "AWS p5.4xlarge Capacity Block - Ohio", "type": "rented_compute", "provider": "aws", "accelerator": "1x H100", "currency": "USD", "hourly_price": 5.191, "source_url": "https://aws.amazon.com/ec2/capacityblocks/pricing/", "price_scope": "full instance; capacity block commitment"}
+  ],
+  "reference_only": [
+    {"provider": "google-cloud", "accelerator": "T4", "currency": "USD", "hourly_gpu_component": 0.35, "note": "Add VM, disk and network before comparison."},
+    {"provider": "google-cloud", "accelerator": "P4", "currency": "USD", "hourly_gpu_component": 0.60, "note": "Add VM, disk and network before comparison."},
+    {"provider": "google-cloud", "accelerator": "V100", "currency": "USD", "hourly_gpu_component": 2.48, "note": "Add VM, disk and network before comparison."},
+    {"provider": "google-cloud", "accelerator": "P100", "currency": "USD", "hourly_gpu_component": 1.46, "note": "Add VM, disk and network before comparison."},
+    {"provider": "akash", "accelerator": "RTX 4090", "currency": "USD", "approximate_hourly_min": 0.50, "approximate_hourly_max": 1.50, "note": "Planning range only; enter the accepted provider bid manually."},
+    {"provider": "akash", "accelerator": "RTX 3090", "currency": "USD", "approximate_hourly_min": 0.30, "approximate_hourly_max": 0.80, "note": "Planning range only; enter the accepted provider bid manually."},
+    {"provider": "akash", "accelerator": "A100 80GB", "currency": "USD", "approximate_hourly_min": 2.50, "approximate_hourly_max": 3.50, "note": "Planning range only; enter the accepted provider bid manually."},
+    {"provider": "akash", "accelerator": "H100", "currency": "USD", "approximate_hourly_min": 2.50, "approximate_hourly_max": 4.00, "note": "Planning range only; enter the accepted provider bid manually."}
+  ]
+}

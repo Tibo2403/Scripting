@@ -1,0 +1,26 @@
+{
+  "currency": "EUR",
+  "pricing_date": "2026-07-13",
+  "currency_conversion": {"USD": 0.86},
+  "workload": {
+    "monthly_input_tokens": 100000000,
+    "monthly_output_tokens": 20000000,
+    "minimum_quality_score": 75
+  },
+  "electricity_tariffs": [{"name": "measured-all-in", "price_per_kwh": 0.20}],
+  "options": [],
+  "catalog_options": [
+    {
+      "catalog_id": "api:gemini/gemini-2.5-flash",
+      "quality_score": 84
+    },
+    {
+      "catalog_id": "compute:runpod:rtx-4090",
+      "litellm_model": "runpod-local-llm",
+      "quality_score": 80,
+      "tokens_per_second": 200,
+      "billed_hours_per_month": 180,
+      "fixed_monthly_cost": 10
+    }
+  ]
+}

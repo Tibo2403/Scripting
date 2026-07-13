@@ -1,0 +1,59 @@
+{
+  "currency": "EUR",
+  "pricing_date": "replace-with-verification-date",
+  "workload": {
+    "monthly_input_tokens": 100000000,
+    "monthly_output_tokens": 20000000,
+    "minimum_quality_score": 75
+  },
+  "electricity_tariffs": [
+    {"name": "standard", "price_per_kwh": 0.25},
+    {"name": "off_peak", "price_per_kwh": 0.16},
+    {"name": "surplus_renewable", "price_per_kwh": 0.10}
+  ],
+  "options": [
+    {
+      "name": "local-rtx-4090",
+      "type": "self_hosted",
+      "litellm_model": "local-llm",
+      "quality_score": 78,
+      "tokens_per_second": 35,
+      "online_hours_per_month": 180,
+      "load_power_watts": 520,
+      "idle_power_watts": 95,
+      "pue": 1.15,
+      "hardware_cost": 3200,
+      "residual_value": 800,
+      "amortization_months": 36,
+      "fixed_monthly_cost": 25
+    },
+    {
+      "name": "akash-gpu-bid",
+      "type": "rented_compute",
+      "litellm_model": "akash-llm",
+      "quality_score": 78,
+      "tokens_per_second": 35,
+      "billed_hours_per_month": 180,
+      "hourly_price": 0.75,
+      "fixed_monthly_cost": 10
+    },
+    {
+      "name": "economy-api",
+      "type": "api",
+      "litellm_model": "cloud-economy",
+      "quality_score": 82,
+      "input_price_per_1m": 0.30,
+      "output_price_per_1m": 1.20,
+      "fixed_monthly_cost": 0
+    },
+    {
+      "name": "premium-api",
+      "type": "api",
+      "litellm_model": "cloud-premium",
+      "quality_score": 94,
+      "input_price_per_1m": 3,
+      "output_price_per_1m": 15,
+      "fixed_monthly_cost": 0
+    }
+  ]
+}

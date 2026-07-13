@@ -32,7 +32,8 @@ For client deployments of self-hosted AI, LiteLLM, Ollama, Open WebUI, or LLM ga
 |-- examples/
 |-- scripts/
 |   |-- bash/
-|   |   `-- install_ia_souveraine.sh
+|   |   |-- install_ia_souveraine.sh
+|   |   `-- install_llm_microservice.sh
 |   |-- linux/
 |   |   |-- check_dependencies.sh
 |   |   |-- dependencies.conf
@@ -88,7 +89,10 @@ Portfolio, client-readiness, and maintenance docs:
 - `docs/demo-media.md` lists screenshots and GIFs to capture.
 - `docs/issue-backlog.md` contains ready-to-create GitHub issues.
 - `docs/codex-workspace-doctor.md` documents `Optimize-CodexWorkspace.ps1`.
-- `docs/self-hosted-llm.md` documents the local Open WebUI + Ollama installer.
+- `docs/self-hosted-llm.md` documents the local Open WebUI stack and the
+  LiteLLM/Ollama microservice for Linux VMs, Docker clouds, and Akash Network.
+- `docs/compute-cost-arbitrage.md` documents the dependency-free calculator for
+  owned GPU electricity, rented compute, API token pricing, and quality floors.
 - `docs/smb-llm-self-hosting-one-day.md` and `docs/smb-llm-pilot/` provide a
   one-day SMB LiteLLM/Ollama setup runbook with fill-in pilot templates.
 - `docs/codex-routing-modes.md` compares direct Codex, LiteLLM proxy, and
@@ -218,6 +222,9 @@ Run the LiteLLM routing smoke test:
 
 ```bash
 bash scripts/bash/install_ia_souveraine.sh --dry-run --skip-model
+bash scripts/bash/install_llm_microservice.sh --dry-run \
+  --master-key 'sk-example-key-1234' \
+  --with-openclaw
 bash scripts/linux/check_dependencies.sh
 bash scripts/linux/pentest_discovery.sh --dry-run --yes-i-am-authorized
 bash scripts/linux/pentest_verification.sh --dry-run --yes-i-am-authorized
@@ -257,6 +264,22 @@ Use the safe placeholders in `examples/` for lab demos and documentation. Do not
 Before running a self-hosted AI installation for a customer, complete [`docs/client-preinstallation-audit.md`](docs/client-preinstallation-audit.md). The checklist helps confirm scope, RGPD constraints, security controls, infrastructure readiness, monitoring, rollback, and the final go/no-go decision.
 
 `install_ia_souveraine.sh` starts a local Open WebUI + Ollama stack in Docker. It keeps model and WebUI data in Docker volumes and supports conservative dry-run checks before installation. See [`docs/self-hosted-llm.md`](docs/self-hosted-llm.md) for usage, persistence, GPU behavior, and troubleshooting.
+
+`install_llm_microservice.sh` deploys a persistent Ollama model behind an
+authenticated LiteLLM/OpenAI-compatible API on a Debian/Ubuntu VM, any Docker
+cloud, or Akash Network. The optional `--with-openclaw` output configures
+OpenClaw agents as clients of the gateway, including a strict no-fallback agent
+profile. It binds to localhost by default; use `--host 0.0.0.0` only with an
+appropriate firewall and TLS reverse proxy. See
+[`docs/self-hosted-llm.md`](docs/self-hosted-llm.md#cloud-litellm-microservice).
+
+`compute_cost_arbitrage.py` compares owned hardware, rented GPU compute such as
+an accepted Akash bid, and hosted LLM APIs. It includes kWh, PUE, hardware
+amortization, capacity, and a minimum quality score, and returns the selected
+LiteLLM alias without changing live routes. Optional CSV history and daily or
+ISO-week trend exports track average, minimum, maximum, and period-over-period
+cost changes. See
+[`docs/compute-cost-arbitrage.md`](docs/compute-cost-arbitrage.md).
 
 ## Python Tools
 

@@ -11,6 +11,7 @@ logs/
 .env
 !.env.example
 .openclaw-deployment-agents/
+llm-microservice-deploy/
 
 # Ignore Python cache files
 __pycache__/
@@ -23,3 +24,6 @@ __pycache__/
 # Keep sanitized examples tracked.
 !examples/*.csv
 !examples/*.json
+!scripts/python/compute-cost-arbitrage.example.json
+!scripts/python/compute-cost-arbitrage.catalog.example.json
+!scripts/python/public-compute-price-snapshot.json
