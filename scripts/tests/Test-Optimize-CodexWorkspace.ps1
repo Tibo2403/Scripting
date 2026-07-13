@@ -1,15 +1,13 @@
 $ErrorActionPreference = 'Stop'
 $doctor = Join-Path $PSScriptRoot '..\powershell\Optimize-CodexWorkspace.ps1'
-$testRoot = Join-Path $env:TEMP 'codex-workspace-doctor-test'
+$testRoot = Join-Path $env:TEMP ("codex-workspace-doctor-test-" + [guid]::NewGuid().ToString('N'))
 $reportPath = Join-Path $testRoot 'report.json'
 $trustedReportPath = Join-Path $testRoot 'trusted-report.json'
 $ciReportPath = Join-Path $testRoot 'ci-report.json'
+$ciLowReadinessReportPath = Join-Path $testRoot 'ci-low-readiness-report.json'
 $partialReportPath = Join-Path $testRoot 'partial-report.json'
+$venvFallbackReportPath = Join-Path $testRoot 'venv-fallback-report.json'
 $agentsPath = Join-Path $testRoot 'AGENTS.md'
-
-if (Test-Path -LiteralPath $testRoot) {
-    Remove-Item -LiteralPath $testRoot -Recurse -Force
-}
 
 try {
     New-Item -ItemType Directory -Path (Join-Path $testRoot 'tests') -Force | Out-Null
@@ -130,6 +128,7 @@ try {
     $ciStdErrPath = Join-Path $testRoot 'ci-policy.stderr.log'
     $ciProcess = Start-Process -FilePath $powerShellPath -ArgumentList @(
         '-NoProfile',
+        '-ExecutionPolicy', 'Bypass',
         '-File', $doctor,
         '-ProjectPath', $testRoot,
         '-FailOn', 'Secret',
@@ -144,6 +143,27 @@ try {
     }
     if ($ciReport.SecretScan.Findings.Count -ne 2) {
         throw 'Redacted validation diagnostics were reported as new secrets.'
+    }
+
+    $ciLowReadinessStdOutPath = Join-Path $testRoot 'ci-low-readiness.stdout.log'
+    $ciLowReadinessStdErrPath = Join-Path $testRoot 'ci-low-readiness.stderr.log'
+    $ciLowReadinessProcess = Start-Process -FilePath $powerShellPath -ArgumentList @(
+        '-NoProfile',
+        '-File', $doctor,
+        '-ProjectPath', $testRoot,
+        '-FailOn', 'LowReadiness',
+        '-MinimumReadinessScore', '100',
+        '-ReportPath', $ciLowReadinessReportPath
+    ) -NoNewWindow -Wait -PassThru -RedirectStandardOutput $ciLowReadinessStdOutPath -RedirectStandardError $ciLowReadinessStdErrPath
+    if ($ciLowReadinessProcess.ExitCode -ne 1) {
+        throw 'CI low-readiness policy did not return a non-zero exit code.'
+    }
+    $ciLowReadinessReport = Get-Content -LiteralPath $ciLowReadinessReportPath -Raw | ConvertFrom-Json
+    if ($ciLowReadinessReport.CI.Status -ne 'failed' -or 'LowReadiness' -notin $ciLowReadinessReport.CI.FailOn) {
+        throw 'CI low-readiness policy failure was not written to the report.'
+    }
+    if (-not ($ciLowReadinessReport.CI.Failures -match 'below the required 100')) {
+        throw 'CI low-readiness failure details were not recorded in the report.'
     }
 
     & $doctor -ProjectPath $testRoot -Disable
@@ -170,6 +190,30 @@ try {
     $partialReport = Get-Content -LiteralPath $partialReportPath -Raw | ConvertFrom-Json
     if ($partialReport.SecretScan.Status -ne 'partial' -or $partialReport.SecretScan.SkippedLargeFileCount -ne 1) {
         throw 'Partial secret scan coverage was not reported.'
+    }
+
+    $venvFallbackRoot = Join-Path $testRoot 'venv-fallback'
+    $venvScriptsRoot = Join-Path $venvFallbackRoot '.venv\Scripts'
+    New-Item -ItemType Directory -Path $venvScriptsRoot -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $venvFallbackRoot 'pyproject.toml') -Value '[tool.pytest.ini_options]'
+    Set-Content -LiteralPath (Join-Path $venvScriptsRoot 'python.cmd') -Value @'
+@echo off
+if "%~1"=="-m" if "%~2"=="compileall" exit /b 0
+if "%~1"=="-m" if "%~2"=="pytest" exit /b 0
+exit /b 1
+'@
+    $originalPath = $env:PATH
+    try {
+        $env:PATH = 'C:\Windows\System32'
+        & $doctor -ProjectPath $venvFallbackRoot -Validate -ReportPath $venvFallbackReportPath
+    }
+    finally {
+        $env:PATH = $originalPath
+    }
+    $venvFallbackReport = Get-Content -LiteralPath $venvFallbackReportPath -Raw | ConvertFrom-Json
+    $venvCompileValidation = @($venvFallbackReport.ValidationResults | Where-Object { $_.Command -eq 'python -m compileall .' })
+    if ($venvCompileValidation.Count -ne 1 -or $venvCompileValidation[0].Status -ne 'passed') {
+        throw 'Local .venv Python fallback was not used for compileall validation.'
     }
 
     Write-Host 'Codex Workspace Doctor smoke test passed.'

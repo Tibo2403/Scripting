@@ -375,6 +375,71 @@ function Protect-ValidationLogLine {
     return $redacted
 }
 
+function Resolve-NativeExecutable {
+    param(
+        [string]$Executable
+    )
+
+    if ([System.IO.Path]::IsPathRooted($Executable) -and (Test-Path -LiteralPath $Executable)) {
+        return [pscustomobject]@{
+            Source = (Resolve-Path -LiteralPath $Executable).Path
+        }
+    }
+
+    $resolvedExecutable = Get-Command $Executable -CommandType Application -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if (-not $resolvedExecutable) {
+        $resolvedExecutable = Get-Command $Executable -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+    }
+    return $resolvedExecutable
+}
+
+function Resolve-PythonValidationInvocation {
+    $venvCandidates = @(
+        (Join-Path $resolvedProject.Path '.venv\Scripts\python.exe'),
+        (Join-Path $resolvedProject.Path '.venv\Scripts\python.cmd'),
+        (Join-Path $resolvedProject.Path 'venv\Scripts\python.exe'),
+        (Join-Path $resolvedProject.Path 'venv\Scripts\python.cmd')
+    )
+
+    foreach ($candidate in $venvCandidates) {
+        $resolvedCandidate = Resolve-NativeExecutable $candidate
+        if ($resolvedCandidate) {
+            return [ordered]@{
+                Executable = $resolvedCandidate.Source
+                PrefixArguments = @()
+            }
+        }
+    }
+
+    $pythonCommand = Resolve-NativeExecutable 'python'
+    if ($pythonCommand) {
+        return [ordered]@{
+            Executable = $pythonCommand.Source
+            PrefixArguments = @()
+        }
+    }
+
+    $python3Command = Resolve-NativeExecutable 'python3'
+    if ($python3Command) {
+        return [ordered]@{
+            Executable = $python3Command.Source
+            PrefixArguments = @()
+        }
+    }
+
+    $pyLauncher = Resolve-NativeExecutable 'py'
+    if ($pyLauncher) {
+        return [ordered]@{
+            Executable = $pyLauncher.Source
+            PrefixArguments = @('-3')
+        }
+    }
+
+    return $null
+}
+
 function Get-RedactedOutputTail {
     param(
         [string]$Output
@@ -426,7 +491,8 @@ function Invoke-NativeValidation {
         [string[]]$Arguments
     )
 
-    if (-not (Get-Command $Executable -ErrorAction SilentlyContinue)) {
+    $resolvedExecutable = Resolve-NativeExecutable $Executable
+    if (-not $resolvedExecutable) {
         return [ordered]@{
             Status = 'unavailable'
             ExitCode = $null
@@ -435,11 +501,6 @@ function Invoke-NativeValidation {
         }
     }
 
-    $resolvedExecutable = Get-Command $Executable -CommandType Application -ErrorAction SilentlyContinue |
-        Select-Object -First 1
-    if (-not $resolvedExecutable) {
-        $resolvedExecutable = Get-Command $Executable -ErrorAction Stop
-    }
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
     $startInfo.CreateNoWindow = $true
     $startInfo.RedirectStandardError = $true
@@ -526,11 +587,29 @@ function Invoke-ValidationCommands {
                 else {
                     switch -Regex ($command) {
                     '^python -m pytest$' {
-                        $result = Invoke-NativeValidation 'python' @('-m', 'pytest')
+                        $pythonInvocation = Resolve-PythonValidationInvocation
+                        if ($pythonInvocation) {
+                            $result = Invoke-NativeValidation $pythonInvocation.Executable (@($pythonInvocation.PrefixArguments) + @('-m', 'pytest'))
+                        }
+                        else {
+                            $result = [ordered]@{
+                                Status = 'unavailable'
+                                ExitCode = $null
+                            }
+                        }
                         break
                     }
                     '^python -m compileall \.$' {
-                        $result = Invoke-NativeValidation 'python' @('-m', 'compileall', '.')
+                        $pythonInvocation = Resolve-PythonValidationInvocation
+                        if ($pythonInvocation) {
+                            $result = Invoke-NativeValidation $pythonInvocation.Executable (@($pythonInvocation.PrefixArguments) + @('-m', 'compileall', '.'))
+                        }
+                        else {
+                            $result = [ordered]@{
+                                Status = 'unavailable'
+                                ExitCode = $null
+                            }
+                        }
                         break
                     }
                     '^npm run (test|lint|build)$' {

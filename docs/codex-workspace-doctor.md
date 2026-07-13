@@ -67,6 +67,10 @@ timeout and retained diagnostic size when needed:
   -ValidationLogLineLimit 30
 ```
 
+For Python validations, the doctor prefers a project-local
+`.venv\Scripts\python(.exe|.cmd)` when present, then falls back to `python`,
+`python3`, or `py -3`.
+
 ## Enforce a CI Policy
 
 `-FailOn` returns a non-zero exit code when one of the selected conditions is
