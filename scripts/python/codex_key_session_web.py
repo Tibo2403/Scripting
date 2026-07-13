@@ -280,7 +280,7 @@ class KeySessionHandler(BaseHTTPRequestHandler):
 
     state: ClassVar[SessionState]
     config_path: ClassVar[Path]
-    litellm_path: ClassVar[Path]
+    litellm_path: ClassVar[Path | None]
     proxy_host: ClassVar[str]
     proxy_port: ClassVar[int]
 
@@ -330,6 +330,11 @@ class KeySessionHandler(BaseHTTPRequestHandler):
         use_local_qwen = form.get("USE_LOCAL_QWEN", "") == "1"
         if not any((openai_key, gemini_key, hf_token, use_local_qwen)):
             self.state.message = "Provide at least one provider key, or keep local Qwen enabled."
+            self._send_page()
+            return
+
+        if self.litellm_path is None:
+            self.state.message = "LiteLLM executable not found. Install LiteLLM first."
             self._send_page()
             return
 
@@ -405,7 +410,11 @@ def run_server(args: argparse.Namespace) -> int:
     handler = KeySessionHandler
     handler.state = SessionState()
     handler.config_path = config_path
-    handler.litellm_path = find_litellm(root)
+    try:
+        handler.litellm_path = find_litellm(root)
+    except FileNotFoundError as exc:
+        handler.litellm_path = None
+        handler.state.message = str(exc)
     handler.proxy_host = args.proxy_host
     handler.proxy_port = args.proxy_port
 
