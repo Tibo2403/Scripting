@@ -24,23 +24,27 @@ Detected stack: Python, PowerShell
 
 For every PR description, merge proposal, push summary, or release validation note, use this structure:
 
+Summarize the code or product change that was delivered, not the Git transport action or what Codex did. Inspect the relevant diff or commits before writing the summary. An unpushed commit, branch name, push command, or successful upload is synchronization evidence, not the problem solved or the reason for the change. If the task was push-only, still explain the contents and purpose of the commits that were pushed.
+
 ### What Problem This Solves
 
-Explain the concrete bug, gap, or maintenance issue. Include the root cause when known.
+Explain the concrete runtime, product, developer, security, or maintenance problem addressed by the code. Include the root cause when known. Do not describe "the commit was not on GitHub" unless the change itself fixes a Git or release-process problem.
 
 ### Why This Change Was Made
 
-Explain the technical change and why this approach was chosen.
+Explain what changed in the code, configuration, tests, or documentation and why that implementation was chosen. Name the important components or behavior. Do not use "pushed the branch" or another Codex/Git action as the technical rationale.
 
 ### User Impact
 
-State whether runtime, product, user, maintainer, or developer behavior changes. If there is no behavior change, say so explicitly.
+State the actual runtime, product, user, maintainer, or developer effect of the delivered change. Do not merely say that the change is now available on GitHub. If there is no behavior change, say so explicitly.
 
 ### Evidence
 
-- Before: failing run, error message, limitation, or previous behavior
+- Code: affected files or components and the key behavior implemented
+- Before: failing run, error message, limitation, or previous behavior addressed by the code
 - Tests: targeted tests and results
 - Checks: CI, lint, smoke tests, or manual validation
+- Sync: branch, commit hash, push result, and final divergence when relevant
 - Autoreview: clean, findings addressed, or not run
 
-Keep the Evidence section factual. Prefer concrete commands, run links, failure messages, and pass/fail results over vague statements.
+Keep the Evidence section factual. Prefer concrete files, behaviors, commands, run links, failure messages, and pass/fail results over vague statements. Git synchronization details support the summary but must not replace an explanation of the delivered code.
