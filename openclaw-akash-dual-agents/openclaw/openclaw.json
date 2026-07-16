@@ -1,0 +1,122 @@
+{
+  gateway: {
+    mode: "local",
+    port: 18789,
+    bind: "0.0.0.0",
+    auth: { token: "${OPENCLAW_GATEWAY_TOKEN}" }
+  },
+  cron: { enabled: true },
+  models: {
+    mode: "merge",
+    providers: {
+      deepinfra: {
+        baseUrl: "https://api.deepinfra.com/v1/openai",
+        apiKey: "${DEEPINFRA_API_KEY}",
+        api: "openai-completions",
+        timeoutSeconds: 180,
+        models: [
+          {
+            id: "${QWEN_MODEL_ID}",
+            name: "Qwen coding model on DeepInfra",
+            reasoning: true,
+            input: ["text"],
+            contextWindow: 131072,
+            contextTokens: 65536,
+            maxTokens: 16384,
+            compat: { thinkingFormat: "qwen" }
+          },
+          {
+            id: "${DEEPSEEK_MODEL_ID}",
+            name: "DeepSeek review model on DeepInfra",
+            reasoning: true,
+            input: ["text"],
+            contextWindow: 131072,
+            contextTokens: 65536,
+            maxTokens: 8192,
+            compat: { requiresReasoningContentOnAssistantMessages: true }
+          }
+        ]
+      },
+      openai: {
+        apiKey: "${OPENAI_API_KEY}",
+        api: "openai-responses",
+        models: [
+          { id: "gpt-4o", name: "GPT-4o", input: ["text", "image"], contextWindow: 128000, maxTokens: 16384 },
+          { id: "gpt-4o-mini", name: "GPT-4o mini", input: ["text", "image"], contextWindow: 128000, maxTokens: 16384 }
+        ]
+      }
+    }
+  },
+  agents: {
+    defaults: {
+      timezone: "Europe/Budapest",
+      maxConcurrent: 2,
+      timeoutSeconds: 1200,
+      models: {
+        "deepinfra/*": {},
+        "openai/gpt-4o": {},
+        "openai/gpt-4o-mini": {}
+      },
+      sandbox: { mode: "non-main", workspaceAccess: "rw" }
+    },
+    list: [
+      {
+        id: "agent-qwen",
+        default: true,
+        workspace: "/data/workspaces/agent-qwen",
+        repoRoot: "/data/repos",
+        model: {
+          primary: "deepinfra/${QWEN_MODEL_ID}",
+          fallbacks: ["openai/gpt-4o"]
+        },
+        thinkingDefault: "high",
+        heartbeat: {
+          every: "2h",
+          activeHours: { start: "07:00", end: "23:00", timezone: "Europe/Budapest" },
+          target: "last"
+        },
+        tools: {
+          profile: "coding",
+          allow: ["read", "write", "edit", "exec", "process", "web_fetch", "web_search"],
+          deny: ["browser", "nodes", "canvas"]
+        }
+      },
+      {
+        id: "agent-deepseek",
+        workspace: "/data/workspaces/agent-deepseek",
+        repoRoot: "/data/repos",
+        model: {
+          primary: "deepinfra/${DEEPSEEK_MODEL_ID}",
+          fallbacks: ["openai/gpt-4o-mini"]
+        },
+        thinkingDefault: "medium",
+        heartbeat: {
+          every: "1h",
+          activeHours: { start: "06:30", end: "23:30", timezone: "Europe/Budapest" },
+          target: "last"
+        },
+        tools: {
+          profile: "coding",
+          allow: ["read", "write", "edit", "exec", "process", "web_fetch", "web_search", "message"],
+          deny: ["browser", "nodes", "canvas"]
+        }
+      }
+    ]
+  },
+  channels: {
+    telegram: {
+      enabled: true,
+      defaultAccount: "qwen",
+      dmPolicy: "pairing",
+      groupPolicy: "disabled",
+      accounts: {
+        qwen: { botToken: "${TOKEN_BOT_A}", dmPolicy: "pairing" },
+        deepseek: { botToken: "${TOKEN_BOT_B}", dmPolicy: "pairing" }
+      }
+    }
+  },
+  bindings: [
+    { agentId: "agent-qwen", match: { channel: "telegram", accountId: "qwen" } },
+    { agentId: "agent-deepseek", match: { channel: "telegram", accountId: "deepseek" } }
+  ]
+}
