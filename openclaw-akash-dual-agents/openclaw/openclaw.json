@@ -36,14 +36,6 @@
             compat: { requiresReasoningContentOnAssistantMessages: true }
           }
         ]
-      },
-      openai: {
-        apiKey: "${OPENAI_API_KEY}",
-        api: "openai-responses",
-        models: [
-          { id: "gpt-4o", name: "GPT-4o", input: ["text", "image"], contextWindow: 128000, maxTokens: 16384 },
-          { id: "gpt-4o-mini", name: "GPT-4o mini", input: ["text", "image"], contextWindow: 128000, maxTokens: 16384 }
-        ]
       }
     }
   },
