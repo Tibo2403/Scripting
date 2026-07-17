@@ -1,6 +1,10 @@
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+# unittest discovery starts from the repository root, so expose the sibling module.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from llm_decision_ledger import Decision, DecisionLedger, Outcome
 
