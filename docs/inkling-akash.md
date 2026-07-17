@@ -1,54 +1,56 @@
 # Inkling on Akash
 
-## Hardware reality
+## Configuration optimale
 
-Inkling has 975 billion total parameters and 41 billion active parameters. Its official BF16 checkpoint requires about 2 TB of aggregate VRAM, while the NVFP4 checkpoint requires about 600 GB and Blackwell-class FP4 support. A single RTX 3090 provides only 24 GiB of VRAM and therefore cannot self-host Inkling.
+Inkling compte 975 milliards de paramètres et nécessite un cluster de GPU spécialisés pour l'auto-hébergement. Une RTX 3090 de 24 GiB ne peut pas charger le modèle.
 
-The helper in `scripts/bash/deploy_inkling_akash.sh` deliberately refuses `--mode self-host` on one RTX 3090. Its default `api` mode deploys a LiteLLM gateway on an Akash RTX 3090 and forwards requests to a remote OpenAI-compatible endpoint that actually hosts Inkling.
+La solution la moins chère est donc, dans cet ordre :
 
-> Cost note: the GPU is not used for inference in API mode. Keeping the requested RTX 3090 preserves the original deployment choice, but a CPU-only Akash deployment is cheaper. Remove the `gpu` block from the generated SDL when the upstream API performs all inference.
+1. appeler directement une API Inkling compatible OpenAI ;
+2. si un endpoint privé et une clé client distincte sont nécessaires, déployer une petite passerelle LiteLLM CPU sur Akash ;
+3. ne louer une RTX 3090 que pour un autre modèle local compatible, car elle ne sert à rien pour une passerelle API Inkling.
 
-## Prerequisites
+Le profil par défaut du script est désormais CPU-only :
 
-- An Akash account funded for deployments.
-- The `provider-services` CLI configured with an Akash key.
-- An OpenAI-compatible provider endpoint exposing Inkling.
-- The provider API token.
+- 0,5 vCPU ;
+- 1 GiB de RAM ;
+- 1 GiB de stockage éphémère ;
+- aucune carte graphique ;
+- plafond d'enchère de 25 uACT par bloc, soit environ 10,80 ACT par mois au maximum configuré. Le prix réel dépend de l'offre gagnante.
 
-## Generate the SDL safely
+## Prérequis
+
+- Un compte Akash financé.
+- Le CLI `provider-services` configuré avec une clé Akash.
+- Un endpoint Inkling compatible avec l'API OpenAI.
+- Une clé API du fournisseur.
+
+## Générer le SDL
 
 ```bash
 export INKLING_API_BASE='https://provider.example/v1'
 export INKLING_API_KEY='replace-me'
-export LITELLM_MASTER_KEY='replace-with-a-long-random-secret'
+export LITELLM_MASTER_KEY="$(openssl rand -hex 32)"
 
 bash scripts/bash/deploy_inkling_akash.sh --dry-run
 bash scripts/bash/deploy_inkling_akash.sh --output deploy-inkling-akash.yaml
 ```
 
-The generated SDL contains secrets. Do not commit it. Restrict its permissions, submit it, and remove it after deployment.
+Le fichier SDL contient les secrets. Ne le commitez pas et supprimez-le après le déploiement.
 
-## Submit the deployment
+## Déployer
 
 ```bash
 export AKASH_KEY_NAME='your-akash-key'
 bash scripts/bash/deploy_inkling_akash.sh --deploy
 ```
 
-Alternatively, generate and review the SDL first:
+Après la création du déploiement, sélectionnez une offre fournisseur et envoyez le manifeste avec votre workflow Akash habituel. La passerelle expose une API compatible OpenAI sur le port 80.
+
+## Tester
 
 ```bash
-provider-services tx deployment create deploy-inkling-akash.yaml \
-  --from "$AKASH_KEY_NAME" \
-  --yes
-```
-
-After selecting a provider lease and sending the manifest using your normal Akash workflow, the gateway exposes an OpenAI-compatible endpoint on port 80. Clients use the model name `inkling` and authenticate with `LITELLM_MASTER_KEY`.
-
-## Test the gateway
-
-```bash
-curl "http://YOUR_AKASH_HOST/v1/chat/completions" \
+curl 'http://YOUR_AKASH_HOST/v1/chat/completions' \
   -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
   -H 'Content-Type: application/json' \
   -d '{
@@ -57,6 +59,16 @@ curl "http://YOUR_AKASH_HOST/v1/chat/completions" \
   }'
 ```
 
-## Self-hosting
+## Profil RTX 3090
 
-Do not use one RTX 3090 for local Inkling inference. Use hardware supported by the selected checkpoint and inference engine. At the initial Inkling release, the practical official configurations require several high-memory Hopper or Blackwell GPUs, not consumer 24 GiB cards.
+Le profil historique reste disponible uniquement pour comparaison :
+
+```bash
+bash scripts/bash/deploy_inkling_akash.sh --profile rtx3090 --dry-run
+```
+
+Il affiche un avertissement, car le GPU reste inutilisé par la passerelle et peut ajouter plusieurs centaines de dollars par mois. Il ne permet pas d'auto-héberger Inkling.
+
+## Réduction supplémentaire du coût
+
+Pour un usage personnel ou un seul client, utilisez directement `INKLING_API_BASE` depuis l'application et ne déployez aucune passerelle. La passerelle Akash devient utile pour centraliser les clés, présenter un endpoint stable, appliquer des quotas ou connecter plusieurs applications.
