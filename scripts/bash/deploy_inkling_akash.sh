@@ -1,135 +1,112 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_NAME="$(basename "$0")"
 OUTPUT_FILE="deploy-inkling-akash.yaml"
-GPU_MODEL="rtx3090"
-GPU_UNITS=1
-MODE="api"
-MAX_PRICE_UAKT="1000"
+PROFILE="cpu"
+MAX_PRICE_UACT="25"
+CPU_UNITS="0.5"
+MEMORY_SIZE="1Gi"
+STORAGE_SIZE="1Gi"
+LITELLM_IMAGE="ghcr.io/berriai/litellm:v1.92.0"
 DEPLOY=false
 DRY_RUN=false
 
 usage() {
   cat <<'EOF'
-Generate and optionally submit an Akash SDL for Inkling.
+Generate and optionally submit a cost-optimized Akash SDL for Inkling.
 
-Important:
-  Inkling cannot be self-hosted on one RTX 3090 (24 GiB VRAM). The official
-  quantized checkpoint needs roughly 600 GB aggregate VRAM. Therefore the
-  default mode deploys a LiteLLM gateway that forwards requests to a remote,
-  OpenAI-compatible Inkling endpoint.
+Inkling cannot run locally on one RTX 3090. The optimal low-cost setup is a
+small CPU-only LiteLLM gateway forwarding to an OpenAI-compatible Inkling API.
+For the absolute lowest cost, call the upstream API directly and skip Akash.
 
 Usage:
   deploy_inkling_akash.sh [options]
 
 Options:
-  --mode api|self-host    Deployment mode (default: api)
-  --gpu MODEL             Akash GPU model (default: rtx3090)
-  --gpu-units N           Number of GPUs (default: 1)
+  --profile cpu|rtx3090   Resource profile (default: cpu)
+  --cpu UNITS             CPU cores for cpu profile (default: 0.5)
+  --memory SIZE           RAM (default: 1Gi)
+  --storage SIZE          Ephemeral storage (default: 1Gi)
+  --max-price-uact N      Maximum ACT micro-units per block (default: 25)
   --output FILE           Generated SDL path
-  --max-price-uakt N      Maximum bid price in uAKT (default: 1000)
-  --deploy                Submit the generated SDL with provider-services
-  --dry-run               Print actions without writing or deploying
-  -h, --help              Show this help
+  --deploy                Submit SDL with provider-services
+  --dry-run               Print SDL and estimated maximum monthly cost
+  -h, --help              Show help
 
-Required environment variables for API mode:
+Required environment variables:
   INKLING_API_BASE        OpenAI-compatible upstream base URL
   INKLING_API_KEY         Upstream API token
+  LITELLM_MASTER_KEY      Client-facing gateway key
 
 Optional environment variables:
-  LITELLM_MASTER_KEY      Client-facing gateway key (default: generated warning)
   INKLING_MODEL_NAME      Upstream model identifier (default: inkling)
 
-Examples:
-  export INKLING_API_BASE='https://your-provider.example/v1'
+Example:
+  export INKLING_API_BASE='https://provider.example/v1'
   export INKLING_API_KEY='...'
-  export LITELLM_MASTER_KEY='change-me'
+  export LITELLM_MASTER_KEY="$(openssl rand -hex 32)"
   bash scripts/bash/deploy_inkling_akash.sh --dry-run
   bash scripts/bash/deploy_inkling_akash.sh --deploy
 EOF
 }
 
-fail() {
-  printf 'ERROR: %s\n' "$*" >&2
-  exit 1
-}
+fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
 require_positive_integer() {
-  local name="$1"
-  local value="$2"
-  [[ "$value" =~ ^[1-9][0-9]*$ ]] || fail "$name must be a positive integer"
+  [[ "$2" =~ ^[1-9][0-9]*$ ]] || fail "$1 must be a positive integer"
+}
+
+require_cpu_value() {
+  [[ "$1" =~ ^([0-9]+([.][0-9]+)?|[0-9]+m)$ ]] || fail "--cpu must be numeric or millicores (for example 0.5 or 500m)"
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --mode)
-      [[ $# -ge 2 ]] || fail "--mode requires a value"
-      MODE="$2"
-      shift 2
-      ;;
-    --gpu)
-      [[ $# -ge 2 ]] || fail "--gpu requires a value"
-      GPU_MODEL="$2"
-      shift 2
-      ;;
-    --gpu-units)
-      [[ $# -ge 2 ]] || fail "--gpu-units requires a value"
-      GPU_UNITS="$2"
-      shift 2
-      ;;
-    --output)
-      [[ $# -ge 2 ]] || fail "--output requires a value"
-      OUTPUT_FILE="$2"
-      shift 2
-      ;;
-    --max-price-uakt)
-      [[ $# -ge 2 ]] || fail "--max-price-uakt requires a value"
-      MAX_PRICE_UAKT="$2"
-      shift 2
-      ;;
-    --deploy)
-      DEPLOY=true
-      shift
-      ;;
-    --dry-run)
-      DRY_RUN=true
-      shift
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
-    *)
-      fail "unknown option: $1"
-      ;;
+    --profile) [[ $# -ge 2 ]] || fail "--profile requires a value"; PROFILE="$2"; shift 2 ;;
+    --cpu) [[ $# -ge 2 ]] || fail "--cpu requires a value"; CPU_UNITS="$2"; shift 2 ;;
+    --memory) [[ $# -ge 2 ]] || fail "--memory requires a value"; MEMORY_SIZE="$2"; shift 2 ;;
+    --storage) [[ $# -ge 2 ]] || fail "--storage requires a value"; STORAGE_SIZE="$2"; shift 2 ;;
+    --max-price-uact) [[ $# -ge 2 ]] || fail "--max-price-uact requires a value"; MAX_PRICE_UACT="$2"; shift 2 ;;
+    --output) [[ $# -ge 2 ]] || fail "--output requires a value"; OUTPUT_FILE="$2"; shift 2 ;;
+    --deploy) DEPLOY=true; shift ;;
+    --dry-run) DRY_RUN=true; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) fail "unknown option: $1" ;;
   esac
 done
 
-require_positive_integer "--gpu-units" "$GPU_UNITS"
-require_positive_integer "--max-price-uakt" "$MAX_PRICE_UAKT"
-
-case "$MODE" in
-  api)
-    : "${INKLING_API_BASE:?Set INKLING_API_BASE to the OpenAI-compatible Inkling endpoint}"
-    : "${INKLING_API_KEY:?Set INKLING_API_KEY to the upstream API token}"
+case "$PROFILE" in
+  cpu) ;;
+  rtx3090)
+    printf 'WARNING: RTX 3090 is unused in API gateway mode and can cost hundreds of dollars per month.\n' >&2
     ;;
-  self-host)
-    if [[ "$GPU_MODEL" == "rtx3090" && "$GPU_UNITS" -eq 1 ]]; then
-      fail "Inkling self-hosting is impossible on 1x RTX 3090 (24 GiB). Use --mode api, or a supported multi-GPU configuration with at least about 600 GB aggregate VRAM."
-    fi
-    fail "Self-host mode is intentionally blocked until a supported Inkling inference image and sufficient Blackwell/Hopper hardware are configured."
-    ;;
-  *)
-    fail "--mode must be api or self-host"
-    ;;
+  *) fail "--profile must be cpu or rtx3090" ;;
 esac
 
+require_cpu_value "$CPU_UNITS"
+require_positive_integer "--max-price-uact" "$MAX_PRICE_UACT"
+[[ "$MEMORY_SIZE" =~ ^[1-9][0-9]*(Mi|Gi)$ ]] || fail "--memory must use Mi or Gi"
+[[ "$STORAGE_SIZE" =~ ^[1-9][0-9]*(Mi|Gi)$ ]] || fail "--storage must use Mi or Gi"
+
+: "${INKLING_API_BASE:?Set INKLING_API_BASE}"
+: "${INKLING_API_KEY:?Set INKLING_API_KEY}"
+: "${LITELLM_MASTER_KEY:?Set LITELLM_MASTER_KEY to a long random secret}"
+
 MODEL_NAME="${INKLING_MODEL_NAME:-inkling}"
-MASTER_KEY="${LITELLM_MASTER_KEY:-}"
-if [[ -z "$MASTER_KEY" ]]; then
-  printf 'WARNING: LITELLM_MASTER_KEY is not set; using a placeholder that must be changed.\n' >&2
-  MASTER_KEY="CHANGE_ME_BEFORE_DEPLOYMENT"
+
+GPU_BLOCK=""
+if [[ "$PROFILE" == "rtx3090" ]]; then
+  GPU_BLOCK=$(cat <<'EOF'
+        gpu:
+          units: 1
+          attributes:
+            vendor:
+              nvidia:
+                - model: rtx3090
+                  ram: 24Gi
+                  interface: pcie
+EOF
+)
 fi
 
 read -r -d '' SDL <<EOF || true
@@ -138,9 +115,9 @@ version: "2.0"
 
 services:
   inkling-gateway:
-    image: ghcr.io/berriai/litellm:main-latest
+    image: ${LITELLM_IMAGE}
     env:
-      - LITELLM_MASTER_KEY=${MASTER_KEY}
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
       - INKLING_API_BASE=${INKLING_API_BASE}
       - INKLING_API_KEY=${INKLING_API_KEY}
       - INKLING_MODEL_NAME=${MODEL_NAME}
@@ -170,25 +147,18 @@ profiles:
     inkling-gateway:
       resources:
         cpu:
-          units: 2
+          units: ${CPU_UNITS}
         memory:
-          size: 4Gi
+          size: ${MEMORY_SIZE}
         storage:
-          size: 8Gi
-        gpu:
-          units: ${GPU_UNITS}
-          attributes:
-            vendor:
-              nvidia:
-                - model: ${GPU_MODEL}
-                  ram: 24Gi
-                  interface: pcie
+          size: ${STORAGE_SIZE}
+${GPU_BLOCK}
   placement:
     akash:
       pricing:
         inkling-gateway:
-          denom: uakt
-          amount: ${MAX_PRICE_UAKT}
+          denom: uact
+          amount: ${MAX_PRICE_UACT}
 
 deployment:
   inkling-gateway:
@@ -197,20 +167,24 @@ deployment:
       count: 1
 EOF
 
+# Approximately 432,000 six-second blocks in 30 days; 1,000,000 uACT = 1 ACT.
+MONTHLY_MAX_ACT=$(awk -v amount="$MAX_PRICE_UACT" 'BEGIN { printf "%.2f", amount * 432000 / 1000000 }')
+printf 'Profile: %s | maximum configured bid: about %s ACT/month (actual winning bid may be lower).\n' "$PROFILE" "$MONTHLY_MAX_ACT" >&2
+
 if [[ "$DRY_RUN" == true ]]; then
   printf '%s\n' "$SDL"
-  printf '\nDry run only; no file was written and no deployment was submitted.\n' >&2
+  printf '\nDry run only; nothing was written or deployed.\n' >&2
   exit 0
 fi
 
 umask 077
 printf '%s\n' "$SDL" >"$OUTPUT_FILE"
 printf 'Generated %s\n' "$OUTPUT_FILE"
-printf 'Security note: the SDL currently contains secrets. Keep it local, deploy it, then delete it securely.\n' >&2
+printf 'Security: this SDL contains secrets. Do not commit it; remove it after deployment.\n' >&2
 
 if [[ "$DEPLOY" == true ]]; then
   command -v provider-services >/dev/null 2>&1 || fail "provider-services CLI is required for --deploy"
   provider-services tx deployment create "$OUTPUT_FILE" --from "${AKASH_KEY_NAME:?Set AKASH_KEY_NAME}" --yes
 else
-  printf 'Review the SDL, then run:\n  provider-services tx deployment create %q --from "$AKASH_KEY_NAME" --yes\n' "$OUTPUT_FILE"
+  printf 'Review the SDL, then deploy it with provider-services.\n'
 fi
