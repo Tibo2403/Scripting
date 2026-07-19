@@ -1,0 +1,167 @@
+---
+version: "2.0"
+
+services:
+  openclaw:
+    image: node:20-bookworm-slim
+    command:
+      - /bin/bash
+      - -lc
+    args:
+      - |
+        set -Eeuo pipefail
+
+        log() {
+          printf '[%s] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"
+        }
+
+        trap 'log "ERREUR ligne ${LINENO}: commande interrompue."' ERR
+
+        export DEBIAN_FRONTEND=noninteractive
+        export HOME=/app
+        export OPENCLAW_STATE_DIR=/app/.openclaw
+        export OPENCLAW_CONFIG_PATH=/app/.openclaw/openclaw.json
+        export PATH="/app/.local/bin:${PATH}"
+
+        log "Installation des dépendances système..."
+        apt-get update
+        apt-get install -y --no-install-recommends \
+          ca-certificates \
+          git \
+          curl \
+          python3 \
+          make \
+          g++
+        rm -rf /var/lib/apt/lists/*
+
+        log "Vérification de Node.js 20 LTS et npm..."
+        node --version
+        npm --version
+        test "$(node -p 'process.versions.node.split(`.`)[0]')" = "20"
+
+        log "Activation de pnpm via Corepack..."
+        corepack enable
+        corepack prepare pnpm@10.15.1 --activate
+        pnpm --version
+
+        mkdir -p /app/.openclaw /app/logs
+
+        if [ ! -d /app/openclaw/.git ]; then
+          log "Premier démarrage : clonage du dépôt officiel OpenClaw..."
+          rm -rf /app/openclaw
+          git clone --depth 1 https://github.com/openclaw/openclaw.git /app/openclaw
+        else
+          log "Dépôt OpenClaw déjà présent sur le volume persistant."
+          if [ "${OPENCLAW_AUTO_UPDATE:-false}" = "true" ]; then
+            log "Mise à jour automatique activée..."
+            git -C /app/openclaw fetch --depth 1 origin main
+            git -C /app/openclaw reset --hard origin/main
+          fi
+        fi
+
+        cd /app/openclaw
+
+        log "Installation idempotente des dépendances..."
+        pnpm install --frozen-lockfile
+
+        log "Compilation d'OpenClaw..."
+        pnpm build
+
+        log "Écriture sécurisée de /app/openclaw/.env..."
+        umask 077
+        {
+          printf 'BIGMODEL_API_KEY=%s\n' "${BIGMODEL_API_KEY:-}"
+          printf 'DASHSCOPE_API_KEY=%s\n' "${DASHSCOPE_API_KEY:-${BIGMODEL_API_KEY:-}}"
+          printf 'GITHUB_TOKEN=%s\n' "${GITHUB_TOKEN:-}"
+          printf 'OPENCLAW_GATEWAY_TOKEN=%s\n' "${OPENCLAW_GATEWAY_TOKEN:-}"
+          printf 'OPENCLAW_GATEWAY_PORT=%s\n' "${OPENCLAW_GATEWAY_PORT:-18789}"
+          printf 'OPENCLAW_STATE_DIR=%s\n' "${OPENCLAW_STATE_DIR}"
+          printf 'OPENCLAW_CONFIG_PATH=%s\n' "${OPENCLAW_CONFIG_PATH}"
+          printf 'NODE_ENV=production\n'
+        } > /app/openclaw/.env
+
+        if [ -z "${BIGMODEL_API_KEY:-${DASHSCOPE_API_KEY:-}}" ]; then
+          log "AVERTISSEMENT : aucune clé Qwen/BigModel n'est définie."
+        fi
+
+        if [ -z "${OPENCLAW_GATEWAY_TOKEN:-}" ]; then
+          log "ERREUR : OPENCLAW_GATEWAY_TOKEN est obligatoire pour une exposition réseau sûre."
+          exit 1
+        fi
+
+        if [ ! -f "${OPENCLAW_CONFIG_PATH}" ]; then
+          log "Création de la configuration minimale non interactive..."
+          cat > "${OPENCLAW_CONFIG_PATH}" <<EOF
+        {
+          "gateway": {
+            "mode": "local",
+            "bind": "lan",
+            "port": ${OPENCLAW_GATEWAY_PORT:-18789},
+            "auth": {
+              "mode": "token",
+              "token": "${OPENCLAW_GATEWAY_TOKEN}"
+            }
+          }
+        }
+        EOF
+          chmod 600 "${OPENCLAW_CONFIG_PATH}"
+        fi
+
+        log "Démarrage permanent du Gateway OpenClaw..."
+        while true; do
+          set +e
+          node /app/openclaw/openclaw.mjs gateway run \
+            --bind lan \
+            --port "${OPENCLAW_GATEWAY_PORT:-18789}" \
+            --auth token \
+            --token "${OPENCLAW_GATEWAY_TOKEN}" \
+            2>&1 | tee -a /app/logs/openclaw.log
+          exit_code=${PIPESTATUS[0]}
+          set -e
+          log "OpenClaw s'est arrêté avec le code ${exit_code}; redémarrage dans 5 secondes."
+          sleep 5
+        done
+    env:
+      - BIGMODEL_API_KEY=COLLEZ_ICI_VOTRE_CLE_QWEN_OU_BIGMODEL
+      - DASHSCOPE_API_KEY=
+      - GITHUB_TOKEN=COLLEZ_ICI_VOTRE_GITHUB_PAT
+      - OPENCLAW_GATEWAY_TOKEN=REMPLACEZ_PAR_UN_SECRET_LONG_ET_ALEATOIRE
+      - OPENCLAW_GATEWAY_PORT=18789
+      - OPENCLAW_AUTO_UPDATE=false
+    expose:
+      - port: 18789
+        as: 18789
+        to:
+          - global: true
+    params:
+      storage:
+        data:
+          mount: /app
+
+profiles:
+  compute:
+    openclaw:
+      resources:
+        cpu:
+          units: 2
+        memory:
+          size: 4Gi
+        storage:
+          - size: 1Gi
+          - name: data
+            size: 30Gi
+            attributes:
+              persistent: true
+              class: beta3
+  placement:
+    lowcost:
+      pricing:
+        openclaw:
+          denom: uakt
+          amount: 1000
+
+deployment:
+  openclaw:
+    lowcost:
+      profile: openclaw
+      count: 1
