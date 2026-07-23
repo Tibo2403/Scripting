@@ -20,6 +20,11 @@ Detected stack: Python, PowerShell
 - Never commit credentials, local environment files, or generated secrets.
 <!-- END CODEX WORKSPACE DOCTOR -->
 
+## Code Size and Generated-Code Guardrails
+
+- Remove generated code that is unused, unreachable, duplicated, superseded, or not connected to an active execution path. Do not keep speculative AI-generated helpers or abstractions without a verified use case.
+- Keep source files at or below 500 lines whenever practical. When a touched file exceeds 400 lines, assess whether cohesive responsibilities can be extracted; do not add substantial new logic to a file already over 500 lines without first splitting it or documenting a concrete exception.
+
 ## Pull Request, Merge, and Push Summaries
 
 For every PR description, merge proposal, push summary, or release validation note, use this structure:
