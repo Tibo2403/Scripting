@@ -23,7 +23,73 @@ Detected stack: Python, PowerShell
 ## Code Size and Generated-Code Guardrails
 
 - Remove generated code that is unused, unreachable, duplicated, superseded, or not connected to an active execution path. Do not keep speculative AI-generated helpers or abstractions without a verified use case.
-- Keep source files at or below 500 lines whenever practical. When a touched file exceeds 400 lines, assess whether cohesive responsibilities can be extracted; do not add substantial new logic to a file already over 500 lines without first splitting it or documenting a concrete exception.
+- Prefer source files below 400 lines. When a touched file reaches 400 lines, actively look for cohesive responsibilities to extract.
+- Do not add substantial new logic to a file over 500 lines without first splitting it or documenting a concrete, temporary exception.
+- Generated scripts, fixtures, snapshots, vendor files, and lockfiles may exceed this limit only when they are not intended for manual maintenance.
+
+## Minimum Acceptable Quality
+
+A change is not complete unless all applicable points below are satisfied.
+
+### Correctness and Validation
+
+- Python files must compile with `python -m compileall .`.
+- PowerShell files must pass `Invoke-ScriptAnalyzer -Path . -Recurse` when PSScriptAnalyzer is available.
+- Run targeted tests or smoke checks for every modified execution path.
+- Do not silently ignore command failures, exceptions, non-zero exit codes, or malformed external responses.
+- Scripts must return a meaningful exit code: zero on success and non-zero on failure.
+
+### Maintainability
+
+- Keep each function or command focused on one responsibility.
+- Extract repeated logic instead of copying it between scripts.
+- Prefer explicit names and straightforward control flow over clever abstractions.
+- Avoid new global mutable state. Pass configuration and dependencies explicitly where practical.
+- Do not add a dependency when the standard library or an existing project dependency already solves the problem adequately.
+- Remove obsolete flags, dead branches, temporary compatibility layers, and commented-out code when their replacement is verified.
+
+### Inputs, Outputs, and Idempotency
+
+- Validate required parameters, paths, environment variables, and external data before use.
+- Quote and escape shell arguments safely; never concatenate untrusted values into executable command strings.
+- Destructive operations must require an explicit target and include a dry-run, confirmation, or force mechanism when practical.
+- Automation scripts should be idempotent whenever feasible: running them twice should not corrupt state or duplicate resources.
+- Write machine-readable output to stdout only when intended; write diagnostics and errors to stderr where supported.
+- Document created, modified, and deleted files or resources for scripts with side effects.
+
+### Security and Secrets
+
+- Never hard-code tokens, passwords, API keys, tenant secrets, private keys, or production endpoints containing credentials.
+- Prefer environment variables, secret stores, or explicit secure parameters for secrets.
+- Avoid logging secrets, authorization headers, full access tokens, personal data, or sensitive file contents.
+- Treat downloaded files, archive contents, API responses, and user-supplied paths as untrusted input.
+- Prevent path traversal and unsafe archive extraction when handling external files.
+- Use least-privilege permissions and avoid requiring administrator or root access unless it is essential and documented.
+
+### Python Minimums
+
+- New or substantially modified public functions should include type hints.
+- Catch only exceptions that can be handled meaningfully; avoid broad `except Exception` unless re-raising with context or handling at a process boundary.
+- Use `pathlib` for filesystem paths where practical.
+- Use `subprocess` with argument lists and `check=True` or explicit return-code handling; avoid `shell=True` unless strictly necessary and justified.
+- Prefer the `logging` module over scattered debug prints in reusable scripts.
+
+### PowerShell Minimums
+
+- Use `[CmdletBinding()]` and typed parameters for reusable or operational scripts where practical.
+- Set or preserve an appropriate error policy and use `-ErrorAction Stop` for commands whose failure must abort the operation.
+- Avoid `Invoke-Expression` and dynamically constructed command strings.
+- Use approved PowerShell verbs for reusable functions.
+- Support `-WhatIf` and `-Confirm` for destructive advanced functions when practical.
+- Return structured objects from reusable functions rather than preformatted display text.
+
+### Tests and Documentation
+
+- Add or update a focused test for bug fixes and non-trivial behavior changes when a test framework exists.
+- At minimum, add a reproducible smoke-test command when automated tests are not practical.
+- Update README or usage documentation when parameters, prerequisites, outputs, side effects, or installation steps change.
+- Include an example invocation for new user-facing scripts.
+- Clearly document platform assumptions, required privileges, external tools, and supported runtime versions.
 
 ## Pull Request, Merge, and Push Summaries
 
