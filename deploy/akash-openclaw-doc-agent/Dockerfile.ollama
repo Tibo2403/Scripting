@@ -1,0 +1,21 @@
+ARG OLLAMA_IMAGE=ollama/ollama:0.30.8
+FROM ${OLLAMA_IMAGE}
+
+USER root
+
+RUN groupadd --system --gid 10001 agent \
+    && useradd --system --uid 10001 --gid agent --home-dir /home/agent --create-home agent \
+    && install -d -m 0750 -o agent -g agent /home/agent/.ollama
+
+COPY --chown=agent:agent runtime/run-ollama.sh /usr/local/bin/run-ollama.sh
+
+USER agent
+
+ENV HOME=/home/agent \
+    OLLAMA_HOST=0.0.0.0:11434 \
+    OLLAMA_MODELS=/home/agent/.ollama/models \
+    OLLAMA_MODEL=llama3.2:3b-instruct-q4_K_M
+
+EXPOSE 11434
+
+ENTRYPOINT ["/bin/sh", "/usr/local/bin/run-ollama.sh"]

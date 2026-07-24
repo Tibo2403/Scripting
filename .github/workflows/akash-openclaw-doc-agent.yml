@@ -1,0 +1,63 @@
+name: Akash OpenClaw documentation agent
+
+on:
+  pull_request:
+    paths:
+      - "deploy/akash-openclaw-doc-agent/**"
+      - ".github/workflows/akash-openclaw-doc-agent.yml"
+  push:
+    paths:
+      - "deploy/akash-openclaw-doc-agent/**"
+      - ".github/workflows/akash-openclaw-doc-agent.yml"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Immutable image version (for example 2026.07.24-1)"
+        required: true
+        default: "2026.07.24-1"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Validate configuration
+        run: python deploy/akash-openclaw-doc-agent/scripts/validate.py
+
+  publish:
+    if: github.event_name == 'workflow_dispatch'
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Validate image version
+        env:
+          IMAGE_VERSION: ${{ inputs.version }}
+        run: |
+          if ! printf '%s' "$IMAGE_VERSION" | grep -Eq '^[0-9]{4}\.[0-9]{2}\.[0-9]{2}-[0-9]+$'; then
+            echo "Invalid immutable image version." >&2
+            exit 1
+          fi
+      - name: Sign in to GitHub Container Registry
+        env:
+          CR_PAT: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$CR_PAT" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Build and publish pinned images
+        env:
+          IMAGE_VERSION: ${{ inputs.version }}
+        working-directory: deploy/akash-openclaw-doc-agent
+        run: |
+          agent_image="ghcr.io/${GITHUB_REPOSITORY,,}/akash-openclaw-doc-agent:${IMAGE_VERSION}"
+          ollama_image="ghcr.io/${GITHUB_REPOSITORY,,}/akash-openclaw-ollama:${IMAGE_VERSION}"
+          docker build --pull --file Dockerfile --tag "$agent_image" .
+          docker build --pull --file Dockerfile.ollama --tag "$ollama_image" .
+          docker push "$agent_image"
+          docker push "$ollama_image"
