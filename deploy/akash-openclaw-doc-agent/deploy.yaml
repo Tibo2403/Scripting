@@ -1,0 +1,63 @@
+version: "2.0"
+
+services:
+  agent:
+    image: ghcr.io/tibo2403/scripting/akash-openclaw-doc-agent:2026.07.24-1
+    env:
+      - ADMIN_ENABLED=false
+      - REGISTRATION_ENABLED=false
+      - PUBLIC_ACCESS=false
+      - ALLOW_SHELL=false
+      - ALLOW_DOCKER=false
+      - ALLOW_TERMINAL=false
+    expose:
+      - port: 8080
+        as: 80
+        to:
+          - global: true
+  ollama:
+    image: ghcr.io/tibo2403/scripting/akash-openclaw-ollama:2026.07.24-1
+    env:
+      - OLLAMA_MODEL=llama3.2:3b-instruct-q4_K_M
+    expose:
+      - port: 11434
+        to:
+          - service: agent
+
+profiles:
+  compute:
+    agent:
+      resources:
+        cpu:
+          units: 0.5
+        memory:
+          size: 1Gi
+        storage:
+          size: 1Gi
+    ollama:
+      resources:
+        cpu:
+          units: 3.5
+        memory:
+          size: 11Gi
+        storage:
+          size: 29Gi
+  placement:
+    akash:
+      pricing:
+        agent:
+          denom: uact
+          amount: 8
+        ollama:
+          denom: uact
+          amount: 42
+
+deployment:
+  agent:
+    akash:
+      profile: agent
+      count: 1
+  ollama:
+    akash:
+      profile: ollama
+      count: 1
