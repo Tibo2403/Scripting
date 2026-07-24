@@ -1,0 +1,7 @@
+.git
+.github
+README.md
+deploy.yaml
+scripts
+__pycache__
+*.pyc
