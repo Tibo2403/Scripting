@@ -12,7 +12,8 @@ from llm_decision_ledger import Decision, DecisionLedger, Outcome
 class DecisionLedgerTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
-        self.ledger = DecisionLedger(Path(self.temp_dir.name) / "ledger.sqlite3")
+        self.database = Path(self.temp_dir.name) / "ledger.sqlite3"
+        self.ledger = DecisionLedger(self.database)
         self.decision = Decision(
             request_id="req-001",
             task_type="code-review",
@@ -30,6 +31,11 @@ class DecisionLedgerTests(unittest.TestCase):
         digest = self.ledger.record_decision(self.decision)
         self.assertEqual(64, len(digest))
         self.assertTrue(self.ledger.verify("req-001"))
+
+    def test_releases_database_file_after_operation(self):
+        self.ledger.record_decision(self.decision)
+        self.database.unlink()
+        self.assertFalse(self.database.exists())
 
     def test_records_outcome_and_builds_evidence(self):
         self.ledger.record_decision(self.decision)
