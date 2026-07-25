@@ -236,6 +236,32 @@ class TestDispatchWithFallback(unittest.TestCase):
 
         self.assertIn("All LiteLLM dispatch attempts failed", str(ctx.exception))
 
+    def test_dispatch_error_keeps_failure_details_and_cause(self):
+        def fake_completion(**kwargs):
+            raise RuntimeError(f"failed {kwargs['model']}")
+
+        config = ScalewayGLMConfig(
+            model="openai/glm-test",
+            api_key="test-key",
+            api_base="https://example.invalid/v1",
+        )
+
+        with self.assertRaises(DispatchError) as ctx:
+            dispatch_with_fallback(
+                "hello",
+                primary_config=config,
+                fallback_models=["openai/fallback-a", "openai/fallback-b"],
+                completion_func=fake_completion,
+                retry_policy=RetryPolicy(max_retries=0),
+            )
+
+        message = str(ctx.exception)
+        self.assertIn("openai/glm-test", message)
+        self.assertIn("openai/fallback-a", message)
+        self.assertIn("openai/fallback-b", message)
+        self.assertIsInstance(ctx.exception.__cause__, RuntimeError)
+        self.assertIn("failed openai/fallback-b", str(ctx.exception.__cause__))
+
 
 class TestClassifyError(unittest.TestCase):
     def test_classify_auth_error(self):

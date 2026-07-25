@@ -328,6 +328,7 @@ def dispatch_with_fallback(
     completion = _resolve_completion_func(completion_func)
     policy = retry_policy or RetryPolicy()
     attempts: list[DispatchAttempt] = []
+    failures: list[tuple[str, Exception]] = []
 
     try:
         response = _call_with_retries(
@@ -344,8 +345,8 @@ def dispatch_with_fallback(
         if return_metrics:
             return DispatchResult(response=response, selected_model=resolved_config.model, attempts=attempts)
         return response
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001 - provider exceptions vary by backend
+        failures.append((resolved_config.model, exc))
 
     for fallback_model in fallback_models:
         fallback_model = str(fallback_model).strip()
@@ -366,7 +367,14 @@ def dispatch_with_fallback(
             if return_metrics:
                 return DispatchResult(response=response, selected_model=fallback_model, attempts=attempts)
             return response
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 - provider exceptions vary by backend
+            failures.append((fallback_model, exc))
             continue
 
-    raise DispatchError(f"All LiteLLM dispatch attempts failed after {len(attempts)} attempts.")
+    failure_summary = "; ".join(
+        f"{model}: {type(exc).__name__}: {exc}" for model, exc in failures
+    ) or "no provider response captured"
+    last_error = failures[-1][1] if failures else None
+    raise DispatchError(
+        f"All LiteLLM dispatch attempts failed after {len(attempts)} attempts. {failure_summary}"
+    ) from last_error
