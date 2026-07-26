@@ -414,10 +414,13 @@ def load_policy(path: Path = POLICY_FILE) -> dict[str, Any]:
     text = read_text(path)
     try:
         import yaml  # type: ignore[import-untyped]
-
-        loaded = yaml.safe_load(text) or {}
-    except Exception:
+    except ImportError:
         loaded = parse_simple_policy(text)
+    else:
+        try:
+            loaded = yaml.safe_load(text) or {}
+        except yaml.YAMLError as exc:
+            raise ValueError(f"Invalid routing policy YAML in {path}: {exc}") from exc
     if not isinstance(loaded, dict):
         return policy
     for key, value in loaded.items():

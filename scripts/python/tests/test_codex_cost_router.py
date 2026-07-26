@@ -1,6 +1,7 @@
 """Tests for the optional Codex cost-routing wrapper."""
 
 import importlib.util
+import types
 import sys
 import tempfile
 import unittest
@@ -165,6 +166,36 @@ class CodexCostRouterTests(unittest.TestCase):
         self.assertEqual(loaded["default_codex_provider"], "huggingface")
         self.assertEqual(loaded["task_provider_rules"]["medium"], "openai")
         self.assertEqual(loaded["fallback_order"], ["huggingface", "litellm"])
+
+    def test_invalid_yaml_policy_raises_instead_of_silent_fallback(self) -> None:
+        fake_yaml = types.SimpleNamespace()
+
+        class FakeYamlError(Exception):
+            pass
+
+        def _boom(_: str) -> None:
+            raise FakeYamlError("broken yaml")
+
+        fake_yaml.YAMLError = FakeYamlError
+        fake_yaml.safe_load = _boom
+        with tempfile.TemporaryDirectory() as directory:
+            policy = Path(directory) / "policy.yaml"
+            policy.write_text(
+                "\n".join(
+                    [
+                        "default_provider: auto",
+                        "task_provider_rules:",
+                        "  simple: local-small",
+                        "  medium: auto",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            with (
+                patch.dict(sys.modules, {"yaml": fake_yaml}),
+                self.assertRaisesRegex(ValueError, "Invalid routing policy YAML"),
+            ):
+                ROUTER.load_policy(policy)
 
     def test_policy_resolves_provider_and_fallback_order(self) -> None:
         policy = {
