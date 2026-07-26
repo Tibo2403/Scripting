@@ -97,3 +97,22 @@ List available Ollama models:
 ```bash
 docker exec ia-souveraine ollama list
 ```
+
+## Review Akash Manifests Before Commit
+
+If you adapt this stack to an Akash SDL, audit the manifest before sharing it
+or committing it. `scripts/python/audit_akash_sdl.py` checks for:
+
+- unpinned or `latest` images;
+- secret-like values embedded directly in the manifest;
+- unexpected globally exposed backend services;
+- missing or oversized HTTP request/time-out limits on public ports.
+
+Example:
+
+```powershell
+python .\scripts\python\audit_akash_sdl.py .\deploy.yaml --public-service litellm --strict --sanitized-output .\deploy.sanitized.yaml
+```
+
+The sanitized output is suitable for review, but any `REDACTED` value must be
+restored from a secret manager or deployment environment before production use.

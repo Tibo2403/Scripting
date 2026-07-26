@@ -83,3 +83,23 @@ one minimal dispatch request.
 `llm_bias_multi_agent.py` is a provider-agnostic multi-agent manager for
 reviewing and revising LLM answers without calling an LLM provider. See
 [`README_LLM_Bias_Multi_Agent.md`](README_LLM_Bias_Multi_Agent.md).
+
+## Akash SDL Security Audit
+
+`audit_akash_sdl.py` audits an Akash `deploy.yaml` against a small production
+security baseline before the manifest is reviewed or committed. It checks image
+pinning, global exposure, HTTP limits, and common secret leaks in `env`,
+`command`, and `args`.
+
+Example:
+
+```powershell
+python .\scripts\python\audit_akash_sdl.py .\deploy.yaml --public-service litellm --strict --sanitized-output .\deploy.sanitized.yaml
+```
+
+Use `--sanitized-output` to write a review copy with detected secret values
+replaced by `REDACTED`. That file is for source-control review only and is not
+deployable until the real values are restored outside the repository.
+
+Regression coverage lives in
+[`tests/test_audit_akash_sdl.py`](tests/test_audit_akash_sdl.py).
