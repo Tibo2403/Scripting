@@ -584,6 +584,20 @@ class CodexCostRouterTests(unittest.TestCase):
                 ROUTER.disable_router()
             self.assertEqual(config.read_bytes(), initial)
 
+    def test_save_state_preserves_damaged_state_file_before_rewrite(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_file = Path(directory) / "cost_router_state.json"
+            state_file.write_text("{not-json", encoding="utf-8")
+            with patch.object(ROUTER, "STATE_FILE", state_file):
+                state = ROUTER.save_state(enabled=True)
+
+            backups = list(state_file.parent.glob("cost_router_state.json.invalid-*"))
+
+            self.assertEqual(state, {"enabled": True})
+            self.assertEqual(len(backups), 1)
+            self.assertEqual(backups[0].read_text(encoding="utf-8"), "{not-json")
+            self.assertEqual(ROUTER.json.loads(state_file.read_text(encoding="utf-8")), {"enabled": True})
+
 
 if __name__ == "__main__":
     unittest.main()

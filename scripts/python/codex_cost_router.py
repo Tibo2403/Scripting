@@ -242,6 +242,23 @@ def write_text(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def backup_damaged_state() -> Path | None:
+    """Preserve an unreadable state file before future writes replace it."""
+    if not STATE_FILE.exists():
+        return None
+    timestamp = utc_now().replace(":", "").replace("+", "").replace(".", "-")
+    backup = STATE_FILE.with_name(f"{STATE_FILE.name}.invalid-{timestamp}")
+    suffix = 1
+    while backup.exists():
+        suffix += 1
+        backup = STATE_FILE.with_name(f"{STATE_FILE.name}.invalid-{timestamp}-{suffix}")
+    try:
+        shutil.copyfile(STATE_FILE, backup)
+    except OSError:
+        return None
+    return backup
+
+
 def remove_profile_block(config: str) -> str:
     """Remove only the managed profile block from a Codex config file."""
     pattern = re.compile(
@@ -255,7 +272,10 @@ def load_state() -> dict[str, Any]:
     """Load local router state without failing on a damaged state file."""
     try:
         return json.loads(read_text(STATE_FILE)) if STATE_FILE.exists() else {}
-    except (json.JSONDecodeError, OSError):
+    except json.JSONDecodeError:
+        backup_damaged_state()
+        return {}
+    except OSError:
         return {}
 
 
