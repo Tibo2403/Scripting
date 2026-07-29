@@ -299,11 +299,19 @@ def read_history() -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     if not LOG_FILE.exists():
         return records
-    for line in LOG_FILE.read_text(encoding="utf-8").splitlines():
-        try:
-            records.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
+    try:
+        with LOG_FILE.open(encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(record, dict):
+                    records.append(record)
+    except OSError:
+        return records
     return records
 
 

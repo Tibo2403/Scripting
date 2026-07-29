@@ -598,6 +598,41 @@ class CodexCostRouterTests(unittest.TestCase):
             self.assertEqual(backups[0].read_text(encoding="utf-8"), "{not-json")
             self.assertEqual(ROUTER.json.loads(state_file.read_text(encoding="utf-8")), {"enabled": True})
 
+    def test_read_history_ignores_malformed_and_non_object_records(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            log_file = Path(directory) / "cost_router.jsonl"
+            log_file.write_text(
+                "\n".join(
+                    [
+                        '{"codex_provider": "standard"}',
+                        "[1, 2, 3]",
+                        "{not-json",
+                        '"string-record"',
+                        '{"codex_provider": "litellm"}',
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(ROUTER, "LOG_FILE", log_file):
+                history = ROUTER.read_history()
+
+        self.assertEqual(
+            history,
+            [
+                {"codex_provider": "standard"},
+                {"codex_provider": "litellm"},
+            ],
+        )
+
+    def test_read_history_keeps_prior_records_when_log_has_invalid_encoding(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            log_file = Path(directory) / "cost_router.jsonl"
+            log_file.write_bytes(b'{"codex_provider": "standard"}\n\xff\n')
+            with patch.object(ROUTER, "LOG_FILE", log_file):
+                history = ROUTER.read_history()
+
+        self.assertEqual(history, [{"codex_provider": "standard"}])
+
 
 if __name__ == "__main__":
     unittest.main()
