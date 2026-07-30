@@ -598,6 +598,20 @@ class CodexCostRouterTests(unittest.TestCase):
             self.assertEqual(backups[0].read_text(encoding="utf-8"), "{not-json")
             self.assertEqual(ROUTER.json.loads(state_file.read_text(encoding="utf-8")), {"enabled": True})
 
+    def test_save_state_preserves_non_object_state_file_before_rewrite(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_file = Path(directory) / "cost_router_state.json"
+            state_file.write_text("[1, 2, 3]", encoding="utf-8")
+            with patch.object(ROUTER, "STATE_FILE", state_file):
+                state = ROUTER.save_state(enabled=True)
+
+            backups = list(state_file.parent.glob("cost_router_state.json.invalid-*"))
+
+            self.assertEqual(state, {"enabled": True})
+            self.assertEqual(len(backups), 1)
+            self.assertEqual(backups[0].read_text(encoding="utf-8"), "[1, 2, 3]")
+            self.assertEqual(ROUTER.json.loads(state_file.read_text(encoding="utf-8")), {"enabled": True})
+
     def test_read_history_ignores_malformed_and_non_object_records(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             log_file = Path(directory) / "cost_router.jsonl"

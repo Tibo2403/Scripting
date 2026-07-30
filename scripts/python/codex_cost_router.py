@@ -271,12 +271,16 @@ def remove_profile_block(config: str) -> str:
 def load_state() -> dict[str, Any]:
     """Load local router state without failing on a damaged state file."""
     try:
-        return json.loads(read_text(STATE_FILE)) if STATE_FILE.exists() else {}
+        state = json.loads(read_text(STATE_FILE)) if STATE_FILE.exists() else {}
     except json.JSONDecodeError:
         backup_damaged_state()
         return {}
     except OSError:
         return {}
+    if not isinstance(state, dict):
+        backup_damaged_state()
+        return {}
+    return state
 
 
 def save_state(**updates: Any) -> dict[str, Any]:
