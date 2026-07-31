@@ -1,6 +1,7 @@
 import json
 import math
 import random
+import shutil
 import threading
 import time
 import urllib.error
@@ -90,6 +91,10 @@ IN_FLIGHT_LOCK = threading.Lock()
 IN_FLIGHT: dict[str, int] = defaultdict(int)
 
 
+def default_state() -> dict[str, Any]:
+    return {"models": {}, "requests": []}
+
+
 @dataclass
 class Choice:
     model: str
@@ -106,11 +111,47 @@ def now() -> float:
 
 def load_state_unlocked() -> dict[str, Any]:
     if not STATE_PATH.exists():
-        return {"models": {}, "requests": []}
+        return default_state()
     try:
-        return json.loads(STATE_PATH.read_text(encoding="utf-8"))
-    except Exception:
-        return {"models": {}, "requests": []}
+        state = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        backup_damaged_state_unlocked()
+        return default_state()
+    except OSError:
+        return default_state()
+
+    if not isinstance(state, dict):
+        backup_damaged_state_unlocked()
+        return default_state()
+
+    damaged = False
+    if not isinstance(state.get("models", {}), dict):
+        state["models"] = {}
+        damaged = True
+    if not isinstance(state.get("requests", []), list):
+        state["requests"] = []
+        damaged = True
+    state.setdefault("models", {})
+    state.setdefault("requests", [])
+    if damaged:
+        backup_damaged_state_unlocked()
+    return state
+
+
+def backup_damaged_state_unlocked() -> Path | None:
+    if not STATE_PATH.exists():
+        return None
+    timestamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    backup = STATE_PATH.with_name(f"{STATE_PATH.name}.invalid-{timestamp}")
+    suffix = 1
+    while backup.exists():
+        suffix += 1
+        backup = STATE_PATH.with_name(f"{STATE_PATH.name}.invalid-{timestamp}-{suffix}")
+    try:
+        shutil.copyfile(STATE_PATH, backup)
+    except OSError:
+        return None
+    return backup
 
 
 def load_state() -> dict[str, Any]:
