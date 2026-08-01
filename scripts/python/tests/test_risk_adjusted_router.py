@@ -4,6 +4,7 @@ import json
 import sys
 import tempfile
 import unittest
+import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 
@@ -50,6 +51,28 @@ class RiskAdjustedRouterStateTests(unittest.TestCase):
             self.assertEqual(state["requests"], [{"selected_model": "codex-qwen-local"}])
             self.assertEqual(len(backups), 1)
 
+
+class RiskAdjustedRouterNetworkTests(unittest.TestCase):
+    def test_forward_json_sanitizes_upstream_network_errors(self) -> None:
+        handler = ROUTER.Handler.__new__(ROUTER.Handler)
+        handler.headers = {}
+
+        with patch.object(ROUTER.urllib.request, "urlopen", side_effect=urllib.error.URLError("secret-token")):
+            status, headers, body, error = handler.forward_json("/v1/chat/completions", {"model": "codex-default"})
+
+        self.assertEqual(status, 502)
+        self.assertEqual(headers, [])
+        self.assertEqual(json.loads(body.decode("utf-8")), {"error": "upstream request failed"})
+        self.assertEqual(error, "URLError")
+        self.assertNotIn("secret-token", body.decode("utf-8"))
+
+    def test_forward_json_does_not_swallow_programming_errors(self) -> None:
+        handler = ROUTER.Handler.__new__(ROUTER.Handler)
+        handler.headers = {}
+
+        with patch.object(ROUTER.urllib.request, "urlopen", side_effect=ValueError("bad test setup")):
+            with self.assertRaises(ValueError):
+                handler.forward_json("/v1/chat/completions", {"model": "codex-default"})
 
 if __name__ == "__main__":
     unittest.main()

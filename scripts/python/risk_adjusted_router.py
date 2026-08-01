@@ -2,6 +2,7 @@ import json
 import math
 import random
 import shutil
+import socket
 import threading
 import time
 import urllib.error
@@ -360,8 +361,12 @@ def extract_completion_tokens(body: bytes) -> int:
             message = choice.get("message") or {}
             text += str(message.get("content") or "")
         return max(1, len(text) // 4) if text else 0
-    except Exception:
+    except (json.JSONDecodeError, TypeError, UnicodeDecodeError, ValueError):
         return 0
+
+
+def upstream_failure_body() -> bytes:
+    return json.dumps({"error": "upstream request failed"}).encode("utf-8")
 
 
 def update_metrics(
@@ -461,7 +466,7 @@ class Handler(BaseHTTPRequestHandler):
 
         try:
             payload = json.loads(raw.decode("utf-8"))
-        except Exception as exc:
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             self.send_json(400, {"error": f"invalid JSON body: {exc}"})
             return
 
@@ -559,11 +564,11 @@ class Handler(BaseHTTPRequestHandler):
                 last_headers = list(exc.headers.items())
                 last_body = exc.read()
                 error = last_body.decode("utf-8", errors="replace")[:1000]
-            except Exception as exc:
+            except (urllib.error.URLError, TimeoutError, socket.timeout, OSError) as exc:
                 last_status = 502
                 last_headers = []
-                last_body = json.dumps({"error": str(exc)}).encode("utf-8")
-                error = str(exc)
+                last_body = upstream_failure_body()
+                error = exc.__class__.__name__
 
             if response is None:
                 elapsed_ms = (time.perf_counter() - started) * 1000
@@ -691,8 +696,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.write_proxy_response(response.status, list(response.headers.items()), data, "", "", [])
         except urllib.error.HTTPError as exc:
             self.write_proxy_response(exc.code, list(exc.headers.items()), exc.read(), "", "", [])
-        except Exception as exc:
-            self.send_json(502, {"error": str(exc)})
+        except (urllib.error.URLError, TimeoutError, socket.timeout, OSError):
+            self.send_json(502, json.loads(upstream_failure_body().decode("utf-8")))
 
     def forward_json(self, path: str, payload: dict[str, Any]) -> tuple[int, list[tuple[str, str]], bytes, str | None]:
         target = UPSTREAM_BASE + path[3:]
@@ -708,8 +713,8 @@ class Handler(BaseHTTPRequestHandler):
         except urllib.error.HTTPError as exc:
             body = exc.read()
             return exc.code, list(exc.headers.items()), body, body.decode("utf-8", errors="replace")[:1000]
-        except Exception as exc:
-            return 502, [], json.dumps({"error": str(exc)}).encode("utf-8"), str(exc)
+        except (urllib.error.URLError, TimeoutError, socket.timeout, OSError) as exc:
+            return 502, [], upstream_failure_body(), exc.__class__.__name__
 
     def open_stream(self, path: str, payload: dict[str, Any]) -> Any:
         target = UPSTREAM_BASE + path[3:]
