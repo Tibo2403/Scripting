@@ -7,7 +7,7 @@ python3 -m py_compile \
   "$kit_dir/webhook_proxy.py"
 bash -n \
   "$kit_dir/setup.sh" \
-  "$kit_dir/install-secure-container.sh" \
+  bash "$kit_dir/install-secure-container.sh" \
   "$kit_dir/container-entrypoint.sh" \
   "$kit_dir/deploy/install-vm.sh"
 
