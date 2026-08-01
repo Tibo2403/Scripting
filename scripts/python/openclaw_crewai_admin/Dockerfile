@@ -18,7 +18,6 @@ RUN chmod 0555 container-entrypoint.sh crewai_admin_mcp.py webhook_proxy.py \
 USER node
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-  CMD python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3)"
+  CMD python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/readyz', timeout=3)"
 
 ENTRYPOINT ["/opt/crewai-admin/container-entrypoint.sh"]
-
