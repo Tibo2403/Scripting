@@ -1,0 +1,36 @@
+{
+  gateway: {
+    auth: { mode: "token" },
+    bind: "loopback",
+    port: 18789
+  },
+  plugins: {
+    allow: ["googlechat"],
+    entries: { googlechat: { enabled: true } }
+  },
+  channels: {
+    googlechat: {
+      enabled: true,
+      serviceAccountFile: "/run/secrets/googlechat-service-account.json",
+      audienceType: "app-url",
+      audience: "__GOOGLE_CHAT_WEBHOOK_URL__",
+      webhookPath: "/googlechat",
+      allowBots: false,
+      dmPolicy: "allowlist",
+      allowFrom: ["__GOOGLE_CHAT_USER_ID__"],
+      groupPolicy: "allowlist",
+      groups: {}
+    }
+  },
+  mcp: {
+    servers: {
+      "crewai-admin": {
+        enabled: true,
+        transport: "stdio",
+        command: "python3",
+        args: ["/opt/crewai-admin/crewai_admin_mcp.py"]
+      }
+    }
+  }
+}
+
