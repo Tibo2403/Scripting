@@ -1,5 +1,6 @@
 {
   gateway: {
+    mode: "local",
     auth: { mode: "token" },
     bind: "loopback",
     port: 18789
@@ -33,4 +34,3 @@
     }
   }
 }
-
