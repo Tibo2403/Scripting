@@ -51,10 +51,23 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self) -> None:  # noqa: N802
-        if self.path == "/healthz":
-            self.send_plain(200, "ok")
-        else:
+        if self.path not in ("/healthz", "/readyz"):
             self.send_plain(404, "not found")
+            return
+        upstream_path = self.path
+        connection = http.client.HTTPConnection(UPSTREAM_HOST, UPSTREAM_PORT, timeout=3)
+        try:
+            connection.request("GET", upstream_path)
+            response = connection.getresponse()
+            response.read(MAX_BODY)
+            if response.status == 200:
+                self.send_plain(200, "ok")
+            else:
+                self.send_plain(503, "gateway not ready")
+        except (OSError, http.client.HTTPException):
+            self.send_plain(503, "gateway unavailable")
+        finally:
+            connection.close()
 
     def do_POST(self) -> None:  # noqa: N802
         if self.path not in ("/googlechat", "/googlechat/"):
@@ -106,4 +119,3 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     ThreadingHTTPServer((LISTEN_HOST, LISTEN_PORT), Handler).serve_forever()
-
