@@ -6,7 +6,7 @@
 | `scripts/linux/check_dependencies.sh` | Linux | Optional sudo for `--install` | package manager, optional `pwsh` | Low | Not needed |
 | `scripts/linux/setup_api.sh` | Debian/Ubuntu Linux | root | `apt-get`, `curl`, `python3`, network | Medium | `--offline` |
 | `scripts/linux/pentest_discovery.sh` | Linux | root recommended | `nmap` | High | Yes |
-| `scripts/linux/pentest_verification.sh` | Linux | root recommended | `nmap`, `msfconsole`, optional `gvm-cli` | High | Yes |
+| `scripts/linux/pentest_verification.sh` | Linux | root recommended | `nmap`, `msfconsole`, optional `gvm-cli`; Python 3 for public-data enrichment | High | Yes |
 | `scripts/linux/pentest_exploitation.sh` | Linux | depends on assessment | optional `searchsploit` | High | Yes |
 | `scripts/linux/scan_wifi.sh` | Linux | root | aircrack-ng suite | High | Yes |
 | `scripts/linux/stealth_post.sh` | Linux | user context | `gpg`, `curl`, `shred` | High | Yes |
