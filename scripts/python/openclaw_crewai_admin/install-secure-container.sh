@@ -51,18 +51,20 @@ umask 077
   printf 'CREWAI_PROJECT_DIR=%s\n' "$crewai_dir"
   printf 'GOOGLE_CHAT_SERVICE_ACCOUNT_FILE=%s\n' "$service_account"
   printf 'OPENCLAW_GATEWAY_TOKEN=%s\n' "$gateway_token"
+  printf 'CONTAINER_UID=%s\n' "$(id -u)"
+  printf 'CONTAINER_GID=%s\n' "$(id -g)"
   printf 'BIND_ADDRESS=127.0.0.1\n'
   printf 'PUBLIC_PORT=8080\n'
 } > "$kit_dir/.env.container"
 
 docker compose --env-file "$kit_dir/.env.container" -f "$kit_dir/compose.secure.yml" build
+docker compose --env-file "$kit_dir/.env.container" -f "$kit_dir/compose.secure.yml" run --rm \
+  --entrypoint node openclaw-crewai \
+  /app/dist/index.js plugins install @openclaw/googlechat
 docker compose --env-file "$kit_dir/.env.container" -f "$kit_dir/compose.secure.yml" up -d
-docker compose --env-file "$kit_dir/.env.container" -f "$kit_dir/compose.secure.yml" exec \
-  openclaw-crewai openclaw plugins install @openclaw/googlechat
-docker compose --env-file "$kit_dir/.env.container" -f "$kit_dir/compose.secure.yml" restart openclaw-crewai
 
 for _attempt in $(seq 1 30); do
-  if curl -fsS http://127.0.0.1:8080/healthz >/dev/null; then
+  if curl -fsS http://127.0.0.1:8080/readyz >/dev/null; then
     echo "Conteneur prêt. Publiez uniquement http://127.0.0.1:8080/googlechat derrière HTTPS."
     exit 0
   fi
@@ -70,4 +72,3 @@ for _attempt in $(seq 1 30); do
 done
 echo "Le contrôle de santé a échoué; consultez docker compose logs." >&2
 exit 1
-
