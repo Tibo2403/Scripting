@@ -17,8 +17,10 @@
       audience: "__GOOGLE_CHAT_WEBHOOK_URL__",
       webhookPath: "/googlechat",
       allowBots: false,
-      dmPolicy: "allowlist",
-      allowFrom: ["__GOOGLE_CHAT_USER_ID__"],
+      dm: {
+        policy: "allowlist",
+        allowFrom: ["__GOOGLE_CHAT_USER_ID__"]
+      },
       groupPolicy: "allowlist",
       groups: {}
     }
