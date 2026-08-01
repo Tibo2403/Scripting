@@ -48,7 +48,9 @@ TASKS_FILE = (PROJECT_DIR / TASKS_RELATIVE).resolve()
 if PROJECT_DIR not in TASKS_FILE.parents:
     raise RuntimeError("Le fichier de tâches doit rester dans le projet CrewAI")
 
-STATE_DIR = Path(__file__).with_name(".state")
+STATE_DIR = Path(
+    os.environ.get("CREWAI_ADMIN_STATE_DIR", str(Path(__file__).with_name(".state")))
+).expanduser().resolve()
 PROPOSALS_DIR = STATE_DIR / "proposals"
 BACKUPS_DIR = STATE_DIR / "backups"
 LOCK_FILE = STATE_DIR / "tasks.lock"
