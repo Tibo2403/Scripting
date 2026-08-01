@@ -20,6 +20,8 @@ services:
       - /tmp:size=128m,mode=1777,noexec,nosuid,nodev
       - /home/node/.cache:size=128m,mode=0700,nosuid,nodev
     environment:
+      HOME: /home/node
+      NPM_CONFIG_CACHE: /tmp/npm-cache
       CREWAI_PROJECT_DIR: /workspace/crewai
       CREWAI_TASKS_FILE: ${CREWAI_TASKS_FILE:-config/tasks.yaml}
       CREWAI_ADMIN_STATE_DIR: /var/lib/openclaw-crewai-admin
