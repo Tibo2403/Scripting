@@ -27,6 +27,8 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: scripts/python/openclaw_crewai_admin
+          load: true
           push: false
           tags: openclaw-crewai-admin:test
-
+      - name: Runtime smoke test
+        run: scripts/python/openclaw_crewai_admin/container-smoke-test.sh
