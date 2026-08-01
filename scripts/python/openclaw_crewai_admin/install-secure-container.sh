@@ -35,7 +35,7 @@ command -v docker >/dev/null || { echo "Docker est requis." >&2; exit 1; }
 docker compose version >/dev/null || { echo "Docker Compose v2 est requis." >&2; exit 1; }
 
 install -d -m 0700 "$kit_dir/runtime/openclaw" "$kit_dir/runtime/crewai-admin"
-python3 - "$kit_dir/openclaw.container.json5.example" "$kit_dir/runtime/openclaw/openclaw.json" "$webhook_url" "$google_user_id" <<'PY'
+python3 - "$kit_dir/openclaw.container.json5.example" "$kit_dir/runtime/openclaw/openclaw.json.pending" "$webhook_url" "$google_user_id" <<'PY'
 import pathlib, sys
 source, target, webhook, user = sys.argv[1:]
 text = pathlib.Path(source).read_text(encoding="utf-8")
@@ -43,7 +43,11 @@ text = text.replace("__GOOGLE_CHAT_WEBHOOK_URL__", webhook)
 text = text.replace("__GOOGLE_CHAT_USER_ID__", user)
 pathlib.Path(target).write_text(text, encoding="utf-8")
 PY
-chmod 0600 "$kit_dir/runtime/openclaw/openclaw.json"
+printf '%s\n' '{ gateway: { auth: { mode: "token" }, bind: "loopback", port: 18789 } }' \
+  > "$kit_dir/runtime/openclaw/openclaw.json"
+chmod 0600 \
+  "$kit_dir/runtime/openclaw/openclaw.json" \
+  "$kit_dir/runtime/openclaw/openclaw.json.pending"
 
 gateway_token="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
 umask 077
@@ -61,6 +65,8 @@ docker compose --env-file "$kit_dir/.env.container" -f "$kit_dir/compose.secure.
 docker compose --env-file "$kit_dir/.env.container" -f "$kit_dir/compose.secure.yml" run --rm \
   --entrypoint node openclaw-crewai \
   /app/dist/index.js plugins install @openclaw/googlechat
+mv "$kit_dir/runtime/openclaw/openclaw.json.pending" \
+  "$kit_dir/runtime/openclaw/openclaw.json"
 docker compose --env-file "$kit_dir/.env.container" -f "$kit_dir/compose.secure.yml" up -d
 
 for _attempt in $(seq 1 30); do
