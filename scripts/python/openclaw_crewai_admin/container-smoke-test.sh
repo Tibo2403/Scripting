@@ -37,7 +37,7 @@ if command -v docker >/dev/null && docker compose version >/dev/null 2>&1; then
   install -d "$test_root/crewai/config"
   cp "$kit_dir/sample-crewai/config/tasks.yaml" "$test_root/crewai/config/tasks.yaml"
   printf '{"type":"service_account","project_id":"ci-test"}\n' > "$test_root/googlechat.json"
-  "$kit_dir/install-secure-container.sh" \
+  bash "$kit_dir/install-secure-container.sh" \
     "$test_root/crewai" \
     "$test_root/googlechat.json" \
     "https://ci.invalid/googlechat" \
