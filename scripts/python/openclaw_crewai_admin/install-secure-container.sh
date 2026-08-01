@@ -77,4 +77,6 @@ for _attempt in $(seq 1 30); do
   sleep 2
 done
 echo "Le contrôle de santé a échoué; consultez docker compose logs." >&2
+docker compose --env-file "$kit_dir/.env.container" -f "$kit_dir/compose.secure.yml" ps >&2 || true
+docker compose --env-file "$kit_dir/.env.container" -f "$kit_dir/compose.secure.yml" logs --tail 200 openclaw-crewai >&2 || true
 exit 1
