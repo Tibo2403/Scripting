@@ -1,0 +1,13 @@
+{
+  mcp: {
+    servers: {
+      "crewai-admin": {
+        enabled: true,
+        transport: "stdio",
+        command: "__PYTHON__",
+        args: ["__SERVER__"]
+      }
+    }
+  }
+}
+
