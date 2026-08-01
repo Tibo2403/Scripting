@@ -43,7 +43,7 @@ text = text.replace("__GOOGLE_CHAT_WEBHOOK_URL__", webhook)
 text = text.replace("__GOOGLE_CHAT_USER_ID__", user)
 pathlib.Path(target).write_text(text, encoding="utf-8")
 PY
-printf '%s\n' '{ gateway: { auth: { mode: "token" }, bind: "loopback", port: 18789 } }' \
+printf '%s\n' '{ gateway: { mode: "local", auth: { mode: "token" }, bind: "loopback", port: 18789 } }' \
   > "$kit_dir/runtime/openclaw/openclaw.json"
 chmod 0600 \
   "$kit_dir/runtime/openclaw/openclaw.json" \
