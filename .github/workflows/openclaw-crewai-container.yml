@@ -31,4 +31,4 @@ jobs:
           push: false
           tags: openclaw-crewai-admin:test
       - name: Runtime smoke test
-        run: scripts/python/openclaw_crewai_admin/container-smoke-test.sh
+        run: bash scripts/python/openclaw_crewai_admin/container-smoke-test.sh
