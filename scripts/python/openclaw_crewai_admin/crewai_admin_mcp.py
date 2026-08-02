@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Serveur MCP minimal pour administrer config/tasks.yaml de CrewAI."""
+"""Serveur MCP minimal pour consulter les agents et administrer les tâches CrewAI."""
 
 from __future__ import annotations
 
@@ -37,16 +37,25 @@ if not PROJECT_DIR_RAW:
     raise RuntimeError("CREWAI_PROJECT_DIR est obligatoire; exécutez setup.sh")
 PROJECT_DIR = Path(PROJECT_DIR_RAW).expanduser().resolve()
 TASKS_RELATIVE = Path(os.environ.get("CREWAI_TASKS_FILE", "config/tasks.yaml"))
+AGENTS_RELATIVE = Path(os.environ.get("CREWAI_AGENTS_FILE", "config/agents.yaml"))
 TTL_SECONDS = int(os.environ.get("CREWAI_PROPOSAL_TTL", "900"))
 
 if str(PROJECT_DIR) == "/":
     raise RuntimeError("CREWAI_PROJECT_DIR doit désigner un projet précis")
-if TASKS_RELATIVE.is_absolute() or ".." in TASKS_RELATIVE.parts:
-    raise RuntimeError("CREWAI_TASKS_FILE doit être un chemin relatif sûr")
 
-TASKS_FILE = (PROJECT_DIR / TASKS_RELATIVE).resolve()
-if PROJECT_DIR not in TASKS_FILE.parents:
-    raise RuntimeError("Le fichier de tâches doit rester dans le projet CrewAI")
+
+def resolve_project_file(relative_path: Path, variable_name: str) -> Path:
+    """Résoudre un fichier de configuration sans permettre de sortie du projet."""
+    if relative_path.is_absolute() or ".." in relative_path.parts:
+        raise RuntimeError(f"{variable_name} doit être un chemin relatif sûr")
+    resolved = (PROJECT_DIR / relative_path).resolve()
+    if PROJECT_DIR not in resolved.parents:
+        raise RuntimeError(f"{variable_name} doit rester dans le projet CrewAI")
+    return resolved
+
+
+TASKS_FILE = resolve_project_file(TASKS_RELATIVE, "CREWAI_TASKS_FILE")
+AGENTS_FILE = resolve_project_file(AGENTS_RELATIVE, "CREWAI_AGENTS_FILE")
 
 STATE_DIR = Path(
     os.environ.get("CREWAI_ADMIN_STATE_DIR", str(Path(__file__).with_name(".state")))
@@ -60,13 +69,21 @@ for directory in (PROPOSALS_DIR, BACKUPS_DIR):
 mcp = FastMCP("crewai-admin")
 
 
-def read_tasks() -> dict[str, Any]:
-    if not TASKS_FILE.is_file():
-        raise RuntimeError(f"Fichier de tâches introuvable: {TASKS_FILE}")
-    data = yaml.safe_load(TASKS_FILE.read_text(encoding="utf-8"))
+def read_yaml_mapping(path: Path, label: str) -> dict[str, Any]:
+    if not path.is_file():
+        raise RuntimeError(f"Fichier {label} introuvable: {path}")
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
-        raise RuntimeError("tasks.yaml doit contenir un objet YAML à la racine")
+        raise RuntimeError(f"{label} doit contenir un objet YAML à la racine")
     return data
+
+
+def read_tasks() -> dict[str, Any]:
+    return read_yaml_mapping(TASKS_FILE, "tasks.yaml")
+
+
+def read_agents() -> dict[str, Any]:
+    return read_yaml_mapping(AGENTS_FILE, "agents.yaml")
 
 
 def validate_task(task_name: str, task: dict[str, Any]) -> None:
@@ -101,6 +118,28 @@ def list_tasks() -> dict[str, Any]:
             for name, value in tasks.items()
         ],
     }
+
+
+@mcp.tool()
+def list_agents() -> dict[str, Any]:
+    """Lister les agents CrewAI configurés, sans exposer de secret."""
+    agents = read_agents()
+    return {
+        "agents_file": str(AGENTS_RELATIVE),
+        "agents": [
+            {"name": name, "role": value.get("role") if isinstance(value, dict) else None}
+            for name, value in agents.items()
+        ],
+    }
+
+
+@mcp.tool()
+def get_agent(agent_name: str) -> dict[str, Any]:
+    """Afficher la définition complète d'un agent CrewAI."""
+    agents = read_agents()
+    if agent_name not in agents:
+        raise ValueError(f"Agent inconnu: {agent_name}")
+    return {"name": agent_name, "definition": agents[agent_name]}
 
 
 @mcp.tool()

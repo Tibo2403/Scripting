@@ -24,6 +24,7 @@ services:
       NPM_CONFIG_CACHE: /tmp/npm-cache
       CREWAI_PROJECT_DIR: /workspace/crewai
       CREWAI_TASKS_FILE: ${CREWAI_TASKS_FILE:-config/tasks.yaml}
+      CREWAI_AGENTS_FILE: ${CREWAI_AGENTS_FILE:-config/agents.yaml}
       CREWAI_ADMIN_STATE_DIR: /var/lib/openclaw-crewai-admin
       CREWAI_PROPOSAL_TTL: ${CREWAI_PROPOSAL_TTL:-900}
       GOOGLE_CHAT_SERVICE_ACCOUNT_FILE: /run/secrets/googlechat-service-account.json

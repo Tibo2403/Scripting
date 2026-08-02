@@ -32,7 +32,8 @@ stable `users/<nombre>`.
 - Linux, macOS ou WSL2
 - Python 3.11+
 - OpenClaw déjà installé
-- Un projet CrewAI contenant `config/tasks.yaml`
+- Un projet CrewAI contenant `config/tasks.yaml`; `config/agents.yaml` est requis
+  pour consulter les agents avec les outils MCP dédiés.
 
 ## Installation
 
@@ -61,6 +62,8 @@ Si votre version utilise l'édition JSON5, copiez le bloc de
 
 - `list_tasks` : affiche les tâches CrewAI.
 - `get_task` : affiche une tâche précise.
+- `list_agents` : affiche les agents CrewAI et leurs rôles.
+- `get_agent` : affiche la définition d'un agent précis.
 - `propose_task_update` : prépare un changement et renvoie un jeton.
 - `apply_task_update` : applique une proposition confirmée.
 - `rollback_last_change` : restaure la sauvegarde précédente.
@@ -69,11 +72,21 @@ Exemple de conversation dans Google Chat :
 
 > Liste les tâches CrewAI.
 
+> Montre-moi la configuration de l'agent `coder_agent`.
+
 > Propose de limiter `market_research` à dix lignes et d'exiger des sources.
 
 > Montre-moi le changement exact, sans l'appliquer.
 
 > J'approuve la proposition `<jeton>` ; applique-la.
+
+## Agent codeur d'exemple
+
+Le dossier `sample-crewai/config` contient désormais un `coder_agent` et une
+tâche `code_change`. L'agent produit uniquement une proposition de patch et les
+commandes de validation : l'exécution de code, la délégation et la publication
+automatique sont désactivées. Lancez la tâche avec une entrée explicite, par
+exemple `coding_request="Ajoute une validation du fichier de configuration"`.
 
 ## Google Chat
 
@@ -86,7 +99,7 @@ webhook Google Chat et conservez l'authentification du Gateway.
 
 ## Sécurité
 
-- Le chemin CrewAI est limité à un seul fichier `tasks.yaml`.
+- Les écritures sont limitées à `tasks.yaml`; `agents.yaml` reste en lecture seule.
 - Une proposition expire après 15 minutes.
 - L'application exige le jeton exact avant toute écriture.
 - Chaque écriture crée une sauvegarde horodatée.

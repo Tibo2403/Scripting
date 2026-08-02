@@ -11,3 +11,13 @@ content_draft:
   expected_output: >
     Un brouillon qui ne sera jamais publié sans validation humaine.
   agent: writer_agent
+
+code_change:
+  description: >
+    Analyser la demande suivante, proposer une modification minimale et sûre,
+    puis fournir le patch et les commandes de validation sans exécuter le code :
+    {coding_request}
+  expected_output: >
+    Une explication concise, un patch applicable, les tests recommandés et les
+    risques ou hypothèses qui nécessitent une validation humaine.
+  agent: coder_agent

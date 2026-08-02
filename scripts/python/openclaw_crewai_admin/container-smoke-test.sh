@@ -7,11 +7,15 @@ python3 -m py_compile \
   "$kit_dir/webhook_proxy.py"
 bash -n \
   "$kit_dir/setup.sh" \
-  bash "$kit_dir/install-secure-container.sh" \
+  "$kit_dir/install-secure-container.sh" \
   "$kit_dir/container-entrypoint.sh" \
   "$kit_dir/deploy/install-vm.sh"
 
-python3 - "$kit_dir/compose.secure.yml" "$kit_dir/Dockerfile" <<'PY'
+python3 - \
+  "$kit_dir/compose.secure.yml" \
+  "$kit_dir/Dockerfile" \
+  "$kit_dir/sample-crewai/config/agents.yaml" \
+  "$kit_dir/sample-crewai/config/tasks.yaml" <<'PY'
 import pathlib, sys, yaml
 compose = yaml.safe_load(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 service = compose["services"]["openclaw-crewai"]
@@ -24,6 +28,13 @@ assert service["ports"][0].startswith("${BIND_ADDRESS:-127.0.0.1}:")
 dockerfile = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")
 assert "USER node" in dockerfile
 assert "2026.7.1" in dockerfile
+agents = yaml.safe_load(pathlib.Path(sys.argv[3]).read_text(encoding="utf-8"))
+tasks = yaml.safe_load(pathlib.Path(sys.argv[4]).read_text(encoding="utf-8"))
+coder = agents["coder_agent"]
+assert coder["allow_delegation"] is False
+assert coder["allow_code_execution"] is False
+assert tasks["code_change"]["agent"] == "coder_agent"
+assert all(task["agent"] in agents for task in tasks.values())
 print("Contrôles statiques du conteneur: OK")
 PY
 
@@ -47,7 +58,7 @@ if command -v docker >/dev/null && docker compose version >/dev/null 2>&1; then
   test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/)" = "404"
   docker compose --env-file "$kit_dir/.env.container" -f "$kit_dir/compose.secure.yml" exec -T \
     openclaw-crewai python3 -c \
-    'import sys; sys.path.insert(0,"/opt/crewai-admin"); import crewai_admin_mcp as c; assert c.list_tasks()["tasks"]'
+    'import sys; sys.path.insert(0,"/opt/crewai-admin"); import crewai_admin_mcp as c; assert c.list_tasks()["tasks"]; assert c.list_agents()["agents"]'
 else
   echo "Docker absent: construction de l'image non exécutée." >&2
   exit 3
