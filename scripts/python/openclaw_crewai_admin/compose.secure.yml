@@ -1,0 +1,46 @@
+services:
+  openclaw-crewai:
+    build:
+      context: .
+      args:
+        OPENCLAW_IMAGE: ${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:2026.7.1}
+    image: ${CONTAINER_IMAGE:-openclaw-crewai-admin:local}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    user: "${CONTAINER_UID:-1000}:${CONTAINER_GID:-1000}"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
+    mem_limit: 2g
+    cpus: 2
+    tmpfs:
+      - /tmp:size=128m,mode=1777,noexec,nosuid,nodev
+      - /home/node/.cache:size=128m,mode=0700,nosuid,nodev
+    environment:
+      HOME: /home/node
+      NPM_CONFIG_CACHE: /tmp/npm-cache
+      CREWAI_PROJECT_DIR: /workspace/crewai
+      CREWAI_TASKS_FILE: ${CREWAI_TASKS_FILE:-config/tasks.yaml}
+      CREWAI_ADMIN_STATE_DIR: /var/lib/openclaw-crewai-admin
+      CREWAI_PROPOSAL_TTL: ${CREWAI_PROPOSAL_TTL:-900}
+      GOOGLE_CHAT_SERVICE_ACCOUNT_FILE: /run/secrets/googlechat-service-account.json
+      OPENCLAW_STATE_DIR: /home/node/.openclaw
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:?Définir OPENCLAW_GATEWAY_TOKEN}
+      WEBHOOK_MAX_BODY_BYTES: 1048576
+      WEBHOOK_RATE_LIMIT_PER_MINUTE: 120
+    volumes:
+      - ${OPENCLAW_STATE_DIR:-./runtime/openclaw}:/home/node/.openclaw
+      - ${CREWAI_PROJECT_DIR:?Définir CREWAI_PROJECT_DIR}:/workspace/crewai
+      - ./runtime/crewai-admin:/var/lib/openclaw-crewai-admin
+      - ${GOOGLE_CHAT_SERVICE_ACCOUNT_FILE:?Définir GOOGLE_CHAT_SERVICE_ACCOUNT_FILE}:/run/secrets/googlechat-service-account.json:ro
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${PUBLIC_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/readyz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s

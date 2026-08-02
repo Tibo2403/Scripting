@@ -1,0 +1,13 @@
+market_research:
+  description: >
+    Rechercher les tendances pertinentes et vérifier les sources.
+  expected_output: >
+    Une synthèse concise accompagnée des liens vers les sources.
+  agent: research_agent
+
+content_draft:
+  description: >
+    Transformer la recherche validée en proposition de publication.
+  expected_output: >
+    Un brouillon qui ne sera jamais publié sans validation humaine.
+  agent: writer_agent

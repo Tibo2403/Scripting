@@ -1,0 +1,7 @@
+.env
+.state/
+.venv/
+__pycache__/
+openclaw-mcp.json5
+.env.container
+runtime/

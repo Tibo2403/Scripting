@@ -1,0 +1,60 @@
+version: "2.0"
+services:
+  openclaw-crewai:
+    image: ghcr.io/OWNER/IMAGE@sha256:REPLACE_WITH_IMMUTABLE_DIGEST
+    params:
+      storage:
+        openclaw-state:
+          mount: /home/node/.openclaw
+          readOnly: false
+        crewai-project:
+          mount: /workspace/crewai
+          readOnly: false
+        admin-state:
+          mount: /var/lib/openclaw-crewai-admin
+          readOnly: false
+    expose:
+      - port: 8080
+        as: 80
+        to:
+          - global: true
+    env:
+      - CREWAI_PROJECT_DIR=/workspace/crewai
+      - CREWAI_TASKS_FILE=config/tasks.yaml
+      - CREWAI_ADMIN_STATE_DIR=/var/lib/openclaw-crewai-admin
+profiles:
+  compute:
+    openclaw-crewai:
+      resources:
+        cpu:
+          units: 2
+        memory:
+          size: 2Gi
+        storage:
+          - size: 4Gi
+          - name: openclaw-state
+            size: 2Gi
+            attributes:
+              persistent: true
+              class: beta3
+          - name: crewai-project
+            size: 2Gi
+            attributes:
+              persistent: true
+              class: beta3
+          - name: admin-state
+            size: 1Gi
+            attributes:
+              persistent: true
+              class: beta3
+  placement:
+    dcloud:
+      pricing:
+        openclaw-crewai:
+          denom: uakt
+          amount: 1000
+deployment:
+  openclaw-crewai:
+    dcloud:
+      profile: openclaw-crewai
+      count: 1
