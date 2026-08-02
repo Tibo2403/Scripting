@@ -46,6 +46,7 @@ if command -v docker >/dev/null && docker compose version >/dev/null 2>&1; then
   }
   trap cleanup EXIT
   install -d "$test_root/crewai/config"
+  cp "$kit_dir/sample-crewai/config/agents.yaml" "$test_root/crewai/config/agents.yaml"
   cp "$kit_dir/sample-crewai/config/tasks.yaml" "$test_root/crewai/config/tasks.yaml"
   printf '{"type":"service_account","project_id":"ci-test"}\n' > "$test_root/googlechat.json"
   bash "$kit_dir/install-secure-container.sh" \
