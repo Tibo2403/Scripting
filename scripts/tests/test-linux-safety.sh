@@ -39,6 +39,10 @@ assert_ok "discovery dry-run" \
 assert_ok "verification dry-run" \
     bash scripts/linux/pentest_verification.sh --dry-run --yes-i-am-authorized >/dev/null 2>&1
 
+assert_ok "verification open-data dry-run" \
+    bash scripts/linux/pentest_verification.sh --dry-run --enrich-open-data \
+        --yes-i-am-authorized >/dev/null 2>&1
+
 assert_ok "exploitation dry-run" \
     bash scripts/linux/pentest_exploitation.sh --dry-run --yes-i-am-authorized >/dev/null 2>&1
 
