@@ -17,14 +17,29 @@ UPSTREAM_PORT = 18789
 MAX_BODY = int(os.environ.get("WEBHOOK_MAX_BODY_BYTES", "1048576"))
 RATE_LIMIT = int(os.environ.get("WEBHOOK_RATE_LIMIT_PER_MINUTE", "120"))
 WINDOW_SECONDS = 60
+CLEANUP_INTERVAL_SECONDS = WINDOW_SECONDS
 
 requests_by_ip: dict[str, deque[float]] = defaultdict(deque)
 rate_lock = threading.Lock()
+last_cleanup = 0.0
 
 
 def rate_allowed(ip: str) -> bool:
+    global last_cleanup
+
     now = time.monotonic()
     with rate_lock:
+        if now - last_cleanup >= CLEANUP_INTERVAL_SECONDS:
+            cutoff = now - WINDOW_SECONDS
+            stale_ips = [
+                tracked_ip
+                for tracked_ip, timestamps in requests_by_ip.items()
+                if not timestamps or timestamps[-1] < cutoff
+            ]
+            for tracked_ip in stale_ips:
+                del requests_by_ip[tracked_ip]
+            last_cleanup = now
+
         bucket = requests_by_ip[ip]
         while bucket and bucket[0] < now - WINDOW_SECONDS:
             bucket.popleft()
