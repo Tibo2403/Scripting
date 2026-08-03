@@ -24,7 +24,7 @@ jobs:
           python3 -m py_compile crewai_admin_mcp.py webhook_proxy.py
           bash -n setup.sh install-secure-container.sh container-entrypoint.sh deploy/install-vm.sh
       - name: Build container
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: scripts/python/openclaw_crewai_admin
           load: true
