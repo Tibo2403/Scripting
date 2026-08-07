@@ -18,6 +18,49 @@ assert_no_artifacts() {
     fi
 }
 
+assert_contains() {
+    local file="$1"
+    local expected="$2"
+    if ! grep -Fq "$expected" "$file"; then
+        echo "Expected '$expected' in $file" >&2
+        exit 1
+    fi
+}
+
+assert_exploitation_enrichment_context() {
+    local temp_root results_dir fake_bin search_file calls_file
+    temp_root="$(mktemp -d)"
+    results_dir="$temp_root/results"
+    fake_bin="$temp_root/bin"
+    search_file="$temp_root/suggestions.txt"
+    calls_file="$temp_root/searchsploit.calls"
+    mkdir -p "$results_dir" "$fake_bin"
+    trap '[[ "${temp_root:-}" == /tmp/* ]] && rm -rf "$temp_root"' RETURN
+
+    touch "$results_dir/10.0.0.5_vuln.xml"
+    cat >"$results_dir/10.0.0.5_cve_enrichment.tsv" <<'EOF'
+cve	priority	kev	kev_due_date	known_ransomware	epss	epss_percentile	cvss	severity	published	description
+CVE-2024-1111	critical	True	2026-08-15	Known	0.42	0.95	8.8	HIGH	2024-01-01	Example issue
+CVE-2024-2222	medium	False			0.02	0.50	7.1	HIGH	2024-02-01	Second issue
+EOF
+    cat >"$fake_bin/searchsploit" <<EOF
+#!/bin/bash
+echo "\$1" >>"$calls_file"
+echo "fake exploit for \$1"
+EOF
+    chmod +x "$fake_bin/searchsploit"
+
+    PATH="$fake_bin:$PATH" bash scripts/linux/pentest_exploitation.sh \
+        --results "$results_dir" \
+        --search-file "$search_file" \
+        --yes-i-am-authorized >/dev/null
+
+    assert_contains "$calls_file" "CVE-2024-1111"
+    assert_contains "$calls_file" "CVE-2024-2222"
+    assert_contains "$search_file" "priority=critical, KEV=True, EPSS=0.42, CVSS=8.8/HIGH"
+    assert_contains "$search_file" "priority=medium, KEV=False, EPSS=0.02, CVSS=7.1/HIGH"
+}
+
 SENSITIVE_SCRIPTS=(
     scripts/pentest_discovery.sh
     scripts/pentest_verification.sh
@@ -54,6 +97,8 @@ assert_ok "verification wrapper dry-run" \
 
 assert_ok "exploitation wrapper dry-run" \
     bash scripts/pentest_exploitation.sh --dry-run --yes-i-am-authorized >/dev/null 2>&1
+
+assert_ok "exploitation enrichment context" assert_exploitation_enrichment_context
 
 assert_ok "wifi dry-run" \
     bash scripts/linux/scan_wifi.sh --dry-run --yes-i-am-authorized --non-interactive \

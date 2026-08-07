@@ -12,6 +12,19 @@ logs/
 # Ignore Python cache files
 __pycache__/
 *.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+.venv/
+venv/
+
+# Ignore local environment files, but keep templates tracked
+.env
+.env.*
+!.env.example
 
 # Ignore data files
 *.csv
