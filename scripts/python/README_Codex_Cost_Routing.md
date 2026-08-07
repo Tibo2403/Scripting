@@ -13,6 +13,7 @@ applies budgets, and selects one of these LiteLLM aliases:
 - `codex-default` for normal coding work
 - `codex-long` for long-context reads, log review, and synthesis
 - `codex-deep` for difficult debugging, security, and architecture decisions
+- `codex-auto` for LiteLLM native complexity-based automatic routing
 - `codex-no-openai` for Gemini + local Qwen routing when OpenAI quota is low
   or exhausted
 - `codex-cheap` and `codex-strong` as backward-compatible aliases
@@ -376,11 +377,11 @@ codex --profile cost-routing
 ```
 
 Install or update the local LiteLLM OSS proxy to the currently pinned stable
-PyPI release. As of 2026-06-29 this repository pins `litellm==1.90.0`:
+PyPI release. As of 2026-08-07 this repository pins `litellm==1.95.0`:
 
 ```powershell
 .\scripts\python\Install-CodexLocalLiteLLMAssets.ps1
-.\scripts\python\Manage-CodexCostRouting.ps1 -Action Update -LiteLLMVersion 1.90.0
+.\scripts\python\Manage-CodexCostRouting.ps1 -Action Update -LiteLLMVersion 1.95.0
 .\scripts\python\Manage-CodexCostRouting.ps1 -Action Status
 ```
 
@@ -390,7 +391,14 @@ the pinned stable version after checking PyPI/release notes.
 You can also update while starting the proxy:
 
 ```powershell
-.\scripts\python\Manage-CodexCostRouting.ps1 -Action Start -CodexProvider LiteLLM -UpdateLiteLLM -LiteLLMVersion 1.90.0
+.\scripts\python\Manage-CodexCostRouting.ps1 -Action Start -CodexProvider LiteLLM -UpdateLiteLLM -LiteLLMVersion 1.95.0
+```
+
+To let LiteLLM classify request complexity and select the configured tier, use
+the `codex-auto` alias:
+
+```powershell
+.\scripts\python\Test-CodexLiteLLMDispatch.ps1 -Model codex-auto -Call
 ```
 
 The launcher automatically bypasses restrictive PowerShell execution policies
