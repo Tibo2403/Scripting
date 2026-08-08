@@ -13,6 +13,7 @@ applies budgets, and selects one of these LiteLLM aliases:
 - `codex-default` for normal coding work
 - `codex-long` for long-context reads, log review, and synthesis
 - `codex-deep` for difficult debugging, security, and architecture decisions
+- `codex-auto` for LiteLLM native complexity-based automatic routing
 - `codex-no-openai` for Gemini + local Qwen routing when OpenAI quota is low
   or exhausted
 - `codex-cheap` and `codex-strong` as backward-compatible aliases
@@ -20,11 +21,14 @@ applies budgets, and selects one of these LiteLLM aliases:
   is set
 - `codex-hf-fast` for larger Hugging Face / multi-provider tasks when
   `HF_TOKEN` is set
+- `codex-inkling` for Thinking Machines Inkling through its OpenAI-compatible
+  ModelsLab endpoint when `INKLING_API_KEY` is set
 
 Gemini and local Qwen are configured through LiteLLM model groups when the proxy is active. Without the proxy, the wrapper keeps the standard Codex path and can still call local Qwen directly through Ollama for selected local tasks.
 
 Provider API keys are never committed or written to a configuration file.
-`GEMINI_API_KEY` is only needed for Gemini dispatch through LiteLLM. Local Qwen
+`GEMINI_API_KEY` is only needed for Gemini dispatch through LiteLLM, and
+`INKLING_API_KEY` enables the `codex-inkling` dispatch. Local Qwen
 only needs Ollama running with `qwen2.5-coder:3b` installed. The local proxy
 master key is generated per session and written only to
 `%TEMP%\codex-litellm-proxy.key` so local test scripts can authenticate; it is
@@ -376,11 +380,11 @@ codex --profile cost-routing
 ```
 
 Install or update the local LiteLLM OSS proxy to the currently pinned stable
-PyPI release. As of 2026-06-29 this repository pins `litellm==1.90.0`:
+PyPI release. As of 2026-08-07 this repository pins `litellm==1.95.0`:
 
 ```powershell
 .\scripts\python\Install-CodexLocalLiteLLMAssets.ps1
-.\scripts\python\Manage-CodexCostRouting.ps1 -Action Update -LiteLLMVersion 1.90.0
+.\scripts\python\Manage-CodexCostRouting.ps1 -Action Update -LiteLLMVersion 1.95.0
 .\scripts\python\Manage-CodexCostRouting.ps1 -Action Status
 ```
 
@@ -390,7 +394,22 @@ the pinned stable version after checking PyPI/release notes.
 You can also update while starting the proxy:
 
 ```powershell
-.\scripts\python\Manage-CodexCostRouting.ps1 -Action Start -CodexProvider LiteLLM -UpdateLiteLLM -LiteLLMVersion 1.90.0
+.\scripts\python\Manage-CodexCostRouting.ps1 -Action Start -CodexProvider LiteLLM -UpdateLiteLLM -LiteLLMVersion 1.95.0
+```
+
+To let LiteLLM classify request complexity and select the configured tier, use
+the `codex-auto` alias:
+
+```powershell
+.\scripts\python\Test-CodexLiteLLMDispatch.ps1 -Model codex-auto -Call
+```
+
+To dispatch explicitly to Inkling, export the provider key for the session and
+call the dedicated alias:
+
+```powershell
+$env:INKLING_API_KEY = "your-modelslab-key"
+.\scripts\python\Test-CodexLiteLLMDispatch.ps1 -Model codex-inkling -Call
 ```
 
 The launcher automatically bypasses restrictive PowerShell execution policies
@@ -402,7 +421,7 @@ When `-CodexProvider LiteLLM` is selected, the script:
 1. installs the official LiteLLM OSS proxy in `C:\tmp\litellm-oss` when needed;
 2. can update the local LiteLLM package with `-Action Update` or `-UpdateLiteLLM`;
 3. asks only for optional session keys that are not already set;
-4. requires at least `OPENAI_API_KEY`, `GEMINI_API_KEY`, or local Qwen on Ollama;
+4. requires at least `OPENAI_API_KEY`, `GEMINI_API_KEY`, `INKLING_API_KEY`, or local Qwen on Ollama;
 5. creates a random local `LITELLM_API_KEY` for the proxy session and writes
    only that local proxy key to `%TEMP%\codex-litellm-proxy.key`;
 6. starts the LiteLLM proxy in the background;
@@ -419,7 +438,7 @@ If you prefer entering keys in a local page for one work session, start:
 ```
 
 Then open `http://127.0.0.1:8787/`, paste `OPENAI_API_KEY`,
-`GEMINI_API_KEY`, or `HF_TOKEN`, and submit the form. Qwen is not managed as an
+`GEMINI_API_KEY`, `HF_TOKEN`, or `INKLING_API_KEY`, and submit the form. Qwen is not managed as an
 API provider here: it is only an optional local Ollama fallback. Run
 `Start-CodexQwenOllama.ps1` and keep the local Qwen checkbox enabled; no Qwen API
 base or API key is accepted by the page. The page starts the LiteLLM proxy on

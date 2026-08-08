@@ -138,6 +138,25 @@ model_list:
       model: huggingface/together/openai/gpt-oss-120b
       api_key: os.environ/HF_TOKEN
 
+  - model_name: codex-inkling
+    litellm_params:
+      model: openai/thinkingmachines-inkling
+      api_base: https://modelslab.com/api/v7/llm
+      api_key: os.environ/INKLING_API_KEY
+      weight: 1
+
+  - model_name: codex-auto
+    litellm_params:
+      model: auto_router/complexity_router
+      complexity_router_config:
+        tiers:
+          SIMPLE: codex-small-local
+          MEDIUM: codex-default
+          COMPLEX: codex-long
+          REASONING: codex-deep
+        session_affinity: true
+      complexity_router_default_model: codex-default
+
 router_settings:
   routing_strategy: simple-shuffle
   num_retries: 2
@@ -150,7 +169,11 @@ router_settings:
     gemini-2.5-flash: codex-light
     gemini-2.5-pro: codex-long
     claude-sonnet: codex-claude-complex
+    thinkingmachines-inkling: codex-inkling
   fallbacks:
+    - codex-auto:
+        - codex-default
+        - codex-qwen-local
     - codex-small-local:
         - codex-phi-local
         - codex-qwen-local
@@ -186,6 +209,10 @@ router_settings:
         - codex-light
         - codex-qwen-local
     - codex-hf-fast:
+        - codex-default
+        - codex-qwen-local
+    - codex-inkling:
+        - codex-deep
         - codex-default
         - codex-qwen-local
   context_window_fallbacks:

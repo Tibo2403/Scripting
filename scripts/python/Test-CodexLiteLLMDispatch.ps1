@@ -53,7 +53,8 @@ $requiredAliases = @(
     "codex-deep",
     "codex-qwen-local",
     "codex-hf-cheap",
-    "codex-hf-fast"
+    "codex-hf-fast",
+    "codex-inkling"
 )
 $missingAliases = @($requiredAliases | Where-Object { $modelIds -notcontains $_ })
 
