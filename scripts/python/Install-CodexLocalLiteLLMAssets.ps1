@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$LiteLLMVersion = '1.90.0',
+    [string]$LiteLLMVersion = '1.95.0',
     [switch]$SkipLiteLLMInstall
 )
 

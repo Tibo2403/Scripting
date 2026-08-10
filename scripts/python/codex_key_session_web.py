@@ -188,7 +188,7 @@ PAGE = """<!doctype html>
       </div>
       <div class="meta">
         <div class="pill">Proxy URL: <code>http://127.0.0.1:{proxy_port}/v1</code></div>
-        <div class="pill">Codex model aliases: <code>codex-light</code>, <code>codex-default</code>, <code>codex-long</code>, <code>codex-deep</code></div>
+        <div class="pill">Codex model aliases: <code>codex-light</code>, <code>codex-default</code>, <code>codex-long</code>, <code>codex-deep</code>, <code>codex-inkling</code></div>
         <div class="pill">Local fallback: <code>codex-qwen-local</code></div>
       </div>
     </section>
@@ -202,6 +202,8 @@ PAGE = """<!doctype html>
         <input id="gemini" name="GEMINI_API_KEY" type="password" placeholder="AI..." autocomplete="off">
         <label for="hf">Hugging Face token optional</label>
         <input id="hf" name="HF_TOKEN" type="password" placeholder="hf_..." autocomplete="off">
+        <label for="inkling">Inkling API key optional</label>
+        <input id="inkling" name="INKLING_API_KEY" type="password" placeholder="Inkling / ModelsLab key" autocomplete="off">
         <label class="check" for="use_qwen">
           <input id="use_qwen" name="USE_LOCAL_QWEN" type="checkbox" value="1" checked>
           Enable local Qwen fallback through Ollama
@@ -321,8 +323,9 @@ class KeySessionHandler(BaseHTTPRequestHandler):
         openai_key = form.get("OPENAI_API_KEY", "")
         gemini_key = form.get("GEMINI_API_KEY", "")
         hf_token = form.get("HF_TOKEN", "")
+        inkling_key = form.get("INKLING_API_KEY", "")
         use_local_qwen = form.get("USE_LOCAL_QWEN", "") == "1"
-        if not any((openai_key, gemini_key, hf_token, use_local_qwen)):
+        if not any((openai_key, gemini_key, hf_token, inkling_key, use_local_qwen)):
             self.state.message = "Provide at least one provider key, or keep local Qwen enabled."
             self._send_page()
             return
@@ -339,6 +342,8 @@ class KeySessionHandler(BaseHTTPRequestHandler):
         if hf_token:
             env["HF_TOKEN"] = hf_token
             env["HUGGINGFACE_API_KEY"] = hf_token
+        if inkling_key:
+            env["INKLING_API_KEY"] = inkling_key
 
         try:
             self.state.process = subprocess.Popen(

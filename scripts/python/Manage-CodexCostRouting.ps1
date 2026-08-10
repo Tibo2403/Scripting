@@ -7,7 +7,7 @@ param(
     [ValidateSet('Standard', 'LiteLLM', 'HuggingFace')]
     [string]$CodexProvider = 'Standard',
     [switch]$UpdateLiteLLM,
-    [string]$LiteLLMVersion = '1.90.0'
+    [string]$LiteLLMVersion = '1.95.0'
 )
 
 $ErrorActionPreference = 'Stop'
