@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from decimal import Decimal, InvalidOperation
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 WAD = 10**18
 JOULES_PER_KWH = 3_600_000
@@ -33,6 +35,7 @@ class EnergyTariff:
     prompt_joules_per_token_wad: int
     completion_joules_per_token_wad: int
     euro_per_kwh_wad: int
+    tariff_id: str = "default-v1"
 
     @classmethod
     def from_decimal_strings(
@@ -40,14 +43,18 @@ class EnergyTariff:
         prompt_joules_per_token: str,
         completion_joules_per_token: str,
         euro_per_kwh: str,
-    ) -> "EnergyTariff":
+        tariff_id: str = "default-v1",
+    ) -> EnergyTariff:
         return cls(
             prompt_joules_per_token_wad=decimal_to_wad(prompt_joules_per_token),
             completion_joules_per_token_wad=decimal_to_wad(completion_joules_per_token),
             euro_per_kwh_wad=decimal_to_wad(euro_per_kwh),
+            tariff_id=tariff_id,
         )
 
     def __post_init__(self) -> None:
+        if not self.tariff_id.strip():
+            raise ValueError("tariff_id is required")
         if min(
             self.prompt_joules_per_token_wad,
             self.completion_joules_per_token_wad,
@@ -67,6 +74,8 @@ class UsageMeasurement:
     energy_kwh_wad: int
     settlement_euro_wad: int
     response_text_sha256: str
+    tariff_id_sha256: str
+    usage_timestamp: int
 
     def usage_digest(self) -> bytes:
         """Return a replay-resistant digest suitable for Solidity bytes32."""
@@ -89,7 +98,12 @@ def _response_text(response: Any) -> str:
     return content if isinstance(content, str) else json.dumps(content, sort_keys=True, default=str)
 
 
-def measurement_from_response(response: Any, tariff: EnergyTariff, requested_model: str) -> UsageMeasurement:
+def measurement_from_response(
+    response: Any,
+    tariff: EnergyTariff,
+    requested_model: str,
+    measured_at: int | None = None,
+) -> UsageMeasurement:
     """Read exact provider-reported prompt/completion counters from a LiteLLM response."""
     usage = _field(response, "usage")
     if usage is None:
@@ -118,6 +132,9 @@ def measurement_from_response(response: Any, tariff: EnergyTariff, requested_mod
     energy_kwh_wad = energy_joules_wad // JOULES_PER_KWH
     settlement_euro_wad = energy_kwh_wad * tariff.euro_per_kwh_wad // WAD
     response_text = _response_text(response)
+    usage_timestamp = int(time.time()) if measured_at is None else measured_at
+    if usage_timestamp < 0:
+        raise ValueError("measured_at cannot be negative")
 
     return UsageMeasurement(
         request_id=str(_field(response, "id", "")),
@@ -129,6 +146,8 @@ def measurement_from_response(response: Any, tariff: EnergyTariff, requested_mod
         energy_kwh_wad=energy_kwh_wad,
         settlement_euro_wad=settlement_euro_wad,
         response_text_sha256=hashlib.sha256(response_text.encode("utf-8")).hexdigest(),
+        tariff_id_sha256=hashlib.sha256(tariff.tariff_id.encode("utf-8")).hexdigest(),
+        usage_timestamp=usage_timestamp,
     )
 
 

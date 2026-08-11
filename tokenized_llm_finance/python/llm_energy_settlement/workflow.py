@@ -31,6 +31,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--prompt-joules-per-token", required=True)
     parser.add_argument("--completion-joules-per-token", required=True)
     parser.add_argument("--euro-per-kwh", required=True)
+    parser.add_argument("--tariff-id", required=True, help="Versioned tariff identifier")
     parser.add_argument(
         "--observed-network-velocity-wad",
         type=int,
@@ -47,6 +48,7 @@ def main() -> int:
             args.prompt_joules_per_token,
             args.completion_joules_per_token,
             args.euro_per_kwh,
+            args.tariff_id,
         )
         _, measurement = meter_completion(
             args.model,
@@ -73,9 +75,13 @@ def main() -> int:
         supervisor = OnChainSupervisor(
             web3=web3,
             private_key=_required_environment("SUPERVISOR_PRIVATE_KEY"),
+            attestor_private_key=_required_environment("METERING_ATTESTOR_PRIVATE_KEY"),
             timelock=timelock,
             vault=vault,
             controller=controller,
+            oracle_private_key=os.environ.get("VELOCITY_ORACLE_PRIVATE_KEY") or None,
+            confirmations=int(os.environ.get("CHAIN_CONFIRMATIONS", "3")),
+            settlement_ttl_seconds=int(os.environ.get("SETTLEMENT_TTL_SECONDS", "21600")),
         )
         pid_receipt = None
         if args.observed_network_velocity_wad is not None:

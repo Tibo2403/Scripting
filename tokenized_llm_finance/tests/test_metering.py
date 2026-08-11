@@ -26,12 +26,14 @@ def _response(total_tokens: int = 150) -> SimpleNamespace:
 class MeteringTest(unittest.TestCase):
     def test_exact_token_energy_euro_pipeline(self) -> None:
         tariff = EnergyTariff.from_decimal_strings("2", "4", "0.25")
-        measured = measurement_from_response(_response(), tariff, "fallback")
+        measured = measurement_from_response(_response(), tariff, "fallback", measured_at=123)
 
         self.assertEqual(measured.total_tokens, 150)
         self.assertEqual(measured.energy_joules_wad, 400 * 10**18)
         self.assertEqual(measured.energy_kwh_wad, (400 * 10**18) // 3_600_000)
         self.assertEqual(measured.settlement_euro_wad, measured.energy_kwh_wad // 4)
+        self.assertEqual(measured.usage_timestamp, 123)
+        self.assertEqual(len(measured.tariff_id_sha256), 64)
         self.assertEqual(len(measured.usage_digest()), 32)
 
     def test_rejects_inconsistent_provider_total(self) -> None:
