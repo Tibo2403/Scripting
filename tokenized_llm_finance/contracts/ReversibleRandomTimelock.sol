@@ -38,6 +38,8 @@ contract ReversibleRandomTimelock is AccessControl, ReentrancyGuard {
     struct Operation {
         address target;
         uint64 readyAt;
+        uint64 executeBefore;
+        uint64 targetGeneration;
         Status status;
         bytes data;
     }
@@ -47,23 +49,31 @@ contract ReversibleRandomTimelock is AccessControl, ReentrancyGuard {
     bytes32 public immutable keyHash;
     uint64 public immutable minimumDelay;
     uint64 public immutable noiseWindow;
+    uint64 public immutable executionWindow;
     uint16 public immutable requestConfirmations;
     uint32 public immutable callbackGasLimit;
 
     mapping(bytes32 operationId => Operation operation) private _operations;
     mapping(uint256 requestId => bytes32 operationId) public requestToOperation;
     mapping(address target => bool allowed) public allowedTarget;
+    mapping(address target => uint64 generation) public targetGeneration;
+    mapping(bytes32 semanticKey => bool used) public usedSemanticKey;
 
     error InvalidConfiguration();
     error TargetNotAllowed(address target);
     error InvalidStatus(Status expected, Status actual);
     error RandomnessOnlyCoordinator();
     error NotReady(uint64 readyAt);
+    error OperationExpired(uint64 executeBefore);
+    error SemanticKeyAlreadyUsed(bytes32 semanticKey);
+    error TargetPermissionChangedSinceQueue(address target);
     error UnderlyingCallFailed(bytes returnData);
 
     event TargetPermissionChanged(address indexed target, bool allowed);
     event OperationQueued(bytes32 indexed operationId, uint256 indexed requestId, address indexed target);
-    event OperationScheduled(bytes32 indexed operationId, uint64 readyAt, uint64 randomDelay);
+    event OperationScheduled(
+        bytes32 indexed operationId, uint64 readyAt, uint64 executeBefore, uint64 randomDelay
+    );
     event OperationCancelled(bytes32 indexed operationId);
     event OperationExecuted(bytes32 indexed operationId, bytes returnData);
 
@@ -74,12 +84,14 @@ contract ReversibleRandomTimelock is AccessControl, ReentrancyGuard {
         bytes32 vrfKeyHash,
         uint64 minimumDelaySeconds,
         uint64 noiseWindowSeconds,
+        uint64 executionWindowSeconds,
         uint16 confirmations,
         uint32 vrfCallbackGasLimit
     ) {
         if (
             admin == address(0) || vrfCoordinator == address(0) || minimumDelaySeconds == 0 ||
             minimumDelaySeconds > type(uint64).max - noiseWindowSeconds ||
+            executionWindowSeconds == 0 ||
             confirmations == 0 || vrfCallbackGasLimit == 0
         ) revert InvalidConfiguration();
         coordinator = IVRFCoordinatorV2PlusLite(vrfCoordinator);
@@ -87,6 +99,7 @@ contract ReversibleRandomTimelock is AccessControl, ReentrancyGuard {
         keyHash = vrfKeyHash;
         minimumDelay = minimumDelaySeconds;
         noiseWindow = noiseWindowSeconds;
+        executionWindow = executionWindowSeconds;
         requestConfirmations = confirmations;
         callbackGasLimit = vrfCallbackGasLimit;
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
@@ -97,24 +110,33 @@ contract ReversibleRandomTimelock is AccessControl, ReentrancyGuard {
 
     function setTargetAllowed(address target, bool allowed) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (target == address(0)) revert InvalidConfiguration();
+        if (allowedTarget[target] != allowed) {
+            if (targetGeneration[target] == type(uint64).max) revert InvalidConfiguration();
+            targetGeneration[target] += 1;
+        }
         allowedTarget[target] = allowed;
         emit TargetPermissionChanged(target, allowed);
     }
 
-    function queue(address target, bytes calldata data, bytes32 salt)
+    function queue(address target, bytes calldata data, bytes32 semanticKey)
         external onlyRole(PROPOSER_ROLE) returns (bytes32 operationId, uint256 requestId)
     {
         if (!allowedTarget[target]) revert TargetNotAllowed(target);
-        operationId = keccak256(abi.encode(block.chainid, address(this), target, data, salt));
+        if (semanticKey == bytes32(0)) revert InvalidConfiguration();
+        if (usedSemanticKey[semanticKey]) revert SemanticKeyAlreadyUsed(semanticKey);
+        operationId = keccak256(abi.encode(block.chainid, address(this), target, data, semanticKey));
         Status current = _operations[operationId].status;
         if (current != Status.None) revert InvalidStatus(Status.None, current);
 
         _operations[operationId] = Operation({
             target: target,
             readyAt: 0,
+            executeBefore: 0,
+            targetGeneration: targetGeneration[target],
             status: Status.AwaitingRandomness,
             data: data
         });
+        usedSemanticKey[semanticKey] = true;
         requestId = coordinator.requestRandomWords(VRFV2PlusClientLite.RandomWordsRequest({
             keyHash: keyHash,
             subId: subscriptionId,
@@ -138,9 +160,12 @@ contract ReversibleRandomTimelock is AccessControl, ReentrancyGuard {
         }
         uint64 jitter = uint64(randomWords[0] % (uint256(noiseWindow) + 1));
         uint64 delay = minimumDelay + jitter;
+        if (block.timestamp > type(uint64).max - delay) revert InvalidConfiguration();
         operation.readyAt = uint64(block.timestamp) + delay;
+        if (operation.readyAt > type(uint64).max - executionWindow) revert InvalidConfiguration();
+        operation.executeBefore = operation.readyAt + executionWindow;
         operation.status = Status.Scheduled;
-        emit OperationScheduled(operationId, operation.readyAt, delay);
+        emit OperationScheduled(operationId, operation.readyAt, operation.executeBefore, delay);
     }
 
     function cancel(bytes32 operationId) external onlyRole(CANCELLER_ROLE) {
@@ -158,6 +183,11 @@ contract ReversibleRandomTimelock is AccessControl, ReentrancyGuard {
         Operation storage operation = _operations[operationId];
         if (operation.status != Status.Scheduled) revert InvalidStatus(Status.Scheduled, operation.status);
         if (block.timestamp < operation.readyAt) revert NotReady(operation.readyAt);
+        if (block.timestamp > operation.executeBefore) revert OperationExpired(operation.executeBefore);
+        if (
+            !allowedTarget[operation.target] ||
+            targetGeneration[operation.target] != operation.targetGeneration
+        ) revert TargetPermissionChangedSinceQueue(operation.target);
 
         operation.status = Status.Executed;
         (bool success, bytes memory result) = operation.target.call(operation.data);
