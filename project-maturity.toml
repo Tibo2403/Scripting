@@ -1,0 +1,88 @@
+schema_version = 1
+
+[[projects]]
+path = "scripts"
+name = "Scripting Toolkit"
+status = "usable"
+summary = "Scripts d'automatisation documentes avec validations PowerShell, Bash et Python en CI."
+documentation = "README.md"
+validation = [
+  "python -m unittest discover -s scripts/python/tests -v",
+  "bash scripts/tests/test-linux-safety.sh",
+  "./scripts/powershell/Test-ScriptSyntax.ps1 -Path ./scripts",
+]
+limitations = [
+  "Certains scripts sensibles exigent une autorisation, un dry-run et une revue operateur.",
+]
+
+[[projects]]
+path = "litellm_scaleway_dispatching"
+name = "LiteLLM Scaleway dispatching"
+status = "usable"
+summary = "Integration isolee avec validation de configuration, retry, fallback et tests sans appel payant."
+documentation = "litellm_scaleway_dispatching/README.md"
+validation = ["python -m unittest scripts.python.tests.test_scaleway_glm_dispatcher -v"]
+limitations = [
+  "La CI simule le fournisseur; un test reel exige des identifiants locaux et reste a la charge de l'operateur.",
+]
+
+[[projects]]
+path = "deploy"
+name = "Deployment prototypes"
+status = "experimental"
+summary = "Configurations de deploiement a evaluer dans un environnement isole avant exploitation."
+documentation = "deploy/akash-openclaw-doc-agent/README.md"
+validation = ["python deploy/akash-openclaw-doc-agent/scripts/validate.py"]
+limitations = [
+  "La configuration statique est validee, mais aucun deploiement Akash de bout en bout n'est teste en CI.",
+]
+
+[[projects]]
+path = "openclaw-akash-dual-agents"
+name = "OpenClaw dual agents on Akash"
+status = "experimental"
+summary = "Prototype de deux agents OpenClaw isoles deployes sur Akash."
+documentation = "openclaw-akash-dual-agents/README.md"
+validation = ["bash -n openclaw-akash-dual-agents/scripts/*.sh"]
+limitations = [
+  "Les modeles distants, Telegram, GitHub et le deploiement Akash ne sont pas testes de bout en bout en CI.",
+]
+
+[[projects]]
+path = "openclaw-inkling-akash"
+name = "OpenClaw Inkling on Akash"
+status = "experimental"
+summary = "Prototype d'image OpenClaw et de manifeste Akash pour un fournisseur Inkling."
+documentation = "openclaw-inkling-akash/README.md"
+validation = [
+  "bash -n openclaw-inkling-akash/entrypoint.sh openclaw-inkling-akash/render-deploy.sh",
+]
+limitations = [
+  "L'endpoint Inkling et le deploiement Akash ne sont pas testes de bout en bout en CI.",
+]
+
+[[projects]]
+path = "pra"
+name = "PRA PME"
+status = "experimental"
+summary = "Orchestrateur et runbook de plan de reprise d'activite pour Windows."
+documentation = "pra/PRA_V2_Operationnel.md"
+validation = ["./scripts/powershell/Test-ScriptSyntax.ps1 -Path ./pra"]
+limitations = [
+  "Les commandes de restauration sont des connecteurs a adapter et aucun exercice de reprise reel n'est automatise.",
+]
+
+[[projects]]
+path = "tokenized_llm_finance"
+name = "Tokenized LLM finance"
+status = "experimental"
+summary = "Prototype Python et Solidity de mesure et de reglement tokenise d'appels LLM."
+documentation = "tokenized_llm_finance/README.md"
+validation = [
+  "python -m pytest tokenized_llm_finance/tests",
+  "forge test --root tokenized_llm_finance",
+]
+limitations = [
+  "Les contrats ne sont pas audites et les tests Foundry ne sont pas encore executes par la CI.",
+  "Le prototype ne constitue ni un produit financier, ni une certification reglementaire.",
+]

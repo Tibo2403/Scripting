@@ -1,5 +1,7 @@
 # Finance tokenisée pour agents LLM
 
+> **Maturité : expérimental.** Les contrats ne sont pas audités et les tests Foundry ne sont pas encore exécutés par la CI. Ne pas utiliser avec de la valeur réelle.
+
 Cette infrastructure mesure un appel LiteLLM, convertit sa consommation estimée en énergie puis en
 euros tokenisés, régule le budget par PID et temporise le règlement avec Chainlink VRF v2.5.
 

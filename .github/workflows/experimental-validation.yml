@@ -1,0 +1,88 @@
+name: Experimental projects checks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "deploy/**"
+      - "openclaw-akash-dual-agents/**"
+      - "openclaw-inkling-akash/**"
+      - "pra/**"
+      - "tokenized_llm_finance/**"
+      - "project-maturity.toml"
+      - ".github/workflows/experimental-validation.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "deploy/**"
+      - "openclaw-akash-dual-agents/**"
+      - "openclaw-inkling-akash/**"
+      - "pra/**"
+      - "tokenized_llm_finance/**"
+      - "project-maturity.toml"
+      - ".github/workflows/experimental-validation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: experimental-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deployment-config:
+    name: Experimental Akash configuration
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Validate Akash OpenClaw configuration
+        run: python deploy/akash-openclaw-doc-agent/scripts/validate.py
+
+  tokenized-python:
+    name: Experimental tokenized finance (Python only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.11"
+      - name: Install test dependencies
+        run: python -m pip install -r tokenized_llm_finance/requirements-dev.txt
+      - name: Run Python tests and lint
+        working-directory: tokenized_llm_finance
+        run: |
+          python -m pytest
+          python -m ruff check python tests
+
+  shell-prototypes:
+    name: Experimental OpenClaw shell syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Validate shell syntax
+        run: |
+          find openclaw-akash-dual-agents openclaw-inkling-akash -name "*.sh" -print0 \
+            | xargs -0 -r -n1 bash -n
+
+  pra-powershell:
+    name: Experimental PRA syntax
+    runs-on: windows-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Validate PRA PowerShell syntax
+        shell: pwsh
+        run: ./scripts/powershell/Test-ScriptSyntax.ps1 -Path ./pra

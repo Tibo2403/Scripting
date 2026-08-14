@@ -1,5 +1,7 @@
 # OpenClaw dual agents on Akash
 
+> **Maturité : expérimental.** Les intégrations Akash, Telegram, GitHub et les modèles distants ne sont pas validées de bout en bout en CI.
+
 Déploiement d'un Gateway OpenClaw unique hébergeant deux agents isolés :
 
 - `agent-qwen` : développement, branches et Pull Requests en brouillon.

@@ -1,5 +1,7 @@
 # PRA V2 Opérationnel (PME) — Exécution PowerShell + Backup standard
 
+> **Maturité : expérimental.** Les connecteurs de restauration sont des placeholders à adapter et un exercice réel reste obligatoire avant tout usage opérationnel.
+
 ## 1. Objectif
 Permettre à une PME de redémarrer ses services critiques rapidement après crash (matériel, logiciel, cyber), avec une procédure semi-automatisée via PowerShell et un backup standard robuste.
 

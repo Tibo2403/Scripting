@@ -4,3 +4,11 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+  - package-ecosystem: "pip"
+    directory: "/scripts/python"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "pip"
+    directory: "/tokenized_llm_finance"
+    schedule:
+      interval: "weekly"
