@@ -10,12 +10,17 @@ contract PIDBudgetController is AccessControl {
     using SignedWadMath for int256;
 
     bytes32 public constant ORACLE_ROLE = keccak256("ORACLE_ROLE");
+    uint256 public constant MAXIMUM_GAIN_WAD = 100e18;
+    uint64 public immutable minimumUpdateInterval;
+    uint64 public immutable maximumElapsedTime;
 
     struct AgentPID {
         uint256 budgetLimitWad;
         uint256 minimumBudgetWad;
         uint256 maximumBudgetWad;
         uint256 targetVelocityWad;
+        uint256 maximumVelocityWad;
+        uint256 maximumBudgetChangeWad;
         uint256 kpWad;
         uint256 kiWad;
         uint256 kdWad;
@@ -27,12 +32,27 @@ contract PIDBudgetController is AccessControl {
         bool configured;
     }
 
+    struct AgentConfiguration {
+        uint256 initialBudgetWad;
+        uint256 minimumBudgetWad;
+        uint256 maximumBudgetWad;
+        uint256 targetVelocityWad;
+        uint256 maximumVelocityWad;
+        uint256 maximumBudgetChangeWad;
+        uint256 kpWad;
+        uint256 kiWad;
+        uint256 kdWad;
+        int256 integralMinimumWadSeconds;
+        int256 integralMaximumWadSeconds;
+    }
+
     mapping(address agent => AgentPID state) private _agents;
 
     error InvalidConfiguration();
     error AgentNotConfigured(address agent);
     error UpdateTooSoon();
-    error ValueOutsideSignedRange();
+    error ObservationStale();
+    error ObservationOutsideRange(uint256 observed, uint256 maximum);
 
     event AgentConfigured(address indexed agent, uint256 initialBudgetWad, uint256 targetVelocityWad);
     event BudgetUpdated(
@@ -43,47 +63,51 @@ contract PIDBudgetController is AccessControl {
         uint256 budgetLimitWad
     );
 
-    constructor(address admin, address oracle) {
-        if (admin == address(0) || oracle == address(0)) revert InvalidConfiguration();
+    constructor(address admin, address oracle, uint64 minimumInterval, uint64 maximumElapsed) {
+        if (
+            admin == address(0) || oracle == address(0) || minimumInterval == 0 ||
+            maximumElapsed < minimumInterval
+        ) revert InvalidConfiguration();
+        minimumUpdateInterval = minimumInterval;
+        maximumElapsedTime = maximumElapsed;
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(ORACLE_ROLE, oracle);
     }
 
-    function configureAgent(
-        address agent,
-        uint256 initialBudgetWad,
-        uint256 minimumBudgetWad,
-        uint256 maximumBudgetWad,
-        uint256 targetVelocityWad,
-        uint256 kpWad,
-        uint256 kiWad,
-        uint256 kdWad,
-        int256 integralMinimumWadSeconds,
-        int256 integralMaximumWadSeconds
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function configureAgent(address agent, AgentConfiguration calldata config)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
         if (
-            agent == address(0) || minimumBudgetWad > initialBudgetWad ||
-            initialBudgetWad > maximumBudgetWad || integralMinimumWadSeconds > 0 ||
-            integralMaximumWadSeconds < 0 || !_fitsSigned(maximumBudgetWad) ||
-            !_fitsSigned(targetVelocityWad)
+            agent == address(0) || config.minimumBudgetWad > config.initialBudgetWad ||
+            config.initialBudgetWad > config.maximumBudgetWad ||
+            config.integralMinimumWadSeconds > 0 || config.integralMaximumWadSeconds < 0 ||
+            !_fitsSigned(config.maximumBudgetWad) || !_fitsSigned(config.maximumVelocityWad) ||
+            config.targetVelocityWad > config.maximumVelocityWad ||
+            config.maximumVelocityWad == 0 || config.maximumBudgetChangeWad == 0 ||
+            config.maximumBudgetChangeWad > config.maximumBudgetWad - config.minimumBudgetWad ||
+            config.kpWad > MAXIMUM_GAIN_WAD || config.kiWad > MAXIMUM_GAIN_WAD ||
+            config.kdWad > MAXIMUM_GAIN_WAD ||
+            config.maximumVelocityWad > uint256(type(int256).max) / maximumElapsedTime
         ) revert InvalidConfiguration();
 
-        _agents[agent] = AgentPID({
-            budgetLimitWad: initialBudgetWad,
-            minimumBudgetWad: minimumBudgetWad,
-            maximumBudgetWad: maximumBudgetWad,
-            targetVelocityWad: targetVelocityWad,
-            kpWad: kpWad,
-            kiWad: kiWad,
-            kdWad: kdWad,
-            integralErrorWadSeconds: 0,
-            previousErrorWad: 0,
-            integralMinimumWadSeconds: integralMinimumWadSeconds,
-            integralMaximumWadSeconds: integralMaximumWadSeconds,
-            lastUpdate: uint64(block.timestamp),
-            configured: true
-        });
-        emit AgentConfigured(agent, initialBudgetWad, targetVelocityWad);
+        AgentPID storage pid = _agents[agent];
+        pid.budgetLimitWad = config.initialBudgetWad;
+        pid.minimumBudgetWad = config.minimumBudgetWad;
+        pid.maximumBudgetWad = config.maximumBudgetWad;
+        pid.targetVelocityWad = config.targetVelocityWad;
+        pid.maximumVelocityWad = config.maximumVelocityWad;
+        pid.maximumBudgetChangeWad = config.maximumBudgetChangeWad;
+        pid.kpWad = config.kpWad;
+        pid.kiWad = config.kiWad;
+        pid.kdWad = config.kdWad;
+        pid.integralErrorWadSeconds = 0;
+        pid.previousErrorWad = 0;
+        pid.integralMinimumWadSeconds = config.integralMinimumWadSeconds;
+        pid.integralMaximumWadSeconds = config.integralMaximumWadSeconds;
+        pid.lastUpdate = uint64(block.timestamp);
+        pid.configured = true;
+        emit AgentConfigured(agent, config.initialBudgetWad, config.targetVelocityWad);
     }
 
     /// @notice Applies u(t)=Kp*e(t)+Ki*integral(e dt)+Kd*de/dt.
@@ -95,10 +119,13 @@ contract PIDBudgetController is AccessControl {
     {
         AgentPID storage pid = _agents[agent];
         if (!pid.configured) revert AgentNotConfigured(agent);
-        if (!_fitsSigned(observedVelocityWad)) revert ValueOutsideSignedRange();
+        if (observedVelocityWad > pid.maximumVelocityWad) {
+            revert ObservationOutsideRange(observedVelocityWad, pid.maximumVelocityWad);
+        }
 
         uint256 elapsed = block.timestamp - pid.lastUpdate;
-        if (elapsed == 0) revert UpdateTooSoon();
+        if (elapsed < minimumUpdateInterval) revert UpdateTooSoon();
+        if (elapsed > maximumElapsedTime) revert ObservationStale();
 
         int256 errorWad = int256(pid.targetVelocityWad) - int256(observedVelocityWad);
         int256 integrated = pid.integralErrorWadSeconds + errorWad * int256(elapsed);
@@ -108,15 +135,28 @@ contract PIDBudgetController is AccessControl {
         int256 outputWad = errorWad.mulWad(pid.kpWad)
             + integrated.mulWad(pid.kiWad)
             + derivativeWad.mulWad(pid.kdWad);
-        int256 candidate = int256(pid.budgetLimitWad) + outputWad;
-        int256 clamped = candidate.clamp(int256(pid.minimumBudgetWad), int256(pid.maximumBudgetWad));
+        int256 limitedOutput = outputWad.clamp(
+            -int256(pid.maximumBudgetChangeWad), int256(pid.maximumBudgetChangeWad)
+        );
+        uint256 nextBudget;
+        if (limitedOutput >= 0) {
+            uint256 increase = uint256(limitedOutput);
+            nextBudget = increase > pid.maximumBudgetWad - pid.budgetLimitWad
+                ? pid.maximumBudgetWad
+                : pid.budgetLimitWad + increase;
+        } else {
+            uint256 decrease = uint256(-limitedOutput);
+            nextBudget = decrease > pid.budgetLimitWad - pid.minimumBudgetWad
+                ? pid.minimumBudgetWad
+                : pid.budgetLimitWad - decrease;
+        }
 
-        pid.budgetLimitWad = uint256(clamped);
+        pid.budgetLimitWad = nextBudget;
         pid.integralErrorWadSeconds = integrated;
         pid.previousErrorWad = errorWad;
         pid.lastUpdate = uint64(block.timestamp);
 
-        emit BudgetUpdated(agent, observedVelocityWad, errorWad, outputWad, pid.budgetLimitWad);
+        emit BudgetUpdated(agent, observedVelocityWad, errorWad, limitedOutput, pid.budgetLimitWad);
         return pid.budgetLimitWad;
     }
 

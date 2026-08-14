@@ -1,5 +1,7 @@
 # Scaleway GLM dispatching with LiteLLM
 
+> **Maturity: usable.** Unit tests cover configuration, retry, fallback and metrics without paid API calls. A real provider smoke test remains an operator responsibility.
+
 Small isolated integration to test a Scaleway GLM provider path inside a LiteLLM dispatching project.
 
 ## What it adds

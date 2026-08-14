@@ -1,10 +1,30 @@
 # Scripting Toolkit
 
-[![Script Validation](https://github.com/Tibo2403/Scripting/actions/workflows/script-validation.yml/badge.svg)](https://github.com/Tibo2403/Scripting/actions/workflows/script-validation.yml)
+[![Usable Projects Validation](https://github.com/Tibo2403/Scripting/actions/workflows/script-validation.yml/badge.svg)](https://github.com/Tibo2403/Scripting/actions/workflows/script-validation.yml)
 
-**Production-minded PowerShell, Bash, and Python automation for AI infrastructure, system administration, Microsoft 365, developer tooling, and authorized security labs.**
+**Monorepo d'automatisation PowerShell, Bash et Python, avec une separation explicite entre les outils utilisables et les prototypes experimentaux.**
 
 Use this repository to audit a Codex workspace, deploy a private Ollama/Open WebUI stack, validate scripts across operating systems, operate Microsoft 365 services, or experiment with budget-aware LLM routing.
+
+## Maturity at a glance
+
+**Usable** means documented and covered by repeatable CI checks for its stated scope. It does not
+mean certified for unattended production. **Experimental** means interfaces or guarantees are still
+incomplete and real secrets, critical systems and real financial value must not be used.
+
+| Project directory | Maturity | Current evidence or gap |
+|---|---|---|
+| `scripts/` | **Usable** | PowerShell, Bash and Python checks run in CI |
+| `litellm_scaleway_dispatching/` | **Usable** | Provider calls are mocked; retry and fallback are unit tested |
+| `deploy/` | **Experimental** | Static validation exists; no end-to-end Akash deployment test |
+| `openclaw-akash-dual-agents/` | **Experimental** | Shell syntax only; external integrations are not tested end to end |
+| `openclaw-inkling-akash/` | **Experimental** | Shell syntax only; provider and deployment are not tested end to end |
+| `pra/` | **Experimental** | Recovery connectors are placeholders and require a real exercise |
+| `tokenized_llm_finance/` | **Experimental** | Contracts are unaudited and Foundry is not yet run in CI |
+
+The machine-readable source of truth is [`project-maturity.toml`](project-maturity.toml). Promotion
+criteria and the meaning of each level are defined in
+[`docs/project-maturity.md`](docs/project-maturity.md).
 
 ## Try it in under 5 minutes
 
@@ -50,17 +70,23 @@ python scripts/python/mcp_server.py
 .
 |-- .github/workflows/        # Script validation and manual AI-assisted refactoring
 |-- docs/                     # Operations, compatibility and client-readiness guidance
+|-- deploy/                   # Experimental deployment configurations
 |-- examples/                 # Safe placeholders and demonstration inputs
+|-- litellm_scaleway_dispatching/ # Usable, unit-tested provider integration
+|-- openclaw-*/               # Experimental OpenClaw deployment prototypes
+|-- pra/                      # Experimental recovery-plan orchestrator
 |-- scripts/
 |   |-- bash/                 # AI infrastructure installers
 |   |-- linux/                # Linux administration and authorized lab workflows
 |   |-- powershell/           # Windows, Microsoft 365 and workspace automation
 |   |-- python/               # MCP tools and LLM routing experiments
 |   `-- tests/                # Safety and smoke tests
+|-- tokenized_llm_finance/    # Experimental Python/Solidity finance prototype
 |-- AGENTS.md
 |-- CHANGELOG.md
 |-- CONTRIBUTING.md
 |-- LICENSE
+|-- project-maturity.toml
 `-- README.md
 ```
 
@@ -131,7 +157,10 @@ find scripts/python -name "*.py" -print0 | xargs -0 -n1 python -m py_compile
 python -m unittest discover -s scripts/python/tests -v
 ```
 
-The CI workflow performs PowerShell syntax checks, PSScriptAnalyzer, Bash syntax checks, ShellCheck, Linux safety smoke tests, Python compilation, unit tests and dedicated repository smoke tests.
+The usable-project workflow performs PowerShell syntax checks, PSScriptAnalyzer, Bash syntax checks,
+ShellCheck, Linux safety smoke tests, Python compilation and unit tests. A separate experimental
+workflow runs the checks currently available for prototypes; a green experimental check is not a
+promotion to usable and its intentionally missing coverage remains listed in the maturity catalog.
 
 ## Authorized security use only
 

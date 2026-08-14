@@ -6,3 +6,4 @@ cache/
 lib/
 out/
 broadcast/
+.pricing-state.json

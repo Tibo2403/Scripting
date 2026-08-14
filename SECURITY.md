@@ -1,24 +1,29 @@
 # Security Policy
 
-## Supported Scope
+## Supported scope
 
-This repository contains administration and authorized security-testing scripts. Security fixes and safety improvements are accepted for the current `main` branch.
+Only the latest revision of the default branch is supported. Projects marked
+`experimental` in `project-maturity.toml` are prototypes and may require
+additional hardening before use with sensitive data, funds, or untrusted input.
+Security fixes and safety improvements are accepted for administration and
+authorized security-testing scripts on the current default branch.
 
-## Reporting a Vulnerability
+## Reporting a vulnerability
 
-Open a private security advisory on GitHub, or contact the repository owner directly if advisories are unavailable.
+Use GitHub's private vulnerability reporting for this repository. Include the
+affected path, reproduction steps, impact, and a minimal suggested mitigation
+when possible. Do not open a public issue containing secrets, personal data,
+or exploitable production details.
 
-Please include:
+## Sensitive data
 
-- Affected script or workflow.
-- Exact command or workflow trigger involved.
-- Expected behavior and observed behavior.
-- Any sensitive logs redacted before sharing.
+Do not commit credentials, API keys, tenant identifiers, scan output, packet
+captures, encrypted payloads, or customer data. Use environment variables or
+local-only configuration files for secrets, and redact sensitive logs before
+sharing them.
 
-## Sensitive Data
+## Authorized use
 
-Do not commit credentials, API keys, tenant identifiers, scan output, packet captures, encrypted payloads, or customer data. Use environment variables or local-only configuration files for secrets.
-
-## Authorized Use
-
-Scripts that perform scanning, exploitation, credential inspection, Wi-Fi analysis, or data transfer must only be used in environments where you have explicit permission.
+Scripts that perform scanning, exploitation, credential inspection, Wi-Fi
+analysis, or data transfer must only be used in environments where you have
+explicit permission.

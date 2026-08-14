@@ -9,6 +9,23 @@ Thank you for improving the Scripting Toolkit.
 3. Never include credentials, real customer data, tenant identifiers, scan output, packet captures, or unauthorized targets.
 4. Add or update documentation when behavior changes.
 5. Add a regression test for bug fixes when practical.
+6. Identify the affected project and its maturity in `project-maturity.toml`.
+
+## Project maturity
+
+This repository uses two explicit levels: **usable** and **experimental**. Read
+[`docs/project-maturity.md`](docs/project-maturity.md) before expanding a project scope or changing
+its level. New top-level project directories must be registered in `project-maturity.toml`; creating
+a separate GitHub repository is not required.
+
+Run the catalog check for every structural change:
+
+```bash
+python scripts/python/check_project_maturity.py
+```
+
+Do not describe an experimental project as production-ready. Promotion to usable must include the
+documentation, safe defaults, CI coverage and risk evidence listed in the maturity policy.
 
 ## Validation
 
@@ -30,4 +47,6 @@ Invoke-ScriptAnalyzer -Path ./scripts -Recurse -Settings ./PSScriptAnalyzerSetti
 
 ## Pull requests
 
-Explain what changed, why it is needed, how it was validated, and any security or compatibility impact. Privileged, network, or offensive-security behavior must include safe defaults and a dry-run path where possible.
+Use the repository pull request template. State the affected maturity level and whether the change
+preserves, promotes or demotes it. Privileged, network, or offensive-security behavior must include
+safe defaults and a dry-run path where possible.

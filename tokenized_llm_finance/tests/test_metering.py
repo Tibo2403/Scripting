@@ -26,12 +26,18 @@ def _response(total_tokens: int = 150) -> SimpleNamespace:
 class MeteringTest(unittest.TestCase):
     def test_exact_token_energy_euro_pipeline(self) -> None:
         tariff = EnergyTariff.from_decimal_strings("2", "4", "0.25")
-        measured = measurement_from_response(_response(), tariff, "fallback")
+        measured = measurement_from_response(_response(), tariff, "fallback", measured_at=123)
 
         self.assertEqual(measured.total_tokens, 150)
         self.assertEqual(measured.energy_joules_wad, 400 * 10**18)
         self.assertEqual(measured.energy_kwh_wad, (400 * 10**18) // 3_600_000)
+        self.assertEqual(measured.euro_per_kwh_wad, decimal_to_wad("0.25"))
+        self.assertEqual(measured.electricity_cost_euro_wad, measured.energy_kwh_wad // 4)
+        self.assertEqual(measured.usd_per_eur_wad, 10**18)
+        self.assertEqual(measured.provider_cost_euro_wad, 0)
         self.assertEqual(measured.settlement_euro_wad, measured.energy_kwh_wad // 4)
+        self.assertEqual(measured.usage_timestamp, 123)
+        self.assertEqual(len(measured.tariff_id_sha256), 64)
         self.assertEqual(len(measured.usage_digest()), 32)
 
     def test_rejects_inconsistent_provider_total(self) -> None:
@@ -42,6 +48,22 @@ class MeteringTest(unittest.TestCase):
     def test_rejects_more_than_eighteen_decimal_places(self) -> None:
         with self.assertRaisesRegex(ValueError, "18 decimals"):
             decimal_to_wad("0.0000000000000000001")
+
+    def test_adds_fx_converted_provider_cost(self) -> None:
+        tariff = EnergyTariff.from_decimal_strings("0", "0", "0.25")
+        measured = measurement_from_response(
+            _response(),
+            tariff,
+            "fallback",
+            measured_at=123,
+            provider_cost_usd_wad=1_200_000_000_000_000_000,
+            usd_per_eur_wad=1_200_000_000_000_000_000,
+        )
+
+        self.assertEqual(measured.provider_cost_euro_wad, 10**18)
+        self.assertEqual(measured.provider_cost_usd_wad, 1_200_000_000_000_000_000)
+        self.assertEqual(measured.usd_per_eur_wad, 1_200_000_000_000_000_000)
+        self.assertEqual(measured.settlement_euro_wad, 10**18)
 
 
 if __name__ == "__main__":

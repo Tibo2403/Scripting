@@ -1,5 +1,7 @@
 # OpenClaw + Inkling sur Akash
 
+> **Maturité : expérimental.** Le fournisseur Inkling et le déploiement Akash ne sont pas validés de bout en bout en CI.
+
 Ce dossier fournit une image OpenClaw configurée avec un fournisseur Inkling compatible avec l'API OpenAI, ainsi qu'un modèle SDL Akash.
 
 ## Prérequis

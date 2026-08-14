@@ -1,5 +1,7 @@
 # Agent de documentation privé sur Akash
 
+> **Maturité : expérimental.** La configuration statique est validée, mais le déploiement Akash complet ne l'est pas en CI.
+
 Ce dossier prépare un agent OpenClaw spécialisé dans la documentation, exécuté sans privilèges avec Ollama et Llama 3.2 3B Q4. Le Gateway OpenClaw écoute uniquement sur `127.0.0.1:18789`. Akash exige néanmoins au moins un endpoint global : seul un endpoint minimal `/healthz` sur le port `8080` est publié. Il ne donne accès ni au Gateway, ni au modèle, ni aux fichiers.
 
 ## Ce que l'agent peut faire
