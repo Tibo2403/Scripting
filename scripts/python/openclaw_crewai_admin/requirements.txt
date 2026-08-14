@@ -1,4 +1,4 @@
 mcp>=1.9,<2
-PyYAML>=6.0,<7
+PyYAML>=6.0.3,<7
 filelock>=3.16,<4
 
