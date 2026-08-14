@@ -91,6 +91,14 @@ A change is not complete unless all applicable points below are satisfied.
 - Include an example invocation for new user-facing scripts.
 - Clearly document platform assumptions, required privileges, external tools, and supported runtime versions.
 
+## Optional Qodo Review
+
+- Treat Qodo code review as advisory and run it after local validation, commits, or pull-request creation.
+- A missing Qodo CLI, API key, account connection, network connection, quota, or review response must never block `git add`, `git commit`, or `git push`.
+- Do not install Qodo commands in mandatory Git hooks or make a Qodo status check a required merge condition.
+- When Qodo is unavailable, record that the autoreview was not run and continue with the repository's local validation commands.
+- Qodo feedback supplements local tests and static analysis; it does not replace them.
+
 ## Pull Request, Merge, and Push Summaries
 
 For every PR description, merge proposal, push summary, or release validation note, use this structure:
