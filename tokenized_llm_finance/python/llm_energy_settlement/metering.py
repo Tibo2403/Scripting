@@ -55,11 +55,14 @@ class EnergyTariff:
     def __post_init__(self) -> None:
         if not self.tariff_id.strip():
             raise ValueError("tariff_id is required")
-        if min(
-            self.prompt_joules_per_token_wad,
-            self.completion_joules_per_token_wad,
-            self.euro_per_kwh_wad,
-        ) < 0:
+        if (
+            min(
+                self.prompt_joules_per_token_wad,
+                self.completion_joules_per_token_wad,
+                self.euro_per_kwh_wad,
+            )
+            < 0
+        ):
             raise ValueError("Economic coefficients must be non-negative")
 
 
@@ -72,6 +75,11 @@ class UsageMeasurement:
     total_tokens: int
     energy_joules_wad: int
     energy_kwh_wad: int
+    euro_per_kwh_wad: int
+    electricity_cost_euro_wad: int
+    provider_cost_usd_wad: int
+    usd_per_eur_wad: int
+    provider_cost_euro_wad: int
     settlement_euro_wad: int
     response_text_sha256: str
     tariff_id_sha256: str
@@ -103,6 +111,8 @@ def measurement_from_response(
     tariff: EnergyTariff,
     requested_model: str,
     measured_at: int | None = None,
+    provider_cost_usd_wad: int = 0,
+    usd_per_eur_wad: int = WAD,
 ) -> UsageMeasurement:
     """Read exact provider-reported prompt/completion counters from a LiteLLM response."""
     usage = _field(response, "usage")
@@ -123,14 +133,20 @@ def measurement_from_response(
     # Exact integer pipeline:
     # energy_joules_WAD = prompt_tokens*J_prompt_WAD + completion_tokens*J_completion_WAD
     # energy_kWh_WAD    = energy_joules_WAD / 3_600_000
-    # euro_WAD          = energy_kWh_WAD * EUR_per_kWh_WAD / 1e18
+    # electricity_EUR_WAD = energy_kWh_WAD * EUR_per_kWh_WAD / 1e18
+    # provider_EUR_WAD    = provider_USD_WAD * 1e18 / USD_per_EUR_WAD
+    # settlement_EUR_WAD  = electricity_EUR_WAD + provider_EUR_WAD
     # Each division deliberately floors the smallest 1e-18 unit, matching Solidity semantics.
+    if provider_cost_usd_wad < 0 or usd_per_eur_wad <= 0:
+        raise ValueError("Provider cost must be non-negative and FX rate positive")
     energy_joules_wad = (
         prompt_tokens * tariff.prompt_joules_per_token_wad
         + completion_tokens * tariff.completion_joules_per_token_wad
     )
     energy_kwh_wad = energy_joules_wad // JOULES_PER_KWH
-    settlement_euro_wad = energy_kwh_wad * tariff.euro_per_kwh_wad // WAD
+    electricity_cost_euro_wad = energy_kwh_wad * tariff.euro_per_kwh_wad // WAD
+    provider_cost_euro_wad = provider_cost_usd_wad * WAD // usd_per_eur_wad
+    settlement_euro_wad = electricity_cost_euro_wad + provider_cost_euro_wad
     response_text = _response_text(response)
     usage_timestamp = int(time.time()) if measured_at is None else measured_at
     if usage_timestamp < 0:
@@ -144,6 +160,11 @@ def measurement_from_response(
         total_tokens=total_tokens,
         energy_joules_wad=energy_joules_wad,
         energy_kwh_wad=energy_kwh_wad,
+        euro_per_kwh_wad=tariff.euro_per_kwh_wad,
+        electricity_cost_euro_wad=electricity_cost_euro_wad,
+        provider_cost_usd_wad=provider_cost_usd_wad,
+        usd_per_eur_wad=usd_per_eur_wad,
+        provider_cost_euro_wad=provider_cost_euro_wad,
         settlement_euro_wad=settlement_euro_wad,
         response_text_sha256=hashlib.sha256(response_text.encode("utf-8")).hexdigest(),
         tariff_id_sha256=hashlib.sha256(tariff.tariff_id.encode("utf-8")).hexdigest(),
@@ -155,12 +176,25 @@ def meter_completion(
     model: str,
     messages: Sequence[Mapping[str, str]],
     tariff: EnergyTariff,
+    usd_per_eur_wad: int = WAD,
+    include_provider_cost: bool = False,
     **completion_kwargs: Any,
 ) -> tuple[Any, UsageMeasurement]:
     """Call LiteLLM and return both its response and a deterministic measurement."""
     if not model.strip() or not messages:
         raise ValueError("model and at least one message are required")
-    from litellm import completion  # Imported lazily so pure metering tests need no API package.
+    from litellm import completion, completion_cost
 
     response = completion(model=model, messages=list(messages), **completion_kwargs)
-    return response, measurement_from_response(response, tariff, model)
+    provider_cost_usd_wad = 0
+    if include_provider_cost:
+        from .pricing import decimal_usd_to_wad
+
+        provider_cost_usd_wad = decimal_usd_to_wad(completion_cost(completion_response=response))
+    return response, measurement_from_response(
+        response,
+        tariff,
+        model,
+        provider_cost_usd_wad=provider_cost_usd_wad,
+        usd_per_eur_wad=usd_per_eur_wad,
+    )

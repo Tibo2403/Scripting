@@ -149,6 +149,13 @@ class OnChainSupervisor:
             self.oracle_private_key,
         )
 
+    def maximum_pid_velocity_wad(self, agent: str) -> int:
+        """Read the configured on-chain ceiling used to bound oracle input."""
+        state = self.controller.functions.agentState(Web3.to_checksum_address(agent)).call()
+        if len(state) <= 4 or not isinstance(state[4], int) or state[4] <= 0:
+            raise ValueError("Controller returned an invalid maximum velocity")
+        return state[4]
+
     def _usage_receipt(
         self, agent: str, beneficiary: str, measurement: UsageMeasurement
     ) -> dict[str, Any]:
@@ -168,6 +175,11 @@ class OnChainSupervisor:
             "promptTokens": measurement.prompt_tokens,
             "completionTokens": measurement.completion_tokens,
             "energyKwhWad": measurement.energy_kwh_wad,
+            "euroPerKwhWad": measurement.euro_per_kwh_wad,
+            "electricityCostEurWad": measurement.electricity_cost_euro_wad,
+            "providerCostUsdWad": measurement.provider_cost_usd_wad,
+            "usdPerEurWad": measurement.usd_per_eur_wad,
+            "providerCostEurWad": measurement.provider_cost_euro_wad,
             "amountWad": measurement.settlement_euro_wad,
             "usageTimestamp": measurement.usage_timestamp,
             "usageEpoch": measurement.usage_timestamp // epoch_duration,
@@ -177,13 +189,25 @@ class OnChainSupervisor:
 
     def _sign_usage_receipt(self, receipt: dict[str, Any]) -> bytes:
         fields = [
-            ("agent", "address"), ("beneficiary", "address"),
-            ("providerRequestId", "bytes32"), ("modelId", "bytes32"),
-            ("tariffId", "bytes32"), ("responseHash", "bytes32"),
-            ("promptTokens", "uint256"), ("completionTokens", "uint256"),
-            ("energyKwhWad", "uint256"), ("amountWad", "uint256"),
-            ("usageTimestamp", "uint256"), ("usageEpoch", "uint256"),
-            ("nonce", "uint256"), ("deadline", "uint256"),
+            ("agent", "address"),
+            ("beneficiary", "address"),
+            ("providerRequestId", "bytes32"),
+            ("modelId", "bytes32"),
+            ("tariffId", "bytes32"),
+            ("responseHash", "bytes32"),
+            ("promptTokens", "uint256"),
+            ("completionTokens", "uint256"),
+            ("energyKwhWad", "uint256"),
+            ("euroPerKwhWad", "uint256"),
+            ("electricityCostEurWad", "uint256"),
+            ("providerCostUsdWad", "uint256"),
+            ("usdPerEurWad", "uint256"),
+            ("providerCostEurWad", "uint256"),
+            ("amountWad", "uint256"),
+            ("usageTimestamp", "uint256"),
+            ("usageEpoch", "uint256"),
+            ("nonce", "uint256"),
+            ("deadline", "uint256"),
         ]
         typed_data = {
             "types": {
@@ -197,7 +221,8 @@ class OnChainSupervisor:
             },
             "primaryType": "UsageReceipt",
             "domain": {
-                "name": "AgentSettlementVault", "version": "1",
+                "name": "AgentSettlementVault",
+                "version": "1",
                 "chainId": self.web3.eth.chain_id,
                 "verifyingContract": self.vault.address,
             },

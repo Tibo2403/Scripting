@@ -58,6 +58,32 @@ python -m llm_energy_settlement.cli --model openai/gpt-4o-mini --prompt "résume
   --prompt-joules-per-token 2.1 --completion-joules-per-token 3.7 --euro-per-kwh 0.22
 ```
 
+## Prix de marché auto-ajustés
+
+```powershell
+$env:ENTSOE_API_TOKEN = "charge-depuis-un-coffre"
+python -m llm_energy_settlement.cli --model openai/gpt-4o-mini --prompt "résume ceci" `
+  --prompt-joules-per-token 2.1 --completion-joules-per-token 3.7 `
+  --auto-market-pricing
+```
+
+Ce mode lit le prix spot day-ahead ENTSO-E (EUR/MWh, converti en EUR/kWh), le taux de référence
+ECB USD par EUR et le coût fournisseur estimé par LiteLLM. Il rejette les données anciennes ou
+futures, applique un plancher/plafond et limite chaque variation par rapport au dernier snapshot
+accepté. Le fichier d'état est écrit atomiquement. Les formules entières sont :
+
+```text
+electricite_EUR_WAD = floor(kWh_WAD * EUR_kWh_WAD / 10^18)
+fournisseur_EUR_WAD = floor(fournisseur_USD_WAD * 10^18 / USD_par_EUR_WAD)
+total_EUR_WAD       = electricite_EUR_WAD + fournisseur_EUR_WAD
+```
+
+Le reçu EIP-712 lie aussi `EUR/kWh`, le coût fournisseur USD et `USD/EUR`. Le coffre recalcule sur
+chaîne chaque conversion avec `Math.mulDiv`, puis vérifie que le total signé est exactement la somme
+des deux composantes.
+Les taux ECB sont des références informatives et non des prix d'exécution. Un cache interne ne
+remplace pas un oracle on-chain décentralisé pour une utilisation financière en production.
+
 ## Déploiement en deux phases
 
 Copier `.env.example`, renseigner des adresses non nulles et distinctes, puis déployer :
@@ -92,6 +118,23 @@ python -m llm_energy_settlement.workflow --model openai/gpt-4o-mini --prompt "an
   --prompt-joules-per-token 2.1 --completion-joules-per-token 3.7 --euro-per-kwh 0.22
 ```
 
+Pour le workflow automatique, supprimer `--tariff-id` et `--euro-per-kwh`, puis ajouter
+`--auto-market-pricing`. Les bornes, l'âge maximal et la variation maximale sont configurables avec
+les variables `PRICE_*` documentées dans `.env.example`.
+
+Si `--observed-network-velocity-wad` est aussi fourni, le workflow applique au signal PID une
+surcharge unidirectionnelle lorsque le prix accepté dépasse `MARKET_PID_REFERENCE_EUR_PER_KWH` :
+
+```text
+prime_brute_bps = max(0, (prix - reference) * 10000 / reference)
+prime_bps = min(prime_brute_bps * sensibilite_bps / 10000, prime_max_bps)
+velocite_effective = velocite_observee * (10000 + prime_bps) / 10000
+```
+
+Une baisse du prix ne gonfle donc jamais le budget. La vélocité effective est plafonnée par
+`maximumVelocityWad` lu directement dans le contrôleur on-chain. La sortie JSON expose le signal
+brut, le signal effectif et la prime appliquée pour permettre l'audit de chaque décision.
+
 ## Limites réglementaires et opérationnelles
 
 - L'ERC-20 est un rail technique permissionné, pas une certification MiCA ni une MNBC. Réserves,
@@ -99,7 +142,8 @@ python -m llm_energy_settlement.workflow --model openai/gpt-4o-mini --prompt "an
 - Les adresses sont pseudonymes, pas anonymes. L'allowlist doit être reliée aux contrôles réglementaires.
 - Des clés distinctes doivent être conservées dans HSM/coffres et idéalement portées par des services
   ou multisigs indépendants. Ne jamais committer une clé réelle.
-- Le prix API LLM, le change, le gaz et les frais de rachat ne sont pas inclus dans la formule énergie.
+- Le mode automatique inclut l'estimation du prix API LLM et le change. Le gaz, les spreads, les frais
+  de rachat et les taxes ne sont pas inclus dans le règlement.
 - Une transaction annulée ne réutilise pas sa clé sémantique : une nouvelle attestation et un nouveau
   nonce sont nécessaires pour une nouvelle tentative.
 - Faire auditer les contrats et tester les scénarios VRF, réorganisation, expiration et pause avant

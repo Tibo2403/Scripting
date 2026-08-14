@@ -6,6 +6,7 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 interface IBudgetController {
@@ -21,7 +22,9 @@ contract AgentSettlementVault is AccessControl, EIP712, ReentrancyGuard {
     bytes32 public constant USAGE_RECEIPT_TYPEHASH = keccak256(
         "UsageReceipt(address agent,address beneficiary,bytes32 providerRequestId,bytes32 modelId,"
         "bytes32 tariffId,bytes32 responseHash,uint256 promptTokens,uint256 completionTokens,uint256 energyKwhWad,"
-        "uint256 amountWad,uint256 usageTimestamp,uint256 usageEpoch,uint256 nonce,uint256 deadline)"
+        "uint256 euroPerKwhWad,uint256 electricityCostEurWad,uint256 providerCostUsdWad,uint256 usdPerEurWad,"
+        "uint256 providerCostEurWad,uint256 amountWad,uint256 usageTimestamp,uint256 usageEpoch,uint256 nonce,"
+        "uint256 deadline)"
     );
 
     struct UsageReceipt {
@@ -34,6 +37,11 @@ contract AgentSettlementVault is AccessControl, EIP712, ReentrancyGuard {
         uint256 promptTokens;
         uint256 completionTokens;
         uint256 energyKwhWad;
+        uint256 euroPerKwhWad;
+        uint256 electricityCostEurWad;
+        uint256 providerCostUsdWad;
+        uint256 usdPerEurWad;
+        uint256 providerCostEurWad;
         uint256 amountWad;
         uint256 usageTimestamp;
         uint256 usageEpoch;
@@ -54,6 +62,9 @@ contract AgentSettlementVault is AccessControl, EIP712, ReentrancyGuard {
     error InvalidUsageEpoch(uint256 supplied, uint256 expected);
     error InvalidUsageTime();
     error DuplicateUsage(bytes32 usageDigest);
+    error InvalidElectricityCost(uint256 expectedWad, uint256 suppliedWad);
+    error InvalidProviderCost(uint256 expectedWad, uint256 suppliedWad);
+    error InvalidCostBreakdown(uint256 expectedWad, uint256 suppliedWad);
     error BudgetExceeded(uint256 requestedWad, uint256 remainingWad);
 
     event UsageSettled(
@@ -61,6 +72,8 @@ contract AgentSettlementVault is AccessControl, EIP712, ReentrancyGuard {
         address indexed agent,
         address indexed beneficiary,
         uint256 amountWad,
+        uint256 electricityCostEurWad,
+        uint256 providerCostEurWad,
         uint256 epoch
     );
 
@@ -109,11 +122,38 @@ contract AgentSettlementVault is AccessControl, EIP712, ReentrancyGuard {
         if (receipt.usageEpoch != expectedEpoch) {
             revert InvalidUsageEpoch(receipt.usageEpoch, expectedEpoch);
         }
+        if (receipt.usdPerEurWad == 0) revert InvalidConfiguration();
+        uint256 expectedElectricityCost = Math.mulDiv(
+            receipt.energyKwhWad, receipt.euroPerKwhWad, 1e18
+        );
+        if (receipt.electricityCostEurWad != expectedElectricityCost) {
+            revert InvalidElectricityCost(
+                expectedElectricityCost, receipt.electricityCostEurWad
+            );
+        }
+        uint256 expectedProviderCost = Math.mulDiv(
+            receipt.providerCostUsdWad, 1e18, receipt.usdPerEurWad
+        );
+        if (receipt.providerCostEurWad != expectedProviderCost) {
+            revert InvalidProviderCost(expectedProviderCost, receipt.providerCostEurWad);
+        }
+        if (receipt.electricityCostEurWad > type(uint256).max - receipt.providerCostEurWad) {
+            revert InvalidCostBreakdown(type(uint256).max, receipt.amountWad);
+        }
+        uint256 expectedAmount = receipt.electricityCostEurWad + receipt.providerCostEurWad;
+        if (receipt.amountWad != expectedAmount) {
+            revert InvalidCostBreakdown(expectedAmount, receipt.amountWad);
+        }
 
         bytes32 usageDigest = hashUsageReceipt(receipt);
         address signer = ECDSA.recover(usageDigest, signature);
         if (!hasRole(ATTESTOR_ROLE, signer)) revert InvalidAttestor(signer);
         if (settledUsage[usageDigest]) revert DuplicateUsage(usageDigest);
+
+        _recordSettlement(receipt, usageDigest);
+    }
+
+    function _recordSettlement(UsageReceipt calldata receipt, bytes32 usageDigest) private {
         uint256 budget = budgetController.budgetLimitWad(receipt.agent);
         uint256 alreadySpent = spentWad[receipt.agent][receipt.usageEpoch];
         uint256 remaining = alreadySpent >= budget ? 0 : budget - alreadySpent;
@@ -129,6 +169,8 @@ contract AgentSettlementVault is AccessControl, EIP712, ReentrancyGuard {
             receipt.agent,
             receipt.beneficiary,
             receipt.amountWad,
+            receipt.electricityCostEurWad,
+            receipt.providerCostEurWad,
             receipt.usageEpoch
         );
     }

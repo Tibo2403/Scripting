@@ -198,6 +198,16 @@ contract InfrastructureTest is Test {
         vault.settle(receipt, signature);
     }
 
+    function testInconsistentCostBreakdownIsRejected() public {
+        (AgentSettlementVault.UsageReceipt memory receipt, bytes memory signature) =
+            _signedReceipt(keccak256("usage-breakdown"), 5 * WAD);
+        receipt.providerCostEurWad += 1;
+
+        vm.expectRevert(AgentSettlementVault.InvalidProviderCost.selector);
+        vm.prank(address(timelock));
+        vault.settle(receipt, signature);
+    }
+
     function testSignedReceiptCannotBeReplayed() public {
         (AgentSettlementVault.UsageReceipt memory receipt, bytes memory signature) =
             _signedReceipt(keccak256("usage-replay"), 5 * WAD);
@@ -227,6 +237,7 @@ contract InfrastructureTest is Test {
         view
         returns (AgentSettlementVault.UsageReceipt memory receipt, bytes memory signature)
     {
+        uint256 electricityCostWad = amountWad / 4;
         receipt = AgentSettlementVault.UsageReceipt({
             agent: AGENT,
             beneficiary: BENEFICIARY,
@@ -236,7 +247,12 @@ contract InfrastructureTest is Test {
             responseHash: keccak256("response"),
             promptTokens: 100,
             completionTokens: 20,
-            energyKwhWad: 1e15,
+            energyKwhWad: electricityCostWad,
+            euroPerKwhWad: WAD,
+            electricityCostEurWad: electricityCostWad,
+            providerCostUsdWad: amountWad - electricityCostWad,
+            usdPerEurWad: WAD,
+            providerCostEurWad: amountWad - electricityCostWad,
             amountWad: amountWad,
             usageTimestamp: block.timestamp,
             usageEpoch: block.timestamp / vault.epochDuration(),
