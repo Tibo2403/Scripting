@@ -1,9 +1,38 @@
-# Finance tokenisée pour agents LLM
+# Infrastructure tokenisée interbancaire et règlement d'agents LLM
 
 > **Maturité : expérimental.** Les contrats ne sont pas audités et les tests Foundry ne sont pas encore exécutés par la CI. Ne pas utiliser avec de la valeur réelle.
 
-Cette infrastructure mesure un appel LiteLLM, convertit sa consommation estimée en énergie puis en
-euros tokenisés, régule le budget par PID et temporise le règlement avec Chainlink VRF v2.5.
+Cette infrastructure combine désormais deux rails : un règlement bilatéral entre banques admises et
+un sous-système qui mesure un appel LiteLLM, convertit sa consommation en euros tokenisés, régule le
+budget par PID et temporise son règlement avec Chainlink VRF v2.5.
+
+## Architecture interbancaire
+
+- `BankRegistry` inscrit chaque établissement sous un identifiant stable, associe son compte de
+  règlement et permet sa suspension immédiate. Les rôles d'inscription et de suspension sont séparés.
+- `InterbankSettlement` crée une instruction irréutilisable de banque débitrice vers banque
+  créditrice. La banque créditrice doit l'accepter avant le transfert atomique du jeton.
+- Chaque instruction lie les deux banques, leurs comptes au moment de la création, le montant, une
+  référence métier hachée et une expiration. Une rotation de compte invalide le règlement en attente.
+- Une limite de sortie par banque et par époque borne la liquidité mobilisable. La pause globale et la
+  suspension individuelle sont indépendantes.
+- `EuroSettlementToken` demeure un actif privé permissionné libellé en euros. Il ne représente ni des
+  réserves BCE, ni une MNBC, ni une créance automatiquement remboursable en monnaie commerciale.
+
+Flux minimal d'un règlement :
+
+```text
+Gouvernance -> inscrit Banque A et Banque B dans BankRegistry
+Compliance  -> autorise leurs comptes dans EuroSettlementToken
+Liquidité   -> fixe la limite de sortie de Banque A
+Banque A    -> approve InterbankSettlement puis crée l'instruction
+Banque B    -> vérifie la référence et appelle acceptAndSettle
+Contrat     -> transfère atomiquement A vers B et scelle l'instruction
+```
+
+L'identifiant BIC est stocké sous forme de hash pour l'intégrité, pas pour garantir sa confidentialité.
+Une donnée sensible doit utiliser un engagement salé ou rester dans le registre réglementaire hors
+chaîne. Les références de paiement peuvent pointer vers un message ISO 20022 conservé hors chaîne.
 
 ## Invariants de sécurité
 
@@ -101,7 +130,22 @@ adresses, le consumer VRF, les rôles, l'allowlist et la capacité de chaque mul
 forge script script/FinalizeHandoff.s.sol:FinalizeHandoff --rpc-url $env:RPC_URL --broadcast
 ```
 
-Le second script refuse l'abandon si la gouvernance ne possède pas tous les rôles critiques attendus.
+Le second script refuse l'abandon si la gouvernance et les opérateurs interbancaires ne possèdent pas
+tous les rôles critiques attendus. Après le premier script, reporter aussi les adresses de
+`BankRegistry` et `InterbankSettlement` dans `BANK_REGISTRY_ADDRESS` et
+`INTERBANK_SETTLEMENT_ADDRESS` avant la finalisation.
+
+## Exploitation du rail interbancaire
+
+L'opérateur d'admission appelle `registerBank(bankId, bicHash, settlementAccount)`. Le responsable
+compliance autorise séparément le compte dans `EuroSettlementToken`, puis le gestionnaire de
+liquidité appelle `setOutgoingLimit(bankId, amountWad)`. Le compte débiteur doit enfin autoriser le
+contrat par `approve` avant de créer une instruction.
+
+La banque débitrice appelle `initiate(instructionId, creditorBankId, amountWad, referenceHash,
+expiresAt)`. La banque créditrice règle avec `acceptAndSettle(instructionId)`. Le débiteur peut annuler
+une instruction encore en attente et n'importe quel acteur peut la marquer expirée après l'échéance.
+Un identifiant consommé ne redevient jamais disponible, y compris après annulation ou expiration.
 
 ## Workflow
 
@@ -141,6 +185,9 @@ brut, le signal effectif et la prime appliquée pour permettre l'audit de chaque
 
 - L'ERC-20 est un rail technique permissionné, pas une certification MiCA ni une MNBC. Réserves,
   remboursement, KYC/AML, gouvernance, reporting et droits des détenteurs restent à mettre en œuvre.
+- Le rail règle aujourd'hui la jambe espèces privée en brut. Il n'implémente pas encore le netting,
+  la monnaie de banque centrale, la connexion TARGET/TIPS, le DvP/PvP, la gestion des files d'attente,
+  le collatéral, la reprise après incident ni une passerelle ISO 20022 complète.
 - Les adresses sont pseudonymes, pas anonymes. L'allowlist doit être reliée aux contrôles réglementaires.
 - Des clés distinctes doivent être conservées dans HSM/coffres et idéalement portées par des services
   ou multisigs indépendants. Ne jamais committer une clé réelle.

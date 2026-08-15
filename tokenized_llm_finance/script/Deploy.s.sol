@@ -8,6 +8,8 @@ import {
     IBudgetController
 } from "../contracts/AgentSettlementVault.sol";
 import {EuroSettlementToken} from "../contracts/EuroSettlementToken.sol";
+import {BankRegistry} from "../contracts/BankRegistry.sol";
+import {InterbankSettlement} from "../contracts/InterbankSettlement.sol";
 import {PIDBudgetController} from "../contracts/PIDBudgetController.sol";
 import {ReversibleRandomTimelock} from "../contracts/ReversibleRandomTimelock.sol";
 
@@ -25,6 +27,10 @@ contract Deploy is Script {
         address attestor;
         address velocityOracle;
         address coordinator;
+        address bankRegistrar;
+        address bankSuspender;
+        address liquidityManager;
+        address interbankPauser;
         uint256 subscriptionId;
         bytes32 keyHash;
     }
@@ -35,7 +41,9 @@ contract Deploy is Script {
             EuroSettlementToken token,
             PIDBudgetController controller,
             AgentSettlementVault vault,
-            ReversibleRandomTimelock timelock
+            ReversibleRandomTimelock timelock,
+            BankRegistry bankRegistry,
+            InterbankSettlement interbankSettlement
         )
     {
         DeploymentConfig memory config = _readConfiguration();
@@ -66,8 +74,24 @@ contract Deploy is Script {
             _asUint16(vm.envUint("VRF_CONFIRMATIONS")),
             _asUint32(vm.envUint("VRF_CALLBACK_GAS_LIMIT"))
         );
+        bankRegistry = new BankRegistry(config.deployer);
+        interbankSettlement = new InterbankSettlement(
+            config.deployer,
+            token,
+            bankRegistry,
+            _asUint64(vm.envUint("INTERBANK_EPOCH_SECONDS")),
+            _asUint64(vm.envUint("MAX_INTERBANK_INSTRUCTION_LIFETIME_SECONDS"))
+        );
 
-        _wireContracts(token, controller, vault, timelock, config);
+        _wireContracts(
+            token,
+            controller,
+            vault,
+            timelock,
+            bankRegistry,
+            interbankSettlement,
+            config
+        );
         vm.stopBroadcast();
 
         // Run FinalizeHandoff only after governance verifies every deployed address and role.
@@ -83,11 +107,17 @@ contract Deploy is Script {
         config.attestor = vm.envAddress("METERING_ATTESTOR_ADDRESS");
         config.velocityOracle = vm.envAddress("VELOCITY_ORACLE_ADDRESS");
         config.coordinator = vm.envAddress("VRF_COORDINATOR_ADDRESS");
+        config.bankRegistrar = vm.envAddress("BANK_REGISTRAR_ADDRESS");
+        config.bankSuspender = vm.envAddress("BANK_SUSPENDER_ADDRESS");
+        config.liquidityManager = vm.envAddress("LIQUIDITY_MANAGER_ADDRESS");
+        config.interbankPauser = vm.envAddress("INTERBANK_PAUSER_ADDRESS");
         if (
             config.deployerKey == 0 || config.governance == address(0) ||
             config.proposer == address(0) || config.canceller == address(0) ||
             config.executor == address(0) || config.attestor == address(0) ||
             config.velocityOracle == address(0) || config.coordinator == address(0) ||
+            config.bankRegistrar == address(0) || config.bankSuspender == address(0) ||
+            config.liquidityManager == address(0) || config.interbankPauser == address(0) ||
             config.governance == config.deployer || config.proposer == config.deployer ||
             config.canceller == config.deployer || config.executor == config.deployer ||
             config.attestor == config.deployer || config.velocityOracle == config.deployer ||
@@ -97,6 +127,12 @@ contract Deploy is Script {
             config.proposer == config.velocityOracle ||
             config.canceller == config.velocityOracle ||
             config.executor == config.velocityOracle || config.attestor == config.velocityOracle
+        ) revert InvalidDeploymentConfiguration();
+        if (
+            config.bankRegistrar == config.deployer ||
+            config.bankSuspender == config.deployer ||
+            config.liquidityManager == config.deployer ||
+            config.interbankPauser == config.deployer
         ) revert InvalidDeploymentConfiguration();
 
         config.subscriptionId = vm.envUint("VRF_SUBSCRIPTION_ID");
@@ -111,6 +147,8 @@ contract Deploy is Script {
         PIDBudgetController controller,
         AgentSettlementVault vault,
         ReversibleRandomTimelock timelock,
+        BankRegistry bankRegistry,
+        InterbankSettlement interbankSettlement,
         DeploymentConfig memory config
     ) private {
         token.setAllowed(address(vault), true);
@@ -128,6 +166,18 @@ contract Deploy is Script {
         timelock.grantRole(timelock.PROPOSER_ROLE(), config.proposer);
         timelock.grantRole(timelock.CANCELLER_ROLE(), config.canceller);
         timelock.grantRole(timelock.EXECUTOR_ROLE(), config.executor);
+        bankRegistry.grantRole(bankRegistry.DEFAULT_ADMIN_ROLE(), config.governance);
+        bankRegistry.grantRole(bankRegistry.REGISTRAR_ROLE(), config.bankRegistrar);
+        bankRegistry.grantRole(bankRegistry.SUSPENDER_ROLE(), config.bankSuspender);
+        interbankSettlement.grantRole(
+            interbankSettlement.DEFAULT_ADMIN_ROLE(), config.governance
+        );
+        interbankSettlement.grantRole(
+            interbankSettlement.LIQUIDITY_MANAGER_ROLE(), config.liquidityManager
+        );
+        interbankSettlement.grantRole(
+            interbankSettlement.PAUSER_ROLE(), config.interbankPauser
+        );
     }
 
     function _asUint64(uint256 value) private pure returns (uint64) {

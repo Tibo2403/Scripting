@@ -5,7 +5,8 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
-/// @notice Permissioned EUR settlement token suitable as a technical MiCA/MNBC rail.
+/// @notice Permissioned private EUR-denominated settlement asset.
+/// @dev This token does not represent central-bank money and does not imply ECB backing.
 /// @dev Legal MiCA compliance, reserves, redemption and identity checks are off-chain obligations.
 contract EuroSettlementToken is ERC20, AccessControl, Pausable {
     bytes32 public constant ISSUER_ROLE = keccak256("ISSUER_ROLE");
