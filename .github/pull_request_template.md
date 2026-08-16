@@ -18,5 +18,5 @@ Explain the technical change and why this approach was chosen.
 - Before:
 - Tests:
 - Checks:
-- Autoreview: clean / findings addressed / not run
+- Standard tests: commands run and pass/fail results
 - Safety: no secrets or customer data; sensitive paths retain authorization and dry-run controls

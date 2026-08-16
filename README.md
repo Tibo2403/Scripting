@@ -157,10 +157,20 @@ find scripts/python -name "*.py" -print0 | xargs -0 -n1 python -m py_compile
 python -m unittest discover -s scripts/python/tests -v
 ```
 
+### Solidity
+
+```bash
+cd tokenized_llm_finance
+forge install OpenZeppelin/openzeppelin-contracts@c64a1edb67b6e3f4a15cca8909c9482ad33a02b0 --no-git
+forge install foundry-rs/forge-std@77041d2ce690e692d6e03cc812b57d1ddaa4d505 --no-git
+forge build
+forge test
+```
+
 The usable-project workflow performs PowerShell syntax checks, PSScriptAnalyzer, Bash syntax checks,
-ShellCheck, Linux safety smoke tests, Python compilation and unit tests. A separate experimental
-workflow runs the checks currently available for prototypes; a green experimental check is not a
-promotion to usable and its intentionally missing coverage remains listed in the maturity catalog.
+ShellCheck, Linux safety smoke tests, Python compilation and unit tests. The experimental workflow
+applies the same standard analyzers to prototypes and also runs pytest, Ruff, Foundry build and
+Foundry tests for tokenized finance. A green experimental check is not a promotion to usable.
 
 ## Authorized security use only
 

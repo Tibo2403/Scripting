@@ -91,13 +91,14 @@ A change is not complete unless all applicable points below are satisfied.
 - Include an example invocation for new user-facing scripts.
 - Clearly document platform assumptions, required privileges, external tools, and supported runtime versions.
 
-## Optional Qodo Review
+## Standard Test Policy
 
-- Treat Qodo code review as advisory and run it after local validation, commits, or pull-request creation.
-- A missing Qodo CLI, API key, account connection, network connection, quota, or review response must never block `git add`, `git commit`, or `git push`.
-- Do not install Qodo commands in mandatory Git hooks or make a Qodo status check a required merge condition.
-- When Qodo is unavailable, record that the autoreview was not run and continue with the repository's local validation commands.
-- Qodo feedback supplements local tests and static analysis; it does not replace them.
+- Use repository-owned tests and established ecosystem tools; do not require an external AI review service.
+- Python changes require compilation plus the applicable `unittest` or `pytest` suite and configured linter.
+- PowerShell changes require parser validation, PSScriptAnalyzer, and applicable smoke tests.
+- Bash changes require `bash -n`, ShellCheck, and applicable safety or smoke tests.
+- Solidity changes require `forge build` and `forge test` with pinned dependencies.
+- Keep CI checks reproducible and non-interactive. External integration tests must use mocks unless a dedicated, explicitly authorized environment is available.
 
 ## Pull Request, Merge, and Push Summaries
 
@@ -120,6 +121,6 @@ State whether runtime, product, user, maintainer, or developer behavior changes.
 - Before: failing run, error message, limitation, or previous behavior
 - Tests: targeted tests and results
 - Checks: CI, lint, smoke tests, or manual validation
-- Autoreview: clean, findings addressed, or not run
+- Standard tests: commands run and pass/fail results
 
 Keep the Evidence section factual. Prefer concrete commands, run links, failure messages, and pass/fail results over vague statements.

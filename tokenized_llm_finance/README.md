@@ -1,6 +1,6 @@
 # Infrastructure tokenisée interbancaire et règlement d'agents LLM
 
-> **Maturité : expérimental.** Les contrats ne sont pas audités et les tests Foundry ne sont pas encore exécutés par la CI. Ne pas utiliser avec de la valeur réelle.
+> **Maturité : expérimental.** Les contrats sont compilés et testés avec Foundry en CI, mais ils ne sont pas audités. Ne pas utiliser avec de la valeur réelle.
 
 Cette infrastructure combine désormais deux rails : un règlement bilatéral entre banques admises et
 un sous-système qui mesure un appel LiteLLM, convertit sa consommation en euros tokenisés, régule le
@@ -75,7 +75,8 @@ Prérequis : Python 3.11+, Foundry, un RPC EVM et une souscription VRF v2.5 fina
 cd tokenized_llm_finance
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements-dev.txt
-forge install OpenZeppelin/openzeppelin-contracts foundry-rs/forge-std --no-commit
+forge install OpenZeppelin/openzeppelin-contracts@c64a1edb67b6e3f4a15cca8909c9482ad33a02b0 --no-git
+forge install foundry-rs/forge-std@77041d2ce690e692d6e03cc812b57d1ddaa4d505 --no-git
 $env:PYTHONPATH = (Resolve-Path python)
 .venv\Scripts\python -m unittest discover -s tests -v
 .venv\Scripts\python -m ruff check python tests

@@ -83,6 +83,6 @@ validation = [
   "forge test --root tokenized_llm_finance",
 ]
 limitations = [
-  "Les contrats ne sont pas audites et les tests Foundry ne sont pas encore executes par la CI.",
+  "Les contrats sont testes avec Foundry en CI mais ne sont pas audites.",
   "Le prototype ne constitue ni un produit financier, ni une certification reglementaire.",
 ]
