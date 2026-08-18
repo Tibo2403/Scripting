@@ -15,7 +15,7 @@ from typing import Any
 
 import yaml
 from filelock import FileLock
-from mcp.server import MCPServer
+from mcp.server.fastmcp import FastMCP
 
 
 def load_dotenv() -> None:
@@ -57,7 +57,7 @@ LOCK_FILE = STATE_DIR / "tasks.lock"
 for directory in (PROPOSALS_DIR, BACKUPS_DIR):
     directory.mkdir(parents=True, exist_ok=True)
 
-mcp = MCPServer("crewai-admin")
+mcp = FastMCP("crewai-admin")
 
 
 def read_tasks() -> dict[str, Any]:
