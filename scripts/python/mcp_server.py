@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server import MCPServer
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -17,11 +17,7 @@ SCRIPTS_ROOT = REPOSITORY_ROOT / "scripts"
 ALLOWED_EXTENSIONS = {".ps1", ".py", ".sh"}
 MAX_SEARCH_RESULTS = 100
 
-mcp = FastMCP(
-    "Scripting Toolkit",
-    stateless_http=True,
-    json_response=True,
-)
+mcp = MCPServer("Scripting Toolkit")
 
 
 def _resolve_script(relative_path: str) -> Path:
@@ -257,4 +253,8 @@ def get_repository_summary() -> dict[str, Any]:
 
 
 if __name__ == "__main__":
-    mcp.run(transport="streamable-http")
+    mcp.run(
+        transport="streamable-http",
+        stateless_http=True,
+        json_response=True,
+    )
