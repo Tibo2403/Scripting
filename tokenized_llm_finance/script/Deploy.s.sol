@@ -22,6 +22,7 @@ contract Deploy is Script {
         address proposer;
         address canceller;
         address executor;
+        address riskPauser;
         address attestor;
         address velocityOracle;
         address coordinator;
@@ -53,7 +54,9 @@ contract Deploy is Script {
             token,
             IBudgetController(address(controller)),
             _asUint64(vm.envUint("BUDGET_EPOCH_SECONDS")),
-            _asUint64(vm.envUint("MAXIMUM_USAGE_AGE_SECONDS"))
+            _asUint64(vm.envUint("MAXIMUM_USAGE_AGE_SECONDS")),
+            vm.envUint("MAXIMUM_SETTLEMENT_WAD"),
+            vm.envUint("MAXIMUM_EPOCH_OUTFLOW_WAD")
         );
         timelock = new ReversibleRandomTimelock(
             config.deployer,
@@ -80,19 +83,24 @@ contract Deploy is Script {
         config.proposer = vm.envAddress("PROPOSER_ADDRESS");
         config.canceller = vm.envAddress("CANCELLER_ADDRESS");
         config.executor = vm.envAddress("EXECUTOR_ADDRESS");
+        config.riskPauser = vm.envAddress("RISK_PAUSER_ADDRESS");
         config.attestor = vm.envAddress("METERING_ATTESTOR_ADDRESS");
         config.velocityOracle = vm.envAddress("VELOCITY_ORACLE_ADDRESS");
         config.coordinator = vm.envAddress("VRF_COORDINATOR_ADDRESS");
         if (
             config.deployerKey == 0 || config.governance == address(0) ||
             config.proposer == address(0) || config.canceller == address(0) ||
-            config.executor == address(0) || config.attestor == address(0) ||
+            config.executor == address(0) || config.riskPauser == address(0) ||
+            config.attestor == address(0) ||
             config.velocityOracle == address(0) || config.coordinator == address(0) ||
             config.governance == config.deployer || config.proposer == config.deployer ||
             config.canceller == config.deployer || config.executor == config.deployer ||
             config.attestor == config.deployer || config.velocityOracle == config.deployer ||
             config.proposer == config.canceller || config.proposer == config.executor ||
             config.canceller == config.executor || config.proposer == config.attestor ||
+            config.riskPauser == config.deployer || config.riskPauser == config.proposer ||
+            config.riskPauser == config.canceller || config.riskPauser == config.executor ||
+            config.riskPauser == config.attestor || config.riskPauser == config.velocityOracle ||
             config.canceller == config.attestor || config.executor == config.attestor ||
             config.proposer == config.velocityOracle ||
             config.canceller == config.velocityOracle ||
@@ -116,6 +124,7 @@ contract Deploy is Script {
         token.setAllowed(address(vault), true);
         vault.grantRole(vault.SETTLER_ROLE(), address(timelock));
         vault.grantRole(vault.ATTESTOR_ROLE(), config.attestor);
+        vault.grantRole(vault.PAUSER_ROLE(), config.riskPauser);
         timelock.setTargetAllowed(address(vault), true);
 
         token.grantRole(token.DEFAULT_ADMIN_ROLE(), config.governance);

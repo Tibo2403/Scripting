@@ -2,6 +2,10 @@
 
 > **Maturité : expérimental.** Les contrats ne sont pas audités et les tests Foundry ne sont pas encore exécutés par la CI. Ne pas utiliser avec de la valeur réelle.
 
+> **Périmètre isolé :** ce répertoire est un prototype autonome, sans dépendance d'exécution aux
+> autres projets du dépôt. Il ne gère ni réserve obligataire, ni levier/repo, ni stabilisation des
+> taux américains. Les règles impératives sont définies dans [BOUNDARIES.md](BOUNDARIES.md).
+
 Cette infrastructure mesure un appel LiteLLM, convertit sa consommation estimée en énergie puis en
 euros tokenisés, régule le budget par PID et temporise le règlement avec Chainlink VRF v2.5.
 
@@ -17,7 +21,12 @@ euros tokenisés, régule le budget par PID et temporise le règlement avec Chai
    `executeBefore = readyAt + executionWindow`.
 5. Une révocation de cible invalide également les opérations déjà mises en file. Une clé sémantique
    n'est utilisable qu'une fois, y compris après annulation, afin d'empêcher le grinding VRF.
-6. Le coffre vérifie la signature, la fraîcheur, l'époque et le plafond PID avant le transfert ERC-20.
+6. Le coffre vérifie la signature, la fraîcheur, l'époque, le plafond PID et sa liquidité avant tout
+   transfert ERC-20.
+7. Un rôle de risque indépendant peut interrompre immédiatement les règlements. Le déployeur perd ce
+   rôle lors du handoff.
+8. Un règlement et la sortie totale d'une époque sont limités par deux plafonds immuables définis au
+   déploiement. Leur augmentation exige donc un nouveau contrat et une revue explicite.
 
 ## Conversion entière
 
@@ -88,7 +97,9 @@ remplace pas un oracle on-chain décentralisé pour une utilisation financière 
 
 ## Déploiement en deux phases
 
-Copier `.env.example`, renseigner des adresses non nulles et distinctes, puis déployer :
+Copier `.env.example`, renseigner des adresses non nulles et distinctes, notamment le multisig de
+risque `RISK_PAUSER_ADDRESS`, puis fixer `MAXIMUM_SETTLEMENT_WAD` et
+`MAXIMUM_EPOCH_OUTFLOW_WAD` à des valeurs conservatrices avant de déployer :
 
 ```powershell
 forge script script/Deploy.s.sol:Deploy --rpc-url $env:RPC_URL --broadcast
@@ -101,7 +112,8 @@ adresses, le consumer VRF, les rôles, l'allowlist et la capacité de chaque mul
 forge script script/FinalizeHandoff.s.sol:FinalizeHandoff --rpc-url $env:RPC_URL --broadcast
 ```
 
-Le second script refuse l'abandon si la gouvernance ne possède pas tous les rôles critiques attendus.
+Le second script refuse l'abandon si les rôles critiques attendus ne sont pas attribués, puis retire
+au déployeur son droit de pause temporaire.
 
 ## Workflow
 
@@ -139,6 +151,8 @@ brut, le signal effectif et la prime appliquée pour permettre l'audit de chaque
 
 ## Limites réglementaires et opérationnelles
 
+- La [frontière du projet](BOUNDARIES.md) exclut impérativement Treasuries, duration longue, levier,
+  repo, basis trades et toute promesse d'influencer ou de stabiliser les taux américains.
 - L'ERC-20 est un rail technique permissionné, pas une certification MiCA ni une MNBC. Réserves,
   remboursement, KYC/AML, gouvernance, reporting et droits des détenteurs restent à mettre en œuvre.
 - Les adresses sont pseudonymes, pas anonymes. L'allowlist doit être reliée aux contrôles réglementaires.

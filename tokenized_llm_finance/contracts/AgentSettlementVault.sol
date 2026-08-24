@@ -7,6 +7,7 @@ import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 interface IBudgetController {
@@ -14,11 +15,12 @@ interface IBudgetController {
 }
 
 /// @notice Settles metered LLM energy costs while enforcing PID budgets per epoch.
-contract AgentSettlementVault is AccessControl, EIP712, ReentrancyGuard {
+contract AgentSettlementVault is AccessControl, EIP712, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     bytes32 public constant SETTLER_ROLE = keccak256("SETTLER_ROLE");
     bytes32 public constant ATTESTOR_ROLE = keccak256("ATTESTOR_ROLE");
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant USAGE_RECEIPT_TYPEHASH = keccak256(
         "UsageReceipt(address agent,address beneficiary,bytes32 providerRequestId,bytes32 modelId,"
         "bytes32 tariffId,bytes32 responseHash,uint256 promptTokens,uint256 completionTokens,uint256 energyKwhWad,"
@@ -53,8 +55,11 @@ contract AgentSettlementVault is AccessControl, EIP712, ReentrancyGuard {
     IBudgetController public immutable budgetController;
     uint64 public immutable epochDuration;
     uint64 public immutable maximumUsageAge;
+    uint256 public immutable maximumSettlementWad;
+    uint256 public immutable maximumEpochOutflowWad;
 
     mapping(address agent => mapping(uint256 epoch => uint256 amountWad)) public spentWad;
+    mapping(uint256 epoch => uint256 amountWad) public totalOutflowWad;
     mapping(bytes32 usageDigest => bool settled) public settledUsage;
 
     error InvalidConfiguration();
@@ -66,6 +71,9 @@ contract AgentSettlementVault is AccessControl, EIP712, ReentrancyGuard {
     error InvalidProviderCost(uint256 expectedWad, uint256 suppliedWad);
     error InvalidCostBreakdown(uint256 expectedWad, uint256 suppliedWad);
     error BudgetExceeded(uint256 requestedWad, uint256 remainingWad);
+    error SettlementLimitExceeded(uint256 requestedWad, uint256 maximumWad);
+    error EpochOutflowLimitExceeded(uint256 requestedWad, uint256 remainingWad);
+    error InsufficientVaultLiquidity(uint256 requestedWad, uint256 availableWad);
 
     event UsageSettled(
         bytes32 indexed usageDigest,
@@ -82,26 +90,42 @@ contract AgentSettlementVault is AccessControl, EIP712, ReentrancyGuard {
         IERC20 token,
         IBudgetController controller,
         uint64 epochDurationSeconds,
-        uint64 maximumUsageAgeSeconds
+        uint64 maximumUsageAgeSeconds,
+        uint256 maximumSettlementAmountWad,
+        uint256 maximumEpochOutflowAmountWad
     )
         EIP712("AgentSettlementVault", "1")
     {
         if (
             admin == address(0) || address(token) == address(0) ||
             address(controller) == address(0) || epochDurationSeconds == 0 ||
-            maximumUsageAgeSeconds == 0
+            maximumUsageAgeSeconds == 0 || maximumSettlementAmountWad == 0 ||
+            maximumEpochOutflowAmountWad < maximumSettlementAmountWad
         ) revert InvalidConfiguration();
         settlementToken = token;
         budgetController = controller;
         epochDuration = epochDurationSeconds;
         maximumUsageAge = maximumUsageAgeSeconds;
+        maximumSettlementWad = maximumSettlementAmountWad;
+        maximumEpochOutflowWad = maximumEpochOutflowAmountWad;
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(ATTESTOR_ROLE, admin);
+        _grantRole(PAUSER_ROLE, admin);
+    }
+
+    /// @notice Stops settlement execution while queued operations remain cancellable.
+    function pause() external onlyRole(PAUSER_ROLE) {
+        _pause();
+    }
+
+    function unpause() external onlyRole(PAUSER_ROLE) {
+        _unpause();
     }
 
     function settle(UsageReceipt calldata receipt, bytes calldata signature)
         external
         onlyRole(SETTLER_ROLE)
+        whenNotPaused
         nonReentrant
     {
         if (
@@ -154,15 +178,33 @@ contract AgentSettlementVault is AccessControl, EIP712, ReentrancyGuard {
     }
 
     function _recordSettlement(UsageReceipt calldata receipt, bytes32 usageDigest) private {
+        if (receipt.amountWad > maximumSettlementWad) {
+            revert SettlementLimitExceeded(receipt.amountWad, maximumSettlementWad);
+        }
+
+        uint256 settlementEpoch = block.timestamp / epochDuration;
+        uint256 epochOutflow = totalOutflowWad[settlementEpoch];
+        uint256 globalRemaining = epochOutflow >= maximumEpochOutflowWad
+            ? 0
+            : maximumEpochOutflowWad - epochOutflow;
+        if (receipt.amountWad > globalRemaining) {
+            revert EpochOutflowLimitExceeded(receipt.amountWad, globalRemaining);
+        }
+
         uint256 budget = budgetController.budgetLimitWad(receipt.agent);
         uint256 alreadySpent = spentWad[receipt.agent][receipt.usageEpoch];
         uint256 remaining = alreadySpent >= budget ? 0 : budget - alreadySpent;
         if (receipt.amountWad == 0 || receipt.amountWad > remaining) {
             revert BudgetExceeded(receipt.amountWad, remaining);
         }
+        uint256 available = settlementToken.balanceOf(address(this));
+        if (receipt.amountWad > available) {
+            revert InsufficientVaultLiquidity(receipt.amountWad, available);
+        }
 
         settledUsage[usageDigest] = true;
         spentWad[receipt.agent][receipt.usageEpoch] = alreadySpent + receipt.amountWad;
+        totalOutflowWad[settlementEpoch] = epochOutflow + receipt.amountWad;
         settlementToken.safeTransfer(receipt.beneficiary, receipt.amountWad);
         emit UsageSettled(
             usageDigest,

@@ -22,6 +22,13 @@ incomplete and real secrets, critical systems and real financial value must not 
 | `pra/` | **Experimental** | Recovery connectors are placeholders and require a real exercise |
 | `tokenized_llm_finance/` | **Experimental** | Contracts are unaudited and Foundry is not yet run in CI |
 
+### Isolated boundary for tokenized finance
+
+`tokenized_llm_finance/` is not an execution dependency of the usable scripting toolkit. Its
+mandatory [project boundary](tokenized_llm_finance/BOUNDARIES.md) excludes Treasury reserve
+management, leverage/repo, cross-project imports and any claim to stabilize US long-term rates.
+Any such activity belongs in a separately governed and reviewed project.
+
 The machine-readable source of truth is [`project-maturity.toml`](project-maturity.toml). Promotion
 criteria and the meaning of each level are defined in
 [`docs/project-maturity.md`](docs/project-maturity.md).

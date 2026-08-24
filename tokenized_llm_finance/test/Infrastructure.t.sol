@@ -63,7 +63,13 @@ contract InfrastructureTest is Test {
             })
         );
         vault = new AgentSettlementVault(
-            address(this), token, IBudgetController(address(controller)), 1 days, 1 days
+            address(this),
+            token,
+            IBudgetController(address(controller)),
+            1 days,
+            1 days,
+            100 * WAD,
+            150 * WAD
         );
         vault.grantRole(vault.ATTESTOR_ROLE(), vm.addr(ATTESTOR_KEY));
         coordinator = new MockCoordinator();
@@ -228,6 +234,67 @@ contract InfrastructureTest is Test {
         vm.warp(receipt.deadline + 1);
 
         vm.expectRevert(AgentSettlementVault.InvalidUsageTime.selector);
+        vm.prank(address(timelock));
+        vault.settle(receipt, signature);
+    }
+
+    function testEmergencyPauseRejectsSettlement() public {
+        (AgentSettlementVault.UsageReceipt memory receipt, bytes memory signature) =
+            _signedReceipt(keccak256("usage-paused"), 5 * WAD);
+        vault.pause();
+
+        vm.expectRevert();
+        vm.prank(address(timelock));
+        vault.settle(receipt, signature);
+    }
+
+    function testOnlyRiskRoleCanPauseSettlement() public {
+        vm.expectRevert();
+        vm.prank(address(0xBAD));
+        vault.pause();
+    }
+
+    function testPerSettlementLimitIsEnforced() public {
+        (AgentSettlementVault.UsageReceipt memory receipt, bytes memory signature) =
+            _signedReceipt(keccak256("usage-too-large"), 101 * WAD);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                AgentSettlementVault.SettlementLimitExceeded.selector, 101 * WAD, 100 * WAD
+            )
+        );
+        vm.prank(address(timelock));
+        vault.settle(receipt, signature);
+    }
+
+    function testGlobalEpochOutflowLimitIsEnforced() public {
+        (AgentSettlementVault.UsageReceipt memory first, bytes memory firstSignature) =
+            _signedReceipt(keccak256("usage-global-first"), 100 * WAD);
+        (AgentSettlementVault.UsageReceipt memory second, bytes memory secondSignature) =
+            _signedReceipt(keccak256("usage-global-second"), 51 * WAD);
+
+        vm.startPrank(address(timelock));
+        vault.settle(first, firstSignature);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                AgentSettlementVault.EpochOutflowLimitExceeded.selector, 51 * WAD, 50 * WAD
+            )
+        );
+        vault.settle(second, secondSignature);
+        vm.stopPrank();
+    }
+
+    function testInsufficientVaultLiquidityIsRejected() public {
+        vm.prank(address(vault));
+        token.burn(9_995 * WAD);
+        (AgentSettlementVault.UsageReceipt memory receipt, bytes memory signature) =
+            _signedReceipt(keccak256("usage-insufficient-liquidity"), 6 * WAD);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                AgentSettlementVault.InsufficientVaultLiquidity.selector, 6 * WAD, 5 * WAD
+            )
+        );
         vm.prank(address(timelock));
         vault.settle(receipt, signature);
     }

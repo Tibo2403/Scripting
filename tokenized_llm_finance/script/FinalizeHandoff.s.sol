@@ -18,6 +18,7 @@ contract FinalizeHandoff is Script {
         address proposer = vm.envAddress("PROPOSER_ADDRESS");
         address canceller = vm.envAddress("CANCELLER_ADDRESS");
         address executor = vm.envAddress("EXECUTOR_ADDRESS");
+        address riskPauser = vm.envAddress("RISK_PAUSER_ADDRESS");
         address attestor = vm.envAddress("METERING_ATTESTOR_ADDRESS");
         address velocityOracle = vm.envAddress("VELOCITY_ORACLE_ADDRESS");
         EuroSettlementToken token = EuroSettlementToken(vm.envAddress("TOKEN_ADDRESS"));
@@ -37,6 +38,7 @@ contract FinalizeHandoff is Script {
             !controller.hasRole(controller.DEFAULT_ADMIN_ROLE(), governance) ||
             !controller.hasRole(controller.ORACLE_ROLE(), velocityOracle) ||
             !vault.hasRole(vault.DEFAULT_ADMIN_ROLE(), governance) ||
+            !vault.hasRole(vault.PAUSER_ROLE(), riskPauser) ||
             !timelock.hasRole(timelock.DEFAULT_ADMIN_ROLE(), governance) ||
             !vault.hasRole(vault.ATTESTOR_ROLE(), attestor) ||
             !timelock.hasRole(timelock.PROPOSER_ROLE(), proposer) ||
@@ -51,6 +53,7 @@ contract FinalizeHandoff is Script {
         token.renounceRole(token.DEFAULT_ADMIN_ROLE(), deployer);
         controller.renounceRole(controller.DEFAULT_ADMIN_ROLE(), deployer);
         vault.renounceRole(vault.ATTESTOR_ROLE(), deployer);
+        vault.renounceRole(vault.PAUSER_ROLE(), deployer);
         vault.renounceRole(vault.DEFAULT_ADMIN_ROLE(), deployer);
         timelock.renounceRole(timelock.PROPOSER_ROLE(), deployer);
         timelock.renounceRole(timelock.CANCELLER_ROLE(), deployer);

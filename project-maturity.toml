@@ -85,4 +85,5 @@ validation = [
 limitations = [
   "Les contrats ne sont pas audites et les tests Foundry ne sont pas encore executes par la CI.",
   "Le prototype ne constitue ni un produit financier, ni une certification reglementaire.",
+  "La frontiere BOUNDARIES.md exclut reserves obligataires, levier, repo et stabilisation des taux.",
 ]
