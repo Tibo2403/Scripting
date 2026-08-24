@@ -8,7 +8,6 @@ import os
 import re
 import shutil
 import socket
-import subprocess
 import sys
 import time
 import unicodedata
@@ -19,6 +18,8 @@ from pathlib import Path
 from typing import Any
 
 from codex_cost_profiles import render_profiles
+from codex_prompt_classifier import classify_prompt
+from codex_router_execution import ExecutionResult, business_reward, run_streamed_command
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -85,7 +86,7 @@ LITELLM_HOST = "localhost"
 LITELLM_PORT = 4000
 OLLAMA_HOST = "127.0.0.1"
 OLLAMA_PORT = 11434
-OLLAMA_CHAT_COMPLETIONS_URL = f"http://{OLLAMA_HOST}:{OLLAMA_PORT}/v1/chat/completions"
+OLLAMA_CHAT_URL = f"http://{OLLAMA_HOST}:{OLLAMA_PORT}/api/chat"
 PHI_OLLAMA_MODEL = "phi4-mini"
 QWEN_OLLAMA_MODEL = "qwen2.5-coder:3b"
 WINDOWS_LITELLM_FALLBACK = Path(r"C:\tmp\litellm-oss\Scripts\litellm.exe")
@@ -146,36 +147,6 @@ ESTIMATED_RATES = {
     CLAUDE_COMPLEX_MODEL: {"input": 3.0, "output": 15.0},
 }
 
-SIMPLE_TERMS = (
-    "correction mineure",
-    "resume",
-    "documentation",
-    "document",
-    "petite modification",
-    "typo",
-    "readme",
-)
-MEDIUM_TERMS = (
-    "refactor",
-    "test",
-    "docker",
-    "api",
-    "python",
-    "typescript",
-)
-COMPLEX_TERMS = (
-    "securite",
-    "security",
-    "fiscalite",
-    "odoo",
-    "architecture",
-    "migration",
-    "production",
-    "rls",
-    "supabase",
-    "bug critique",
-    "critical bug",
-)
 HF_TERMS = (
     "hugging face",
     "huggingface",
@@ -356,20 +327,9 @@ def smart_truncate(text: str, max_tokens: int) -> str:
 
 
 def classify_complexity(prompt: str) -> tuple[str, str]:
-    """Classify a task using explicit, explainable keyword rules."""
-    normalized = normalize_for_matching(prompt)
-    complex_matches = [term for term in COMPLEX_TERMS if term in normalized]
-    medium_matches = [term for term in MEDIUM_TERMS if term in normalized]
-    simple_matches = [term for term in SIMPLE_TERMS if term in normalized]
-
-    if complex_matches:
-        return "complex", f"complex keyword: {', '.join(complex_matches[:3])}"
-    if medium_matches or estimate_tokens(prompt) > 1_500:
-        detail = ", ".join(medium_matches[:3]) or "large prompt"
-        return "medium", f"medium complexity: {detail}"
-    if simple_matches:
-        return "simple", f"simple task: {', '.join(simple_matches[:3])}"
-    return "medium", "default routing for an unclassified task"
+    """Classify a task from semantic intent, scope, and risk signals."""
+    result = classify_prompt(prompt)
+    return result.category, result.reason
 
 
 def _parse_scalar(value: str) -> Any:
@@ -460,6 +420,9 @@ def claude_available() -> bool:
 def select_local_small_model(reason: str) -> tuple[str, str]:
     """Choose the fastest local small-task model with a remote fallback."""
     if phi_available():
+        guard_reason = phi_throughput_guard_reason(read_history())
+        if guard_reason and qwen_available():
+            return QWEN_LOCAL_MODEL, f"Phi latency guard switched to Qwen: {guard_reason}; {reason}"
         return SMALL_LOCAL_MODEL, (
             f"local small-task provider requested; capped at {SMALL_TASK_MAX_OUTPUT_TOKENS} "
             f"output tokens to target >= {SMALL_TASK_TARGET_TOKENS_PER_SECOND:.1f} tok/s; {reason}"
@@ -467,6 +430,32 @@ def select_local_small_model(reason: str) -> tuple[str, str]:
     if qwen_available():
         return QWEN_LOCAL_MODEL, f"local small-task provider requested; Phi unavailable so Qwen selected; {reason}"
     return LIGHT_MODEL, "local small-task provider requested but Ollama is not listening; using light remote tier"
+
+
+def is_business_record(record: dict[str, Any]) -> bool:
+    """Return whether a completed, non-dry-run observation may influence KPIs."""
+    return (
+        record.get("execution_mode") != "dry-run"
+        and ("success" in record or "returncode" in record)
+    )
+
+
+def phi_throughput_guard_reason(records: list[dict[str, Any]]) -> str | None:
+    """Open Phi's circuit when its latest measured throughput misses the floor."""
+    for item in reversed(records):
+        if not is_business_record(item) or item.get("model") not in LOCAL_SMALL_MODELS:
+            continue
+        try:
+            throughput = float(item.get("tokens_per_second"))
+        except (TypeError, ValueError):
+            continue
+        if throughput < SMALL_TASK_TARGET_TOKENS_PER_SECOND:
+            return (
+                f"last Phi throughput {throughput:.2f} tok/s is below "
+                f"{SMALL_TASK_TARGET_TOKENS_PER_SECOND:.2f} tok/s"
+            )
+        return None
+    return None
 
 
 def select_claude_model(reason: str) -> tuple[str, str]:
@@ -759,7 +748,8 @@ def markov_health_for_provider(provider: str, records: list[dict[str, Any]], dec
     observations = [
         item
         for item in records
-        if item.get("codex_provider") == provider or item.get("attempt_provider") == provider
+        if is_business_record(item)
+        and (item.get("codex_provider") == provider or item.get("attempt_provider") == provider)
     ]
     for item in observations:
         pressure = provider_observation_pressure(item)
@@ -790,7 +780,8 @@ def provider_observations(provider: str, records: list[dict[str, Any]]) -> list[
     return [
         item
         for item in records
-        if item.get("codex_provider") == provider or item.get("attempt_provider") == provider
+        if is_business_record(item)
+        and (item.get("codex_provider") == provider or item.get("attempt_provider") == provider)
     ]
 
 
@@ -984,53 +975,85 @@ def build_codex_command(
     ]
 
 
-def run_ollama_local(prompt: str, max_output_tokens: int, ollama_model: str, label: str) -> int:
-    """Call a local Ollama model without requiring the LiteLLM proxy."""
+def run_ollama_local(
+    prompt: str,
+    max_output_tokens: int,
+    ollama_model: str,
+    label: str,
+) -> ExecutionResult:
+    """Stream a local Ollama response and return measured execution telemetry."""
     payload = {
         "model": ollama_model,
         "messages": [
             {"role": "system", "content": "You are a concise local coding assistant."},
             {"role": "user", "content": prompt},
         ],
-        "temperature": 0.1,
-        "max_tokens": max_output_tokens,
-        "stream": False,
+        "options": {"temperature": 0.1, "num_predict": max_output_tokens},
+        "stream": True,
     }
     request = urllib.request.Request(
-        OLLAMA_CHAT_COMPLETIONS_URL,
+        OLLAMA_CHAT_URL,
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",
     )
     started = time.perf_counter()
+    first_token_at: float | None = None
+    completion_tokens = 0
+    eval_duration_ns = 0
+    output_parts: list[str] = []
     try:
         with urllib.request.urlopen(request, timeout=120) as response:
-            data = json.loads(response.read().decode("utf-8"))
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            for raw_line in response:
+                if not raw_line.strip():
+                    continue
+                data = json.loads(raw_line.decode("utf-8"))
+                content = str((data.get("message") or {}).get("content") or "")
+                if content:
+                    if first_token_at is None:
+                        first_token_at = time.perf_counter()
+                    output_parts.append(content)
+                    print(content, end="", flush=True)
+                if data.get("done"):
+                    completion_tokens = int(data.get("eval_count") or 0)
+                    eval_duration_ns = int(data.get("eval_duration") or 0)
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
         print(f"Local {label} call failed: {exc}", file=sys.stderr)
-        return 7
-    elapsed = max(time.perf_counter() - started, 0.001)
-    choice = (data.get("choices") or [{}])[0]
-    message = choice.get("message") or {}
-    content = str(message.get("content") or "").strip()
-    if content:
-        print(content)
-    usage = data.get("usage") or {}
-    completion_tokens = int(usage.get("completion_tokens") or 0)
+        latency_ms = round((time.perf_counter() - started) * 1_000)
+        return ExecutionResult(7, latency_ms, error=str(exc))
+    finished = time.perf_counter()
+    latency_ms = round((finished - started) * 1_000)
+    ttft_ms = round((first_token_at - started) * 1_000) if first_token_at else None
+    if not completion_tokens and output_parts:
+        completion_tokens = estimate_tokens("".join(output_parts))
+    if eval_duration_ns > 0:
+        throughput = completion_tokens / (eval_duration_ns / 1_000_000_000)
+    elif completion_tokens and first_token_at:
+        throughput = completion_tokens / max(finished - first_token_at, 0.001)
+    else:
+        throughput = None
+    if output_parts:
+        print()
     if completion_tokens:
         print(
             f"\n[local-{label}] completion_tokens={completion_tokens} "
-            f"elapsed_s={elapsed:.2f} tokens_per_s={completion_tokens / elapsed:.2f}"
+            f"elapsed_s={(finished - started):.2f} tokens_per_s={(throughput or 0):.2f}"
         )
-    return 0
+    return ExecutionResult(
+        0,
+        latency_ms,
+        ttft_ms,
+        completion_tokens,
+        round(throughput, 3) if throughput is not None else None,
+    )
 
 
-def run_phi_local(prompt: str, max_output_tokens: int) -> int:
+def run_phi_local(prompt: str, max_output_tokens: int) -> ExecutionResult:
     """Call local Phi-4 Mini through Ollama without requiring the LiteLLM proxy."""
     return run_ollama_local(prompt, max_output_tokens, PHI_OLLAMA_MODEL, "phi")
 
 
-def run_qwen_local(prompt: str, max_output_tokens: int) -> int:
+def run_qwen_local(prompt: str, max_output_tokens: int) -> ExecutionResult:
     """Call local Qwen through Ollama without requiring the LiteLLM proxy."""
     return run_ollama_local(prompt, max_output_tokens, QWEN_OLLAMA_MODEL, "qwen")
 
@@ -1174,9 +1197,12 @@ def print_status() -> int:
     return 0
 
 
-def print_history(limit: int) -> int:
+def print_history(limit: int, *, business_only: bool = False) -> int:
     """Display recent routing records as a compact table."""
-    records = read_history()[-limit:]
+    records = read_history()
+    if business_only:
+        records = [item for item in records if is_business_record(item)]
+    records = records[-limit:]
     print("Timestamp                  Model          Input  Output  Ratio   Estimated USD")
     print("-------------------------  -------------  -----  ------  ------  -------------")
     for item in records:
@@ -1194,21 +1220,25 @@ def print_history(limit: int) -> int:
 def print_stats() -> int:
     """Display aggregate estimated routing statistics."""
     records = read_history()
-    if not records:
-        print("No routing history yet.")
+    business_records = [item for item in records if is_business_record(item)]
+    if not business_records:
+        print("No completed business executions yet (dry-runs are excluded).")
         return 0
-    total_cost = sum(float(item.get("estimated_cost_usd", 0)) for item in records)
-    total_savings = sum(float(item.get("estimated_savings_usd", 0)) for item in records)
-    original = sum(int(item.get("original_input_tokens", 0)) for item in records)
-    optimized = sum(int(item.get("estimated_input_tokens", 0)) for item in records)
+    total_cost = sum(float(item.get("estimated_cost_usd", 0)) for item in business_records)
+    total_savings = sum(float(item.get("estimated_savings_usd", 0)) for item in business_records)
+    original = sum(int(item.get("original_input_tokens", 0)) for item in business_records)
+    optimized = sum(int(item.get("estimated_input_tokens", 0)) for item in business_records)
     print("Codex Cost Router statistics")
     print("----------------------------")
-    print(f"Requests routed          : {len(records)}")
+    print(f"Completed executions     : {len(business_records)}")
+    print(f"Dry-runs excluded        : {sum(item.get('execution_mode') == 'dry-run' for item in records)}")
     print(f"Original input tokens    : {original}")
     print(f"Optimized input tokens   : {optimized}")
     print(f"Tokens removed           : {max(0, original - optimized)}")
     print(f"Estimated routed cost    : ${total_cost:.8f}")
-    adaptive_records = [item for item in records if isinstance(item.get("adaptive_router"), dict)]
+    adaptive_records = [
+        item for item in business_records if isinstance(item.get("adaptive_router"), dict)
+    ]
     switches = sum(1 for item in adaptive_records if item["adaptive_router"].get("would_switch"))
     applied = sum(1 for item in adaptive_records if item["adaptive_router"].get("applied"))
     print(f"Estimated savings vs strong: ${total_savings:.8f}")
@@ -1217,7 +1247,29 @@ def print_stats() -> int:
         print(f"Adaptive would switch   : {switches}")
         print(f"Adaptive applied switch : {applied}")
     print()
-    return print_history(10)
+    return print_history(10, business_only=True)
+
+
+def finalize_execution_record(
+    record: dict[str, Any],
+    result: ExecutionResult,
+    attempt_provider: str | None,
+    attempt_model: str | None,
+) -> None:
+    """Persist a completed observation exactly once, after execution finishes."""
+    record.update(result.to_record())
+    record["attempt_provider"] = attempt_provider
+    record["attempt_model"] = attempt_model
+    record["kpi_eligible"] = True
+    record["business_reward"] = business_reward(
+        str(record.get("prompt_category") or "medium"),
+        success=result.success,
+        latency_ms=result.latency_ms,
+        cost_usd=float(record.get("estimated_cost_usd") or 0.0),
+        quality_score=None,
+    )
+    append_log(record)
+    save_state(current_model=str(record["model"]), last_routing=record)
 
 
 def find_codex() -> str | None:
@@ -1313,6 +1365,7 @@ def print_doctor() -> int:
 def run_router(args: argparse.Namespace) -> int:
     """Optimize, log, and optionally execute a one-shot Codex CLI request."""
     prompt = " ".join(args.prompt).strip()
+    prompt_classification = classify_prompt(prompt)
     optimized = build_optimized_prompt(prompt, args.max_input_tokens)
     policy = load_policy(args.policy)
     selected_codex_provider, codex_provider_reason = codex_provider_from_policy(args.codex_provider, policy)
@@ -1384,14 +1437,15 @@ def run_router(args: argparse.Namespace) -> int:
         "estimated_output_tokens": output_tokens,
         "compression_ratio": compression_ratio,
         "routing_reason": reason,
+        "prompt_category": prompt_classification.category,
+        "prompt_risk_score": prompt_classification.risk_score,
+        "prompt_semantic_score": prompt_classification.semantic_score,
+        "classification_signals": list(prompt_classification.signals),
         "execution_mode": execution_mode,
         "estimated_cost_usd": cost,
         "policy_max_cost_usd": max_cost,
         "estimated_savings_usd": round(max(0.0, strong_cost - cost), 8),
     }
-    append_log(record)
-    save_state(current_model=model, last_routing=record)
-
     print(f"Model             : {model}")
     print(f"Provider          : {effective_provider}")
     print(f"Codex profile     : {selected_codex_profile}")
@@ -1427,16 +1481,19 @@ def run_router(args: argparse.Namespace) -> int:
         print(f"Policy cost limit : ${max_cost:.8f} exceeded")
 
     if args.dry_run:
+        record["kpi_eligible"] = False
+        append_log(record)
+        save_state(current_model=model, last_routing=record)
         print("\nOptimized prompt:")
         print(optimized)
         return 0
 
     codex = find_codex()
-    if not codex:
-        print("Codex CLI was not found in PATH or CODEX_CLI_PATH.", file=sys.stderr)
-        return 3
-
+    execution_started = time.perf_counter()
     last_returncode = 0
+    last_result: ExecutionResult | None = None
+    last_attempt_provider: str | None = None
+    last_attempt_model: str | None = None
     for attempt_provider in fallback_order:
         ready, message = codex_provider_ready(attempt_provider)
         if not ready:
@@ -1452,10 +1509,24 @@ def run_router(args: argparse.Namespace) -> int:
             continue
         if attempt_provider == "standard" and model in LOCAL_SMALL_MODELS and phi_available():
             print("Executing through local Ollama Phi-4 Mini (no LiteLLM proxy required)")
-            return run_phi_local(optimized, output_tokens)
+            result = run_phi_local(optimized, output_tokens)
+            finalize_execution_record(record, result, attempt_provider, PHI_OLLAMA_MODEL)
+            return result.returncode
         if attempt_provider == "standard" and model == QWEN_LOCAL_MODEL and qwen_available():
             print("Executing through local Ollama Qwen (no LiteLLM proxy required)")
-            return run_qwen_local(optimized, output_tokens)
+            result = run_qwen_local(optimized, output_tokens)
+            finalize_execution_record(record, result, attempt_provider, QWEN_OLLAMA_MODEL)
+            return result.returncode
+        if not codex:
+            message = "Codex CLI was not found in PATH or CODEX_CLI_PATH."
+            print(message, file=sys.stderr)
+            result = ExecutionResult(
+                3,
+                round((time.perf_counter() - execution_started) * 1_000),
+                error=message,
+            )
+            finalize_execution_record(record, result, attempt_provider, None)
+            return result.returncode
         attempt_profile = codex_profile(attempt_provider)
         attempt_model = codex_model(model, attempt_provider)
         print(f"Executing through {attempt_profile} ({attempt_model})")
@@ -1466,11 +1537,22 @@ def run_router(args: argparse.Namespace) -> int:
             args.codex_arg,
             optimized,
         )
-        last_returncode = subprocess.run(command, check=False).returncode
+        last_result = run_streamed_command(command)
+        last_returncode = last_result.returncode
+        last_attempt_provider = attempt_provider
+        last_attempt_model = attempt_model
         if last_returncode == 0:
-            return 0
+            finalize_execution_record(record, last_result, attempt_provider, attempt_model)
+            return last_returncode
         print(f"Provider {attempt_provider} failed with exit code {last_returncode}.", file=sys.stderr)
-    return last_returncode or 6
+    if last_result is None:
+        last_result = ExecutionResult(
+            last_returncode or 6,
+            round((time.perf_counter() - execution_started) * 1_000),
+            error="no provider was ready for execution",
+        )
+    finalize_execution_record(record, last_result, last_attempt_provider, last_attempt_model)
+    return last_result.returncode
 
 
 def build_parser() -> argparse.ArgumentParser:

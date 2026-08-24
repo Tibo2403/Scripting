@@ -357,6 +357,33 @@ provider is not ready or exits with a non-zero code, the wrapper tries the next
 provider in the policy order. A dry-run prints the planned order without calling
 Codex.
 
+## Hybrid Classification And Business Reward
+
+The one-shot router classifies each prompt with a hybrid signal rather than
+keywords alone. It combines normalized semantic cues, estimated task
+complexity, and explicit risk signals (for example production, security,
+credentials, destructive operations, or financial decisions). The resulting
+`prompt_category`, `risk_score`, `semantic_score`, and matched signals are kept
+in the execution record so the decision remains auditable.
+
+The meta-optimizer uses a category-specific reward profile:
+
+- `simple` emphasizes latency and cost.
+- `medium` balances quality, success, latency, and cost.
+- `complex` emphasizes quality and successful completion.
+
+Safety and capacity guardrails still take precedence over these reward
+profiles. When no measured quality score is available, the reward is computed
+from the remaining observed dimensions with their weights renormalized.
+
+## Local Throughput Guard
+
+Completed local executions feed a persistent throughput guard. If the latest
+eligible Phi execution drops below `5 tokens/s`, the next compatible small-task
+decision excludes Phi and switches to an available Qwen model. Dry-runs and
+unmeasured attempts never open or close this guard. The record includes the
+guard reason for diagnosis.
+
 ## Quick Start
 
 Open PowerShell in the repository:
@@ -575,6 +602,16 @@ Routing metadata is written to:
 %USERPROFILE%\.codex\logs\cost_router.jsonl
 ```
 
+Live records are appended only after the attempt finishes and include:
+
+- `success` and `returncode`;
+- total `latency_ms` and streaming `ttft_ms` when available;
+- `tokens_per_second` and `generated_tokens`;
+- prompt category, risk and semantic signals;
+- the category-specific `business_reward`.
+
+Dry-runs remain in history for routing audit, with `kpi_eligible: false`, but
+`stats`, provider health, adaptive routing, and business rewards exclude them.
 Prompts and API keys are not logged.
 
 ## Files
@@ -582,6 +619,8 @@ Prompts and API keys are not logged.
 - `Manage-CodexCostRouting.ps1`: automatic run, persistent start, status, and stop workflow.
 - `codex-cost-routing.cmd`: simple Windows launcher.
 - `codex_cost_router.py`: prompt optimization and one-shot routing.
+- `codex_prompt_classifier.py`: hybrid semantic, complexity, and risk classification.
+- `codex_router_execution.py`: streamed execution metrics and category reward calculation.
 - `Invoke-QwenLocal.ps1`: direct Ollama local Qwen call for fast small tasks.
 - `Measure-QwenLocalSpeed.ps1`: repeatable local token/s benchmark.
 - `codex_key_session_web.py`: local-only web form for session keys.

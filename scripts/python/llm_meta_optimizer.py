@@ -148,6 +148,12 @@ DEFAULT_PROFILES = (
     OptimizationProfile("latency", 0.25, 0.20, 0.45, 0.10),
 )
 
+CATEGORY_REWARD_PROFILES = {
+    "simple": OptimizationProfile("simple-reward", 0.15, 0.25, 0.35, 0.25),
+    "medium": OptimizationProfile("medium-reward", 0.30, 0.30, 0.20, 0.20),
+    "complex": OptimizationProfile("complex-reward", 0.45, 0.35, 0.15, 0.05),
+}
+
 
 class MetaOptimizer:
     """Select an objective, rank eligible candidates, and record the decision."""
@@ -198,11 +204,17 @@ class MetaOptimizer:
             raise NoEligibleCandidate(f"all candidates rejected ({detail})")
 
         profile = self._select_profile(request, tuple(eligible), active_policy)
-        ranked = self._rank(profile, eligible)
+        reward_profile = (
+            CATEGORY_REWARD_PROFILES.get(request.task_type.casefold(), profile)
+            if profile.name == "balanced"
+            else profile
+        )
+        ranked = self._rank(reward_profile, eligible)
         selected = ranked[0].candidate
         shadow = self._select_shadow_candidate(selected, eligible)
         explanation = (
-            f"meta-profile={profile.name}; score={ranked[0].score:.4f}; "
+            f"meta-profile={profile.name}; reward-category={request.task_type.casefold()}; "
+            f"score={ranked[0].score:.4f}; "
             f"eligible={len(eligible)}; rejected={len(rejected)}"
         )
         return MetaDecision(

@@ -4,6 +4,7 @@ import importlib.util
 import sys
 import tempfile
 import unittest
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -65,6 +66,32 @@ class CodexCostRouterTests(unittest.TestCase):
     def test_route_model_matches_accented_french_keywords(self) -> None:
         self.assertEqual(ROUTER.route_model("Prepare un resume du README")[0], "codex-light")
         self.assertEqual(ROUTER.route_model("Question de fiscalite pour Odoo")[0], "codex-deep")
+
+    def test_hybrid_classifier_detects_semantic_operational_risk(self) -> None:
+        category, reason = ROUTER.classify_complexity(
+            "Une fuite mémoire intermittente apparaît sous forte charge"
+        )
+        self.assertEqual(category, "complex")
+        self.assertIn("hybrid category=complex", reason)
+        self.assertIn("risk=", reason)
+
+    def test_phi_throughput_guard_switches_to_qwen(self) -> None:
+        history = [
+            {
+                "execution_mode": "codex-exec",
+                "model": ROUTER.SMALL_LOCAL_MODEL,
+                "success": True,
+                "tokens_per_second": 2.5,
+            }
+        ]
+        with (
+            patch.object(ROUTER, "phi_available", return_value=True),
+            patch.object(ROUTER, "qwen_available", return_value=True),
+            patch.object(ROUTER, "read_history", return_value=history),
+        ):
+            model, reason = ROUTER.select_local_small_model("simple task")
+        self.assertEqual(model, ROUTER.QWEN_LOCAL_MODEL)
+        self.assertIn("below 5.00 tok/s", reason)
 
     def test_route_model_sends_long_context_to_gemini_biased_alias(self) -> None:
         self.assertEqual(
@@ -476,6 +503,70 @@ class CodexCostRouterTests(unittest.TestCase):
         self.assertEqual(record["requested_codex_provider"], "litellm")
         self.assertEqual(record["codex_provider"], "standard")
         self.assertEqual(record["codex_profile"], "standard")
+
+    def test_live_run_is_persisted_only_with_execution_metrics(self) -> None:
+        policy = {
+            **ROUTER.DEFAULT_POLICY,
+            "task_provider_rules": {"medium": "auto"},
+            "fallback_order": ["standard"],
+        }
+        args = ROUTER.argparse.Namespace(
+            prompt=["Refactor this Python API"],
+            max_input_tokens=ROUTER.DEFAULT_MAX_INPUT_TOKENS,
+            policy=Path("unused-policy.yaml"),
+            codex_provider="standard",
+            provider="openai",
+            force_model=None,
+            max_output_tokens=ROUTER.DEFAULT_MAX_OUTPUT_TOKENS,
+            dry_run=False,
+            codex_arg=[],
+        )
+        result = ROUTER.ExecutionResult(0, 1_250, 180, 42, 39.7)
+        with tempfile.TemporaryDirectory() as directory:
+            log_file = Path(directory) / "cost_router.jsonl"
+            state_file = Path(directory) / "cost_router_state.json"
+            with (
+                patch.object(ROUTER, "LOG_DIR", Path(directory)),
+                patch.object(ROUTER, "LOG_FILE", log_file),
+                patch.object(ROUTER, "STATE_FILE", state_file),
+                patch.object(ROUTER, "load_policy", return_value=policy),
+                patch.object(ROUTER, "find_codex", return_value="codex"),
+                patch.object(ROUTER, "proxy_available", return_value=False),
+                patch.object(ROUTER, "phi_available", return_value=False),
+                patch.object(ROUTER, "qwen_available", return_value=False),
+                patch.object(ROUTER, "run_streamed_command", return_value=result),
+            ):
+                self.assertEqual(ROUTER.run_router(args), 0)
+            record = ROUTER.json.loads(log_file.read_text(encoding="utf-8").splitlines()[0])
+        self.assertTrue(record["success"])
+        self.assertEqual(record["returncode"], 0)
+        self.assertEqual(record["latency_ms"], 1_250)
+        self.assertEqual(record["ttft_ms"], 180)
+        self.assertEqual(record["generated_tokens"], 42)
+        self.assertEqual(record["tokens_per_second"], 39.7)
+        self.assertEqual(record["prompt_category"], "medium")
+        self.assertIn("business_reward", record)
+
+    def test_stats_exclude_dry_runs_from_business_kpis(self) -> None:
+        history = [
+            {"execution_mode": "dry-run", "estimated_cost_usd": 99.0},
+            {
+                "execution_mode": "codex-exec",
+                "success": True,
+                "returncode": 0,
+                "estimated_cost_usd": 0.01,
+                "estimated_savings_usd": 0.02,
+            },
+        ]
+        with patch.object(ROUTER, "read_history", return_value=history), patch(
+            "sys.stdout", new_callable=StringIO
+        ) as output:
+            self.assertEqual(ROUTER.print_stats(), 0)
+        rendered = output.getvalue()
+        self.assertIn("Completed executions     : 1", rendered)
+        self.assertIn("Dry-runs excluded        : 1", rendered)
+        self.assertIn("$0.01000000", rendered)
+        self.assertNotIn("99.00000000", rendered)
 
     def test_build_optimized_prompt_respects_budget(self) -> None:
         context = "<div>" + ("Architecture production Odoo migration security. " * 1000) + "</div>"

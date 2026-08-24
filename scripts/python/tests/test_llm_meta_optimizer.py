@@ -166,6 +166,39 @@ class MetaOptimizerTests(unittest.TestCase):
         self.assertIsNotNone(result.shadow_candidate)
         self.assertEqual("emerging", result.shadow_candidate.model)
 
+    def test_reward_weights_change_by_prompt_category(self):
+        fast = ModelCandidate(
+            model="fast",
+            provider="provider-fast",
+            data_boundary="external",
+            estimated_cost_usd=0.005,
+            latency_ms_p95=200,
+            quality_score=0.30,
+            success_rate=0.70,
+            sample_count=100,
+        )
+        accurate = ModelCandidate(
+            model="accurate",
+            provider="provider-accurate",
+            data_boundary="external",
+            estimated_cost_usd=0.10,
+            latency_ms_p95=2_000,
+            quality_score=0.99,
+            success_rate=0.99,
+            sample_count=100,
+        )
+        simple = self.optimizer.optimize(
+            RoutingRequest(request_id="req-simple", task_type="simple"),
+            (fast, accurate),
+        )
+        complex_result = self.optimizer.optimize(
+            RoutingRequest(request_id="req-complex", task_type="complex"),
+            (fast, accurate),
+        )
+        self.assertEqual("fast", simple.selected.model)
+        self.assertEqual("accurate", complex_result.selected.model)
+        self.assertIn("reward-category=complex", complex_result.explanation)
+
 
 if __name__ == "__main__":
     unittest.main()
