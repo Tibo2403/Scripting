@@ -18,6 +18,25 @@ from pathlib import Path
 from typing import Iterable, Optional
 
 
+RISK_LEVELS = frozenset({"low", "medium", "high", "critical"})
+DATA_CLASSIFICATIONS = frozenset({"public", "internal", "confidential", "restricted"})
+DATA_BOUNDARIES = frozenset({"local", "approved-region", "external"})
+EXECUTION_MODES = frozenset({"shadow", "live"})
+
+
+class GuardrailViolation(ValueError):
+    """Raised when a routing decision violates a mandatory governance rule."""
+
+
+@dataclass(frozen=True)
+class GovernancePolicy:
+    """Fail-closed controls applied before a live decision is recorded."""
+
+    approval_risk_levels: tuple[str, ...] = ("high", "critical")
+    local_only_data_classifications: tuple[str, ...] = ("restricted",)
+    max_live_estimated_cost_usd: Optional[float] = None
+
+
 @dataclass(frozen=True)
 class Decision:
     request_id: str
@@ -27,6 +46,12 @@ class Decision:
     reason: str
     estimated_cost_usd: float
     risk_level: str = "medium"
+    selected_provider: str = "unspecified"
+    data_classification: str = "internal"
+    data_boundary: str = "external"
+    execution_mode: str = "shadow"
+    policy_version: str = "draft"
+    approved_by: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -43,8 +68,13 @@ class Outcome:
 class DecisionLedger:
     """Append-only SQLite ledger with simple model evidence summaries."""
 
-    def __init__(self, database: str | Path = "llm_decisions.sqlite3") -> None:
+    def __init__(
+        self,
+        database: str | Path = "llm_decisions.sqlite3",
+        policy: Optional[GovernancePolicy] = None,
+    ) -> None:
         self.database = str(database)
+        self.policy = policy or GovernancePolicy()
         self._initialize()
 
     @contextmanager
@@ -70,6 +100,13 @@ class DecisionLedger:
                     reason TEXT NOT NULL,
                     estimated_cost_usd REAL NOT NULL CHECK(estimated_cost_usd >= 0),
                     risk_level TEXT NOT NULL,
+                    selected_provider TEXT NOT NULL,
+                    data_classification TEXT NOT NULL,
+                    data_boundary TEXT NOT NULL,
+                    execution_mode TEXT NOT NULL,
+                    policy_version TEXT NOT NULL,
+                    approved_by TEXT,
+                    integrity_version INTEGER NOT NULL DEFAULT 2,
                     integrity_hash TEXT NOT NULL
                 );
 
@@ -85,6 +122,34 @@ class DecisionLedger:
                 );
                 """
             )
+            self._migrate_decision_columns(connection)
+
+    @staticmethod
+    def _migrate_decision_columns(connection: sqlite3.Connection) -> None:
+        """Add governance fields without invalidating version-one ledger rows."""
+        existing = {
+            row["name"] for row in connection.execute("PRAGMA table_info(decisions)")
+        }
+        governance_existed = "policy_version" in existing
+        additions = {
+            "selected_provider": "TEXT NOT NULL DEFAULT 'unspecified'",
+            "data_classification": "TEXT NOT NULL DEFAULT 'internal'",
+            "data_boundary": "TEXT NOT NULL DEFAULT 'external'",
+            "execution_mode": "TEXT NOT NULL DEFAULT 'shadow'",
+            "policy_version": "TEXT NOT NULL DEFAULT 'legacy-v1'",
+            "approved_by": "TEXT",
+        }
+        for column, definition in additions.items():
+            if column not in existing:
+                connection.execute(
+                    f"ALTER TABLE decisions ADD COLUMN {column} {definition}"
+                )
+        if "integrity_version" not in existing:
+            default_version = 2 if governance_existed else 1
+            connection.execute(
+                "ALTER TABLE decisions ADD COLUMN integrity_version "
+                f"INTEGER NOT NULL DEFAULT {default_version}"
+            )
 
     @staticmethod
     def _canonical_payload(decision: Decision) -> str:
@@ -92,21 +157,99 @@ class DecisionLedger:
         payload["alternative_models"] = list(decision.alternative_models)
         return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
+    @staticmethod
+    def _legacy_canonical_payload(decision: Decision) -> str:
+        payload = {
+            "request_id": decision.request_id,
+            "task_type": decision.task_type,
+            "selected_model": decision.selected_model,
+            "alternative_models": list(decision.alternative_models),
+            "reason": decision.reason,
+            "estimated_cost_usd": decision.estimated_cost_usd,
+            "risk_level": decision.risk_level,
+        }
+        return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
     @classmethod
     def integrity_hash(cls, decision: Decision) -> str:
         return hashlib.sha256(cls._canonical_payload(decision).encode("utf-8")).hexdigest()
 
-    def record_decision(self, decision: Decision) -> str:
-        if not decision.request_id.strip():
-            raise ValueError("request_id cannot be empty")
+    def _validate_decision(self, decision: Decision) -> None:
+        required_text = {
+            "request_id": decision.request_id,
+            "task_type": decision.task_type,
+            "selected_model": decision.selected_model,
+            "reason": decision.reason,
+            "selected_provider": decision.selected_provider,
+            "policy_version": decision.policy_version,
+        }
+        empty_fields = [name for name, value in required_text.items() if not value.strip()]
+        if empty_fields:
+            raise ValueError(f"required fields cannot be empty: {', '.join(empty_fields)}")
         if decision.estimated_cost_usd < 0:
             raise ValueError("estimated_cost_usd cannot be negative")
+        if decision.risk_level not in RISK_LEVELS:
+            raise ValueError(f"unsupported risk_level: {decision.risk_level}")
+        if decision.data_classification not in DATA_CLASSIFICATIONS:
+            raise ValueError(
+                f"unsupported data_classification: {decision.data_classification}"
+            )
+        if decision.data_boundary not in DATA_BOUNDARIES:
+            raise ValueError(f"unsupported data_boundary: {decision.data_boundary}")
+        if decision.execution_mode not in EXECUTION_MODES:
+            raise ValueError(f"unsupported execution_mode: {decision.execution_mode}")
+
+        # Shadow decisions never dispatch traffic, so they may be recorded for
+        # comparison even when they would not yet be allowed in production.
+        if decision.execution_mode == "shadow":
+            return
+
+        if (
+            decision.risk_level in self.policy.approval_risk_levels
+            and not (decision.approved_by or "").strip()
+        ):
+            raise GuardrailViolation(
+                f"live {decision.risk_level}-risk decisions require human approval"
+            )
+        if (
+            decision.data_classification
+            in self.policy.local_only_data_classifications
+            and decision.data_boundary != "local"
+        ):
+            raise GuardrailViolation(
+                f"live {decision.data_classification} data must remain local"
+            )
+        cost_ceiling = self.policy.max_live_estimated_cost_usd
+        if cost_ceiling is not None and decision.estimated_cost_usd > cost_ceiling:
+            raise GuardrailViolation(
+                "estimated live cost exceeds the configured decision ceiling"
+            )
+
+    def record_decision(self, decision: Decision) -> str:
+        self._validate_decision(decision)
 
         digest = self.integrity_hash(decision)
         with self._connect() as connection:
             connection.execute(
                 """
-                INSERT INTO decisions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO decisions (
+                    request_id,
+                    created_at,
+                    task_type,
+                    selected_model,
+                    alternative_models,
+                    reason,
+                    estimated_cost_usd,
+                    risk_level,
+                    selected_provider,
+                    data_classification,
+                    data_boundary,
+                    execution_mode,
+                    policy_version,
+                    approved_by,
+                    integrity_version,
+                    integrity_hash
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     decision.request_id,
@@ -117,6 +260,13 @@ class DecisionLedger:
                     decision.reason,
                     decision.estimated_cost_usd,
                     decision.risk_level,
+                    decision.selected_provider,
+                    decision.data_classification,
+                    decision.data_boundary,
+                    decision.execution_mode,
+                    decision.policy_version,
+                    decision.approved_by,
+                    2,
                     digest,
                 ),
             )
@@ -185,5 +335,17 @@ class DecisionLedger:
             reason=row["reason"],
             estimated_cost_usd=row["estimated_cost_usd"],
             risk_level=row["risk_level"],
+            selected_provider=row["selected_provider"],
+            data_classification=row["data_classification"],
+            data_boundary=row["data_boundary"],
+            execution_mode=row["execution_mode"],
+            policy_version=row["policy_version"],
+            approved_by=row["approved_by"],
         )
-        return self.integrity_hash(decision) == row["integrity_hash"]
+        if row["integrity_version"] == 1:
+            expected = hashlib.sha256(
+                self._legacy_canonical_payload(decision).encode("utf-8")
+            ).hexdigest()
+        else:
+            expected = self.integrity_hash(decision)
+        return expected == row["integrity_hash"]

@@ -75,3 +75,74 @@ A first sellable product can expose this ledger through an API and dashboard wit
 
 The commercial differentiator is not cheaper API forwarding. It is **decision
 intelligence for reliable multi-model AI engineering**.
+
+## Product boundary: Decision Control Plane vs LiteLLM
+
+The project treats LiteLLM as the execution gateway, not as a competitor to
+rebuild. LiteLLM owns provider authentication, OpenAI-compatible transport,
+streaming, retries, fallbacks, load balancing, and technical budget enforcement.
+
+The Decision Control Plane owns the business decision before and after that
+execution:
+
+```text
+Application or agent
+        |
+        v
+Decision Control Plane
+task classification, data boundary, risk, approval, explanation, evidence
+        |
+        v
+LiteLLM or another gateway
+authentication, provider invocation, retry, fallback, streaming, metering
+        |
+        v
+Model providers and local models
+        |
+        v
+Outcome, reviewed quality, and cost returned to the Decision Ledger
+```
+
+Routing by cost, latency, or provider health alone is not the product moat.
+The moat is the evidence accumulated for a precise task and customer policy,
+plus the ability to prove which policy authorized a live execution.
+
+## Mandatory guardrails
+
+The ledger applies these rules before recording a decision intended for live
+execution:
+
+1. High- and critical-risk decisions require a named human approver.
+2. Restricted data must remain inside the local execution boundary.
+3. A configured maximum estimated cost is a hard ceiling, not a soft score.
+4. Risk, data classification, boundary, execution mode, and policy version use
+   explicit validated values.
+5. A rejected live decision fails closed and is never silently downgraded.
+6. Shadow decisions may be recorded for evaluation because they dispatch no
+   production traffic.
+7. Governance metadata is included in the integrity hash.
+
+These are minimum controls. Provider allowlists, regional residency checks,
+separation of approver and operator, cryptographic signatures, retention rules,
+and append-only remote storage remain required before production deployment.
+
+## Explicit separation from tokenized finance
+
+The Decision Control Plane is an AI infrastructure and governance project. It
+does not issue tokens, hold collateral, manage liquidity, price bonds, or make
+financial promises. The tokenized-finance project is a separate product and
+risk domain with its own repository boundary, governance, legal review, and
+financial safeguards.
+
+The only permitted integration is conventional: a finance application may call
+the Decision Control Plane to govern its AI model usage. That integration does
+not transfer financial responsibilities into the router and does not make the
+ledger a financial settlement system.
+
+## Delivery sequence
+
+1. Stabilize the policy schema and SQLite ledger with fail-closed tests.
+2. Add a LiteLLM callback adapter without duplicating proxy behavior.
+3. Add shadow comparisons and reviewed quality evidence by task type.
+4. Add a policy API and human-approval workflow.
+5. Move integrity records to signed, append-only storage before multi-tenant use.
