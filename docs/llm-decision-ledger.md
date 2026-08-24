@@ -146,3 +146,30 @@ ledger a financial settlement system.
 3. Add shadow comparisons and reviewed quality evidence by task type.
 4. Add a policy API and human-approval workflow.
 5. Move integrity records to signed, append-only storage before multi-tenant use.
+
+## Meta-optimization decision system
+
+The meta-optimizer does not use one permanent score for every request. It first
+selects the appropriate optimization profile from the request context:
+
+- high or critical risk selects the quality profile;
+- a binding cost ceiling selects the cost profile;
+- a binding P95 latency ceiling selects the latency profile;
+- a quality floor selects the quality profile;
+- requests without dominant pressure use the balanced profile.
+
+Mandatory constraints run before scoring. Provider allowlists, capabilities,
+data boundaries, cost ceilings, latency ceilings, quality floors, and human
+approval can reject a candidate or the entire request. Scoring cannot restore a
+rejected candidate.
+
+Eligible candidates are ranked using confidence-adjusted historical quality and
+reliability, normalized latency, and normalized cost. Sparse observations are
+shrunk toward a neutral prior to prevent a new model from winning production
+traffic on one unusually good result. The eligible alternative with the least
+evidence is exposed as a shadow candidate so its evidence can grow safely.
+
+`MetaOptimizer.optimize_and_record()` evaluates candidates with the exact
+`GovernancePolicy` owned by the ledger, converts the result into a `Decision`,
+and records its integrity hash. This keeps the optimization loop auditable and
+prevents a caller from using a softer policy for selection than for execution.
