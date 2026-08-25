@@ -201,9 +201,16 @@ contract InfrastructureTest is Test {
     function testInconsistentCostBreakdownIsRejected() public {
         (AgentSettlementVault.UsageReceipt memory receipt, bytes memory signature) =
             _signedReceipt(keccak256("usage-breakdown"), 5 * WAD);
+        uint256 expectedProviderCostEurWad = receipt.providerCostEurWad;
         receipt.providerCostEurWad += 1;
 
-        vm.expectRevert(AgentSettlementVault.InvalidProviderCost.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                AgentSettlementVault.InvalidProviderCost.selector,
+                expectedProviderCostEurWad,
+                expectedProviderCostEurWad + 1
+            )
+        );
         vm.prank(address(timelock));
         vault.settle(receipt, signature);
     }
