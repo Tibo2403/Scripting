@@ -7,7 +7,6 @@ import re
 import unittest
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PYTHON_ROOT = PROJECT_ROOT / "python"
 FORBIDDEN_IMPORT_ROOTS = {
@@ -57,7 +56,11 @@ class ProjectBoundaryTests(unittest.TestCase):
                         relative_path = source_path.relative_to(PROJECT_ROOT)
                         violations.append(f"{relative_path} escapes through {import_path}")
 
-        self.assertEqual([], violations, "Escaping Solidity imports found:\n" + "\n".join(violations))
+        self.assertEqual(
+            [],
+            violations,
+            "Escaping Solidity imports found:\n" + "\n".join(violations),
+        )
 
 
 if __name__ == "__main__":
