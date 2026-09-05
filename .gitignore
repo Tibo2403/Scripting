@@ -33,3 +33,4 @@ venv/
 # Keep sanitized examples tracked.
 !examples/*.csv
 !examples/*.json
+AI_REPORT.md
