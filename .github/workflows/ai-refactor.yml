@@ -8,12 +8,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  ai-refactor:
+  generate-and-validate:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
+    outputs:
+      has_patch: ${{ steps.generate.outputs.has_patch }}
 
     env:
       OPENAI_MODEL: gpt-4.1
@@ -21,6 +22,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -72,11 +75,9 @@ jobs:
                 printf '\n<<<END>>>\n' >> "$tmpctx"
               done
 
-          context="$(jq -Rs . < "$tmpctx")"
-
-          body="$(jq -n \
+          jq -n \
             --arg model "$OPENAI_MODEL" \
-            --arg context "$context" \
+            --rawfile context "$tmpctx" \
             '{
               model: $model,
               input: [
@@ -86,18 +87,31 @@ jobs:
                 },
                 {
                   role: "user",
-                  content: ("Repository sample as JSON string:\n" + $context + "\nReturn an empty response if no safe improvement is obvious.")
+                  content: ("Repository sample:\n" + $context + "\nReturn an empty response if no safe improvement is obvious.")
                 }
               ],
               temperature: 0,
               max_output_tokens: 4096
-            }')"
+            }' > request.json
 
-          curl -sS https://api.openai.com/v1/responses \
+          curl --fail-with-body --silent --show-error https://api.openai.com/v1/responses \
             -H "Authorization: Bearer ${OPENAI_API_KEY}" \
             -H "Content-Type: application/json" \
-            -d "$body" \
-            | jq -r '.output_text // ""' > ai.patch
+            --data-binary @request.json \
+            --output response.json
+
+          if jq -e '.error != null' response.json >/dev/null; then
+            jq -r '.error.message // "OpenAI returned an unspecified error."' response.json >&2
+            exit 1
+          fi
+
+          jq -er '[
+            .output[]?
+            | select(.type == "message")
+            | .content[]?
+            | select(.type == "output_text")
+            | .text
+          ] | join("")' response.json > ai.patch
 
           if [ -s ai.patch ] && grep -Eq '^(diff --git |--- )' ai.patch; then
             git apply --check ai.patch
@@ -162,10 +176,45 @@ jobs:
           done < <(find scripts -name "*.sh" -print0)
           find scripts -name "*.sh" -print0 | xargs -0 shellcheck --severity=error
 
-      - name: Create pull request
+      - name: Upload validated patch
         if: steps.generate.outputs.has_patch == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ai-refactor-patch-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ai.patch
+          if-no-files-found: error
+          retention-days: 1
+
+  create-pull-request:
+    needs: generate-and-validate
+    if: needs.generate-and-validate.outputs.has_patch == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download validated patch
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ai-refactor-patch-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Apply validated patch
+        run: |
+          set -euo pipefail
+          git apply --check ai.patch
+          git apply --whitespace=fix ai.patch
+
+      - name: Create pull request
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           title: "AI refactor"
           body: "Manual AI-assisted refactor. Review carefully before merging."
           branch: ai/refactor-${{ github.run_id }}
