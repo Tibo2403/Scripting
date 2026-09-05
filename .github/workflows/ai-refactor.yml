@@ -93,7 +93,7 @@ jobs:
               max_output_tokens: 4096
             }')"
 
-          curl -sS https://api.openai.com/v1/responses \
+          curl --fail-with-body -sS https://api.openai.com/v1/responses \
             -H "Authorization: Bearer ${OPENAI_API_KEY}" \
             -H "Content-Type: application/json" \
             -d "$body" \
