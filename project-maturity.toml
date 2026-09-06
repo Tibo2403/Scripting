@@ -1,6 +1,18 @@
 schema_version = 1
 
 [[projects]]
+path = "tools"
+name = "AI code analysis experiments"
+status = "experimental"
+summary = "Scripts experimentaux d'analyse Inkling et de refactoring local."
+documentation = "tools/README.md"
+validation = ["python -m compileall tools", "bash -n tools/analyze-ai.sh tools/refactor.sh tools/tools/analyze-ai.sh"]
+limitations = [
+  "Les appels fournisseur ne sont pas testes en CI et transmettent le code a un service externe.",
+  "Les anciens scripts imbriques utilisent une configuration differente; voir le README avant execution.",
+]
+
+[[projects]]
 path = "scripts"
 name = "Scripting Toolkit"
 status = "usable"
