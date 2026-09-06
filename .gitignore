@@ -18,6 +18,7 @@ __pycache__/
 .coverage
 .coverage.*
 htmlcov/
+deploy/akash-openclaw-doc-agent/deploy.resolved.yaml
 .venv/
 venv/
 

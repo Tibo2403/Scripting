@@ -1,4 +1,4 @@
-ARG OPENCLAW_IMAGE=ghcr.io/openclaw/openclaw:2026.5.26
+ARG OPENCLAW_IMAGE=ghcr.io/openclaw/openclaw:2026.5.26@sha256:ae7ff536446f1bbb57ea51b9b21097d8f299d30d683dcd72644973bc0522f3b3
 FROM ${OPENCLAW_IMAGE}
 
 USER root

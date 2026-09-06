@@ -1,0 +1,16 @@
+model_list:
+  - model_name: inkling
+    litellm_params:
+      model: openai/thinkingmachines/inkling
+      api_base: https://ai-gateway.vercel.sh/v1
+      api_key: os.environ/INKLING_API_KEY
+
+litellm_settings:
+  drop_params: true
+  request_timeout: 180
+  num_retries: 2
+  set_verbose: false
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  disable_spend_logs: true

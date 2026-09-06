@@ -21,8 +21,8 @@ applies budgets, and selects one of these LiteLLM aliases:
   is set
 - `codex-hf-fast` for larger Hugging Face / multi-provider tasks when
   `HF_TOKEN` is set
-- `codex-inkling` for Thinking Machines Inkling through its OpenAI-compatible
-  ModelsLab endpoint when `INKLING_API_KEY` is set
+- `codex-inkling` for Thinking Machines Inkling through the OpenAI-compatible
+  Vercel AI Gateway when `INKLING_API_KEY` is set
 
 Gemini and local Qwen are configured through LiteLLM model groups when the proxy is active. Without the proxy, the wrapper keeps the standard Codex path and can still call local Qwen directly through Ollama for selected local tasks.
 
@@ -435,7 +435,7 @@ To dispatch explicitly to Inkling, export the provider key for the session and
 call the dedicated alias:
 
 ```powershell
-$env:INKLING_API_KEY = "your-modelslab-key"
+$env:INKLING_API_KEY = "your-vercel-ai-gateway-key"
 .\scripts\python\Test-CodexLiteLLMDispatch.ps1 -Model codex-inkling -Call
 ```
 

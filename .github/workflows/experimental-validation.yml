@@ -86,7 +86,7 @@ jobs:
           python -m ruff check python tests
 
   shell-prototypes:
-    name: Experimental OpenClaw shell syntax
+    name: OpenClaw shell syntax (supplemental)
     needs: changes
     if: needs.changes.outputs.shell_prototypes == 'true'
     runs-on: ubuntu-latest

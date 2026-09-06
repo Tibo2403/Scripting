@@ -1,0 +1,56 @@
+name: Inkling gateway checks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".devcontainer/**"
+      - "scripts/bash/deploy_inkling_akash.sh"
+      - "scripts/tests/test-inkling-gateway.sh"
+      - "scripts/python/litellm-cost-routing.yaml"
+      - "scripts/python/tests/test_inkling_gateway_config.py"
+      - ".github/workflows/inkling-gateway.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".devcontainer/**"
+      - "scripts/bash/deploy_inkling_akash.sh"
+      - "scripts/tests/test-inkling-gateway.sh"
+      - "scripts/python/litellm-cost-routing.yaml"
+      - "scripts/python/tests/test_inkling_gateway_config.py"
+      - ".github/workflows/inkling-gateway.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: inkling-gateway-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+      - name: Install validation dependency
+        run: python -m pip install "PyYAML==6.0.2"
+      - name: Validate configuration contract
+        run: python -m unittest scripts.python.tests.test_inkling_gateway_config
+      - name: Validate shell syntax
+        run: bash -n .devcontainer/start-inkling-gateway.sh scripts/bash/deploy_inkling_akash.sh scripts/tests/test-inkling-gateway.sh
+      - name: Run shell smoke tests
+        run: bash scripts/tests/test-inkling-gateway.sh
+      - name: Scan gateway files for committed secrets
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24e2e231f8f1204fcec7a # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build the Codespaces image
+        run: docker build --build-arg LITELLM_VERSION=1.92.0 -f .devcontainer/Dockerfile .

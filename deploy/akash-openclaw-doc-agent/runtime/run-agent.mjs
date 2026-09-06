@@ -2,12 +2,28 @@ import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 
+function readPort(name, fallback) {
+  const value = process.env[name] ?? String(fallback);
+  if (!/^\d+$/.test(value)) {
+    throw new Error(`${name} must be an integer between 1 and 65535.`);
+  }
+
+  const port = Number(value);
+  if (port < 1 || port > 65535) {
+    throw new Error(`${name} must be an integer between 1 and 65535.`);
+  }
+  return port;
+}
+
+const gatewayPort = readPort("OPENCLAW_GATEWAY_PORT", 18789);
+const healthPort = readPort("HEALTH_PORT", 8080);
+const openclawExecutable = process.env.OPENCLAW_EXECUTABLE || "openclaw";
 const gatewayToken =
   process.env.OPENCLAW_GATEWAY_TOKEN || randomBytes(32).toString("hex");
 
 const gateway = spawn(
-  "openclaw",
-  ["gateway", "run", "--bind", "loopback", "--port", "18789"],
+  openclawExecutable,
+  ["gateway", "run", "--bind", "loopback", "--port", String(gatewayPort)],
   {
     env: {
       ...process.env,
@@ -34,7 +50,7 @@ const health = createServer(async (request, response) => {
     let ready = false;
     if (!gatewayExited) {
       try {
-        const gatewayHealth = await fetch("http://127.0.0.1:18789/healthz", {
+        const gatewayHealth = await fetch(`http://127.0.0.1:${gatewayPort}/healthz`, {
           signal: AbortSignal.timeout(1500),
         });
         ready = gatewayHealth.ok;
@@ -58,7 +74,7 @@ const health = createServer(async (request, response) => {
   response.end(JSON.stringify({ error: "not_found" }));
 });
 
-health.listen(8080, "0.0.0.0");
+health.listen(healthPort, "0.0.0.0");
 
 function shutdown(signal) {
   health.close();

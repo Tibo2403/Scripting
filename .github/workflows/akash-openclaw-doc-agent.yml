@@ -14,7 +14,7 @@ on:
       version:
         description: "Immutable image version (for example 2026.07.24-1)"
         required: true
-        default: "2026.07.24-1"
+        default: "2026.08.27-1"
 
 permissions:
   contents: read
@@ -25,8 +25,25 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Validate configuration
-        run: python deploy/akash-openclaw-doc-agent/scripts/validate.py
+      - name: Validate configuration and validator regressions
+        run: |
+          python deploy/akash-openclaw-doc-agent/scripts/validate.py
+          python -m unittest discover deploy/akash-openclaw-doc-agent/tests -p 'test_*.py' -v
+      - name: Test agent runtime
+        run: |
+          node_major="$(node -p 'process.versions.node.split(".")[0]')"
+          if [ "$node_major" -lt 20 ]; then
+            echo "Node.js 20 or newer is required; found $(node --version)." >&2
+            exit 1
+          fi
+          node --test deploy/akash-openclaw-doc-agent/tests/run-agent.test.mjs
+      - name: Test Ollama runtime
+        run: bash deploy/akash-openclaw-doc-agent/tests/test-run-ollama.sh
+      - name: Check Docker build definitions
+        working-directory: deploy/akash-openclaw-doc-agent
+        run: |
+          docker build --check --file Dockerfile .
+          docker build --check --file Dockerfile.ollama .
 
   publish:
     if: github.event_name == 'workflow_dispatch'
@@ -61,3 +78,22 @@ jobs:
           docker build --pull --file Dockerfile.ollama --tag "$ollama_image" .
           docker push "$agent_image"
           docker push "$ollama_image"
+          agent_repo_digest="$(docker inspect --format='{{index .RepoDigests 0}}' "$agent_image")"
+          ollama_repo_digest="$(docker inspect --format='{{index .RepoDigests 0}}' "$ollama_image")"
+          if [ -z "$agent_repo_digest" ] || [ -z "$ollama_repo_digest" ]; then
+            echo "Registry did not return immutable image digests." >&2
+            exit 1
+          fi
+          agent_reference="${agent_image}@${agent_repo_digest##*@}"
+          ollama_reference="${ollama_image}@${ollama_repo_digest##*@}"
+          python scripts/render_deploy.py \
+            --agent-image "$agent_reference" \
+            --ollama-image "$ollama_reference" \
+            --output deploy.resolved.yaml
+      - name: Upload immutable Akash deployment manifest
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: akash-deploy-${{ inputs.version }}-${{ github.run_attempt }}
+          path: deploy/akash-openclaw-doc-agent/deploy.resolved.yaml
+          if-no-files-found: error
+          retention-days: 30

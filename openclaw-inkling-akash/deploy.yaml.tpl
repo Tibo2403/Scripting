@@ -1,27 +1,19 @@
----
 version: "2.0"
-
 services:
   openclaw:
-    image: ${OPENCLAW_IMAGE}
+    image: {{IMAGE}}
     env:
-      - INKLING_API_KEY=${INKLING_API_KEY}
-      - INKLING_BASE_URL=${INKLING_BASE_URL}
-      - INKLING_MODEL=${INKLING_MODEL}
-      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
-      - OPENCLAW_PORT=18789
-      - OPENCLAW_STATE_DIR=/home/node/.openclaw
+{{ENV}}
     expose:
       - port: 18789
         as: 18789
         to:
-          - global: true
+          - global: false
     params:
       storage:
         data:
           mount: /home/node/.openclaw
           readOnly: false
-
 profiles:
   compute:
     openclaw:
@@ -33,19 +25,18 @@ profiles:
         storage:
           - size: 1Gi
           - name: data
-            size: 5Gi
+            size: 8Gi
             attributes:
               persistent: true
               class: beta3
   placement:
-    dcloud:
+    akash:
       pricing:
         openclaw:
           denom: uakt
           amount: 10000
-
 deployment:
   openclaw:
-    dcloud:
+    akash:
       profile: openclaw
       count: 1

@@ -16,11 +16,13 @@ incomplete and real secrets, critical systems and real financial value must not 
 |---|---|---|
 | `scripts/` | **Usable** | PowerShell, Bash and Python checks run in CI |
 | `litellm_scaleway_dispatching/` | **Usable** | Provider calls are mocked; retry and fallback are unit tested |
-| `deploy/` | **Experimental** | Static validation exists; no end-to-end Akash deployment test |
-| `openclaw-akash-dual-agents/` | **Experimental** | Shell syntax only; external integrations are not tested end to end |
-| `openclaw-inkling-akash/` | **Experimental** | Shell syntax only; provider and deployment are not tested end to end |
+| `deploy/` | **Usable** | Security invariants, runtime failures and Docker build definitions run in CI; Akash deployment stays operator-controlled |
+| `openclaw-akash-dual-agents/` | **Usable** | Read-only code review; configuration and failure tests, dedicated Docker CI |
+| `openclaw-inkling-akash/` | **Usable** | Configurable private gateway; configuration and failure tests, dedicated Docker CI |
 | `pra/` | **Experimental** | Recovery connectors are placeholders and require a real exercise |
 | `tokenized_llm_finance/` | **Experimental** | Contracts are unaudited and Foundry is not yet run in CI |
+
+The two OpenClaw profile promotions require a green [dedicated CI run](https://github.com/Tibo2403/Scripting/actions/workflows/openclaw-deployments.yml) before merge. Local configuration tests and the pinned OpenClaw schema passed. Docker Linux 29.6.1 and `docker run --rm hello-world` were verified on 2026-09-06; builds of the project images and external integrations remain unverified. See [validation evidence](scripts/openclaw/VALIDATION.md).
 
 ### Isolated boundary for tokenized finance
 
@@ -77,10 +79,10 @@ python scripts/python/mcp_server.py
 .
 |-- .github/workflows/        # Script validation and manual AI-assisted refactoring
 |-- docs/                     # Operations, compatibility and client-readiness guidance
-|-- deploy/                   # Experimental deployment configurations
+|-- deploy/                   # Usable, tested Akash OpenClaw deployment configuration
 |-- examples/                 # Safe placeholders and demonstration inputs
 |-- litellm_scaleway_dispatching/ # Usable, unit-tested provider integration
-|-- openclaw-*/               # Experimental OpenClaw deployment prototypes
+|-- openclaw-*/               # OpenClaw deployment profiles; promotion pending CI
 |-- pra/                      # Experimental recovery-plan orchestrator
 |-- scripts/
 |   |-- bash/                 # AI infrastructure installers
@@ -101,6 +103,13 @@ See [`docs/compatibility-matrix.md`](docs/compatibility-matrix.md) for operating
 
 ## Core workflows
 
+### OpenClaw deployment profiles
+
+- [Dual agents](openclaw-akash-dual-agents/README.md): two agents for read-only repository review, with persistent repositories and Telegram pairing.
+- [Inkling gateway](openclaw-inkling-akash/README.md): a private gateway with a configurable OpenAI-compatible provider.
+
+Both profiles build from the repository root and require their documented environment variables. Start with the linked guide to configure secrets, build the image and run the first manual check. Akash deployment and provider calls require separate operator validation.
+
 ### Codex workspace audit
 
 ```powershell
@@ -108,6 +117,20 @@ See [`docs/compatibility-matrix.md`](docs/compatibility-matrix.md) for operating
 ```
 
 The workspace doctor audits a project before a Codex CLI session and can maintain a generated section in `AGENTS.md`. See [`docs/codex-workspace-doctor.md`](docs/codex-workspace-doctor.md).
+
+### Grok coding agent on GitHub
+
+The manual `Grok coder` workflow runs Grok Build on an ephemeral GitHub-hosted runner and opens a
+draft pull request with its changes. It does not require Akash, MCP or an external review plugin.
+
+1. Create an xAI API key and save it as the repository Actions secret `XAI_API_KEY`.
+2. In **Settings > Actions > General**, allow GitHub Actions to create pull requests.
+3. Open **Actions > Grok coder (manual) > Run workflow**.
+4. Enter a focused coding task and start the workflow.
+5. Review the generated draft pull request and its standard CI checks before merging.
+
+The agent cannot merge directly. Its prompt also prevents changes to GitHub workflow files; make
+those changes manually when required.
 
 ### Private AI stack
 
@@ -131,10 +154,33 @@ Connect an MCP client to `http://localhost:8000/mcp`. The server can list, searc
 The Python tooling includes experiments for Codex/LiteLLM routing, local route health checks and risk-adjusted dispatch. Start with:
 
 - [`scripts/python/README_Codex_Cost_Routing.md`](scripts/python/README_Codex_Cost_Routing.md)
+- [`scripts/python/README_Astra_Switch.md`](scripts/python/README_Astra_Switch.md): Windows launcher for selecting and restoring a dedicated local Astra route; requires the existing LiteLLM proxy and an API key.
 - [`docs/codex-routing-modes.md`](docs/codex-routing-modes.md)
 - [`scripts/python/PRODUCTION_SECURITY_GOVERNANCE.md`](scripts/python/PRODUCTION_SECURITY_GOVERNANCE.md)
 
 Experimental routers should remain bound to `127.0.0.1` unless authentication and TLS are added.
+
+### Inkling gateway in GitHub Codespaces
+
+The repository devcontainer provides a private LiteLLM gateway for the official
+Vercel Inkling endpoint. Add `INKLING_API_KEY` and `LITELLM_MASTER_KEY` as
+Codespaces repository secrets, then create or rebuild the Codespace. Port 4000
+is forwarded privately and the OpenAI-compatible model name exposed to clients
+is `inkling`.
+
+```bash
+curl http://localhost:4000/v1/chat/completions \
+  -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"inkling","messages":[{"role":"user","content":"Hello"}]}'
+```
+
+If the Codespace was created before the secrets were configured, start the
+gateway explicitly after rebuilding it:
+
+```bash
+bash .devcontainer/start-inkling-gateway.sh
+```
 
 ## Validation
 

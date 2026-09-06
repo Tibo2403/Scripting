@@ -140,8 +140,8 @@ model_list:
 
   - model_name: codex-inkling
     litellm_params:
-      model: openai/thinkingmachines-inkling
-      api_base: https://modelslab.com/api/v7/llm
+      model: openai/thinkingmachines/inkling
+      api_base: https://ai-gateway.vercel.sh/v1
       api_key: os.environ/INKLING_API_KEY
       weight: 1
 

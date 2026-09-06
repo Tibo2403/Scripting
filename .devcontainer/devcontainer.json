@@ -1,0 +1,30 @@
+{
+  "name": "Scripting - Inkling gateway",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "..",
+    "args": {
+      "LITELLM_VERSION": "1.92.0"
+    }
+  },
+  "forwardPorts": [4000],
+  "portsAttributes": {
+    "4000": {
+      "label": "Inkling LiteLLM gateway",
+      "onAutoForward": "notify",
+      "visibility": "private"
+    }
+  },
+  "postStartCommand": "bash .devcontainer/start-inkling-gateway.sh --allow-missing-secrets",
+  "remoteEnv": {
+    "LITELLM_CONFIG_PATH": "${containerWorkspaceFolder}/.devcontainer/litellm-inkling.yaml"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "redhat.vscode-yaml"
+      ]
+    }
+  }
+}

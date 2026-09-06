@@ -1,0 +1,12 @@
+**
+!scripts/
+!scripts/openclaw/
+!scripts/openclaw/config.mjs
+!scripts/openclaw/settings.mjs
+!openclaw-akash-dual-agents/
+!openclaw-akash-dual-agents/agents/
+!openclaw-akash-dual-agents/agents/agent-qwen/
+!openclaw-akash-dual-agents/agents/agent-deepseek/
+!openclaw-akash-dual-agents/agents/*/*.md
+!openclaw-akash-dual-agents/scripts/
+!openclaw-akash-dual-agents/scripts/*.sh

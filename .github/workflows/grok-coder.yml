@@ -1,0 +1,113 @@
+name: Grok coder (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "Coding task for Grok"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: grok-coder-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  code:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      GROK_VERSION: "1.0.5"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require Grok API key
+        env:
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+        run: |
+          if [ -z "${XAI_API_KEY:-}" ]; then
+            echo "Repository secret XAI_API_KEY is not configured." >&2
+            exit 1
+          fi
+
+      - name: Install pinned Grok CLI
+        run: |
+          set -euo pipefail
+          installer="$RUNNER_TEMP/install-grok.sh"
+          curl --fail --silent --show-error --location \
+            --output "$installer" https://x.ai/cli/install.sh
+          bash "$installer" "$GROK_VERSION"
+          "$HOME/.grok/bin/grok" --version
+
+      - name: Run Grok coding agent
+        env:
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          TASK: ${{ inputs.task }}
+        run: |
+          set -euo pipefail
+          prompt="Read AGENTS.md and complete this task: ${TASK}
+
+          Work only inside this repository. Do not use MCP or external review plugins. Do not edit
+          .github/workflows, expose secrets, commit, push, or merge. Keep the
+          change focused and run the relevant standard tests before finishing."
+
+          "$HOME/.grok/bin/grok" \
+            --no-auto-update \
+            --always-approve \
+            --cwd "$GITHUB_WORKSPACE" \
+            --output-format plain \
+            --single "$prompt"
+
+      - name: Validate Python
+        run: |
+          set -euo pipefail
+          python -m compileall .
+          python -m unittest discover -s scripts/python/tests -v
+
+      - name: Validate shell syntax
+        run: |
+          set -euo pipefail
+          find scripts -name "*.sh" -print0 | xargs -0 -n1 bash -n
+
+      - name: Validate PowerShell syntax
+        shell: pwsh
+        run: ./scripts/powershell/Test-ScriptSyntax.ps1 -Path ./scripts
+
+      - name: Create draft pull request
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: grok/run-${{ github.run_id }}
+          commit-message: "Grok: automated coding task"
+          delete-branch: true
+          draft: true
+          title: "Grok: automated coding task"
+          body: |
+            ### What Problem This Solves
+
+            Manual coding task submitted to Grok: `${{ inputs.task }}`
+
+            ### Why This Change Was Made
+
+            Grok Build generated a focused patch on an isolated branch without MCP or external review plugins.
+
+            ### User Impact
+
+            Review the generated patch to determine its exact runtime and user impact before merging.
+
+            ### Evidence
+
+            - Before: task supplied through the manual GitHub Actions form
+            - Tests: Python compilation and unit tests, Bash syntax, and PowerShell syntax
+            - Checks: the normal pull-request workflows will run after this draft PR is created
+            - Autoreview: not run

@@ -2,7 +2,7 @@ version: "2.0"
 
 services:
   agent:
-    image: ghcr.io/tibo2403/scripting/akash-openclaw-doc-agent:2026.07.24-1
+    image: __AGENT_IMAGE__
     env:
       - ADMIN_ENABLED=false
       - REGISTRATION_ENABLED=false
@@ -15,14 +15,24 @@ services:
         as: 80
         to:
           - global: true
+    params:
+      storage:
+        workspace:
+          mount: /workspace
+          readOnly: false
   ollama:
-    image: ghcr.io/tibo2403/scripting/akash-openclaw-ollama:2026.07.24-1
+    image: __OLLAMA_IMAGE__
     env:
       - OLLAMA_MODEL=llama3.2:3b-instruct-q4_K_M
     expose:
       - port: 11434
         to:
           - service: agent
+    params:
+      storage:
+        ollama-models:
+          mount: /home/agent/.ollama/models
+          readOnly: false
 
 profiles:
   compute:
@@ -33,7 +43,12 @@ profiles:
         memory:
           size: 1Gi
         storage:
-          size: 1Gi
+          - size: 1Gi
+          - name: workspace
+            size: 5Gi
+            attributes:
+              persistent: true
+              class: beta3
     ollama:
       resources:
         cpu:
@@ -41,7 +56,12 @@ profiles:
         memory:
           size: 11Gi
         storage:
-          size: 29Gi
+          - size: 1Gi
+          - name: ollama-models
+            size: 28Gi
+            attributes:
+              persistent: true
+              class: beta3
   placement:
     akash:
       pricing:

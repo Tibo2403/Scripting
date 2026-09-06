@@ -1,0 +1,26 @@
+name: OpenClaw deployment profiles
+on:
+  pull_request:
+    paths: ['openclaw-akash-dual-agents/**', 'openclaw-inkling-akash/**', 'scripts/openclaw/**', '.github/workflows/openclaw-deployments.yml']
+  push:
+    paths: ['openclaw-akash-dual-agents/**', 'openclaw-inkling-akash/**', 'scripts/openclaw/**', '.github/workflows/openclaw-deployments.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --test scripts/openclaw/tests/*.test.mjs
+      - run: bash scripts/openclaw/tests/smoke.sh
+      - name: Build both pinned images
+        run: |
+          docker build -f openclaw-akash-dual-agents/Dockerfile -t dual:test .
+          docker build -f openclaw-inkling-akash/Dockerfile -t inkling:test .
+      - name: Validate configs using the actual OpenClaw schema without network
+        run: bash scripts/openclaw/tests/docker-schema.sh

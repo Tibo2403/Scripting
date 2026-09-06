@@ -1,19 +1,9 @@
 version: "2.0"
-
 services:
   openclaw:
-    image: ghcr.io/tibo2403/openclaw-akash-dual-agents:latest
+    image: {{IMAGE}}
     env:
-      - DEEPINFRA_API_KEY=REPLACE_ME
-      - OPENAI_API_KEY=REPLACE_ME_OPTIONAL
-      - GITHUB_TOKEN=REPLACE_ME
-      - TOKEN_BOT_A=REPLACE_ME
-      - TOKEN_BOT_B=REPLACE_ME
-      - OPENCLAW_GATEWAY_TOKEN=REPLACE_WITH_LONG_RANDOM_VALUE
-      - QWEN_MODEL_ID=Qwen/Qwen3-Coder-32B-Instruct
-      - DEEPSEEK_MODEL_ID=deepseek-ai/DeepSeek-V4-Flash
-      - REPOSITORIES=Tibo2403/Scripting
-      - TZ=Europe/Budapest
+{{ENV}}
     expose:
       - port: 18789
         as: 18789
@@ -24,15 +14,14 @@ services:
         data:
           mount: /data
           readOnly: false
-
 profiles:
   compute:
     openclaw:
       resources:
         cpu:
-          units: 0.5
+          units: 1
         memory:
-          size: 1Gi
+          size: 2Gi
         storage:
           - size: 1Gi
           - name: data
@@ -46,7 +35,6 @@ profiles:
         openclaw:
           denom: uact
           amount: 25
-
 deployment:
   openclaw:
     akash:

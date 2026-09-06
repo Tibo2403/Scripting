@@ -1,0 +1,7 @@
+**
+!scripts/
+!scripts/openclaw/
+!scripts/openclaw/config.mjs
+!scripts/openclaw/settings.mjs
+!openclaw-inkling-akash/
+!openclaw-inkling-akash/entrypoint.sh

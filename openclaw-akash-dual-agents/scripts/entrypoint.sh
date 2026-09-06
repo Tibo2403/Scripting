@@ -1,40 +1,46 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 umask 077
-
-required=(DEEPINFRA_API_KEY GITHUB_TOKEN TOKEN_BOT_A TOKEN_BOT_B OPENCLAW_GATEWAY_TOKEN QWEN_MODEL_ID DEEPSEEK_MODEL_ID)
-for name in "${required[@]}"; do
-  if [[ -z "${!name:-}" ]]; then
-    echo "Missing required environment variable: ${name}" >&2
-    exit 1
+template="${OPENCLAW_TEMPLATE_DIR:-/opt/openclaw-template}"
+runtime="${OPENCLAW_RUNTIME_DIR:-/opt/openclaw-runtime}"
+data="${OPENCLAW_DATA_DIR:-/data}"
+export OPENCLAW_STATE_DIR="${OPENCLAW_STATE_DIR:-${data}/openclaw}"
+export OPENCLAW_CONFIG_PATH="${OPENCLAW_CONFIG_PATH:-${OPENCLAW_STATE_DIR}/openclaw.json}"
+node "${runtime}/config.mjs" dual "${OPENCLAW_CONFIG_PATH}"
+openclaw config validate
+bash "${template}/scripts/validate-models.sh"
+mkdir -p "${data}/repos"
+for agent in agent-qwen agent-deepseek; do
+  workspace="${data}/workspaces/${agent}"
+  mkdir -p "${workspace}"
+  for file in SOUL.md TOOLS.md HEARTBEAT.md; do
+    if [[ ! -e "${workspace}/${file}" ]]; then
+      cp "${template}/agents/${agent}/${file}" "${workspace}/${file}"
+    fi
+  done
+  if [[ ! -e "${workspace}/AGENTS.md" ]]; then
+    printf '# AGENTS\n\nRead SOUL.md and TOOLS.md. Review repositories in REPOSITORIES under /data/repos/OWNER/NAME.\n' > "${workspace}/AGENTS.md"
   fi
 done
-
-mkdir -p /data/openclaw /data/workspaces/agent-qwen /data/workspaces/agent-deepseek /data/repos
-if [[ ! -f /data/openclaw/openclaw.json ]]; then
-  cp /opt/openclaw-template/openclaw.json /data/openclaw/openclaw.json
-fi
-for agent in agent-qwen agent-deepseek; do
-  cp -n /opt/openclaw-template/agents/${agent}/SOUL.md /data/workspaces/${agent}/SOUL.md
-  cp -n /opt/openclaw-template/agents/${agent}/TOOLS.md /data/workspaces/${agent}/TOOLS.md
-  cp -n /opt/openclaw-template/agents/${agent}/HEARTBEAT.md /data/workspaces/${agent}/HEARTBEAT.md
-  printf '# AGENTS\n\nFollow SOUL.md, TOOLS.md and HEARTBEAT.md. Work only in repositories explicitly listed in REPOSITORIES.\n' > /data/workspaces/${agent}/AGENTS.md
-
-done
-
 export GH_TOKEN="${GITHUB_TOKEN}"
-IFS=',' read -ra repos <<< "${REPOSITORIES:-Tibo2403/Scripting}"
+IFS=',' read -ra repos <<< "${REPOSITORIES}"
 for repo in "${repos[@]}"; do
   repo="${repo//[[:space:]]/}"
-  [[ -z "${repo}" ]] && continue
-  dest="/data/repos/${repo##*/}"
+  dest="${data}/repos/${repo}"
+  mkdir -p "${dest%/*}"
   if [[ -d "${dest}/.git" ]]; then
-    git -C "${dest}" fetch --prune origin || true
+    origin="$(git -C "${dest}" remote get-url origin)"
+    if [[ "$origin" != "https://github.com/${repo}.git" && "$origin" != "https://github.com/${repo}" ]]; then
+      echo 'Existing repository origin does not match REPOSITORIES.' >&2
+      exit 1
+    fi
+    # Preserve local work: never reset, merge or pull automatically.
+    git -C "${dest}" -c credential.helper= -c 'credential.helper=!gh auth git-credential' fetch --prune origin
+  elif [[ -e "${dest}" ]]; then
+    echo 'Checkout destination exists but is not a Git repository.' >&2
+    exit 1
   else
     gh repo clone "${repo}" "${dest}" -- --filter=blob:none
   fi
 done
-
-/opt/openclaw-template/scripts/validate-models.sh
-openclaw doctor || true
-exec openclaw gateway --port 18789
+exec openclaw gateway --port "${OPENCLAW_PORT:-18789}"

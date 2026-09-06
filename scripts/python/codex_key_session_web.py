@@ -203,7 +203,7 @@ PAGE = """<!doctype html>
         <label for="hf">Hugging Face token optional</label>
         <input id="hf" name="HF_TOKEN" type="password" placeholder="hf_..." autocomplete="off">
         <label for="inkling">Inkling API key optional</label>
-        <input id="inkling" name="INKLING_API_KEY" type="password" placeholder="Inkling / ModelsLab key" autocomplete="off">
+        <input id="inkling" name="INKLING_API_KEY" type="password" placeholder="Vercel AI Gateway key for Inkling" autocomplete="off">
         <label class="check" for="use_qwen">
           <input id="use_qwen" name="USE_LOCAL_QWEN" type="checkbox" value="1" checked>
           Enable local Qwen fallback through Ollama

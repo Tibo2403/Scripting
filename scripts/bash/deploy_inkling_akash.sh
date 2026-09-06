@@ -34,15 +34,14 @@ Options:
   -h, --help              Show help
 
 Required environment variables:
-  INKLING_API_BASE        OpenAI-compatible upstream base URL
   INKLING_API_KEY         Upstream API token
   LITELLM_MASTER_KEY      Client-facing gateway key
 
 Optional environment variables:
-  INKLING_MODEL_NAME      Upstream model identifier (default: inkling)
+  INKLING_API_BASE        Upstream base URL (default: Vercel AI Gateway)
+  INKLING_MODEL_NAME      Upstream model identifier (default: thinkingmachines/inkling)
 
 Example:
-  export INKLING_API_BASE='https://provider.example/v1'
   export INKLING_API_KEY='...'
   export LITELLM_MASTER_KEY="$(openssl rand -hex 32)"
   bash scripts/bash/deploy_inkling_akash.sh --dry-run
@@ -88,11 +87,11 @@ require_positive_integer "--max-price-uact" "$MAX_PRICE_UACT"
 [[ "$MEMORY_SIZE" =~ ^[1-9][0-9]*(Mi|Gi)$ ]] || fail "--memory must use Mi or Gi"
 [[ "$STORAGE_SIZE" =~ ^[1-9][0-9]*(Mi|Gi)$ ]] || fail "--storage must use Mi or Gi"
 
-: "${INKLING_API_BASE:?Set INKLING_API_BASE}"
 : "${INKLING_API_KEY:?Set INKLING_API_KEY}"
 : "${LITELLM_MASTER_KEY:?Set LITELLM_MASTER_KEY to a long random secret}"
 
-MODEL_NAME="${INKLING_MODEL_NAME:-inkling}"
+INKLING_API_BASE="${INKLING_API_BASE:-https://ai-gateway.vercel.sh/v1}"
+MODEL_NAME="${INKLING_MODEL_NAME:-thinkingmachines/inkling}"
 
 GPU_BLOCK=""
 if [[ "$PROFILE" == "rtx3090" ]]; then
@@ -172,8 +171,10 @@ MONTHLY_MAX_ACT=$(awk -v amount="$MAX_PRICE_UACT" 'BEGIN { printf "%.2f", amount
 printf 'Profile: %s | maximum configured bid: about %s ACT/month (actual winning bid may be lower).\n' "$PROFILE" "$MONTHLY_MAX_ACT" >&2
 
 if [[ "$DRY_RUN" == true ]]; then
-  printf '%s\n' "$SDL"
-  printf '\nDry run only; nothing was written or deployed.\n' >&2
+  REDACTED_SDL="${SDL//"$INKLING_API_KEY"/<redacted-inkling-api-key>}"
+  REDACTED_SDL="${REDACTED_SDL//"$LITELLM_MASTER_KEY"/<redacted-litellm-master-key>}"
+  printf '%s\n' "$REDACTED_SDL"
+  printf '\nDry run only; secrets were redacted and nothing was written or deployed.\n' >&2
   exit 0
 fi
 
