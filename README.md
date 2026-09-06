@@ -15,6 +15,7 @@ incomplete and real secrets, critical systems and real financial value must not 
 | Project directory | Maturity | Current evidence or gap |
 |---|---|---|
 | `scripts/` | **Usable** | PowerShell, Bash and Python checks run in CI |
+| [`tools/`](tools/README.md) | **Experimental** | Inkling analysis and local refactoring; syntax checks only, no provider integration tests |
 | `litellm_scaleway_dispatching/` | **Usable** | Provider calls are mocked; retry and fallback are unit tested |
 | `deploy/` | **Experimental** | Static validation exists; no end-to-end Akash deployment test |
 | `openclaw-akash-dual-agents/` | **Experimental** | Shell syntax only; external integrations are not tested end to end |
