@@ -4,6 +4,31 @@ from scripts.python.ci_changed_components import classify_paths
 
 
 class ClassifyPathsTests(unittest.TestCase):
+    def test_scaleway_runtime_changes_select_python_checks(self) -> None:
+        for path in (
+            "litellm_scaleway_dispatching/scaleway_glm_dispatcher.py",
+            "litellm_scaleway_dispatching/requirements.txt",
+        ):
+            with self.subTest(path=path):
+                selected = classify_paths([path])
+                self.assertEqual(
+                    {name for name, enabled in selected.items() if enabled}, {"python"}
+                )
+        self.assertFalse(any(classify_paths(["litellm_scaleway_dispatching/README.md"]).values()))
+
+    def test_selector_changes_exercise_all_consumers(self) -> None:
+        for path in (
+            "scripts/python/ci_changed_components.py",
+            "scripts/python/tests/test_ci_changed_components.py",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(all(classify_paths([path]).values()))
+
+    def test_maturity_tests_also_validate_the_real_catalog(self) -> None:
+        selected = classify_paths(["scripts/python/tests/test_project_maturity.py"])
+        self.assertTrue(selected["maturity"])
+        self.assertTrue(selected["python"])
+
     def test_documentation_does_not_select_a_component(self) -> None:
         self.assertFalse(any(classify_paths(["README.md"]).values()))
 

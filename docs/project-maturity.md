@@ -35,6 +35,11 @@ comme telles dans leur documentation ; elles n'heritent pas automatiquement du n
 
 ## Controle anti-derive
 
+Les clones Git independants places localement a la racine (dossier `.git` propre,
+comme `LinkedGpt/`) ne font pas partie du catalogue du depot parent. Ils conservent
+leurs fichiers et leur historique ; `LinkedGpt/` est ignore par le Git parent.
+Les sous-modules utilisant un fichier `.git` restent soumis au catalogue.
+
 La commande suivante verifie que tous les dossiers de projet a la racine sont classes, que leur
 documentation existe et que les projets experimentaux expliquent leurs limites :
 

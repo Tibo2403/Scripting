@@ -26,10 +26,16 @@ venv/
 .env.*
 !.env.example
 
-# Ignore data files
+# Ignore local tabular data files
 *.csv
-*.json
+
+# Independent local checkout (has its own Git history).
+/LinkedGpt/
+
+# JavaScript dependencies and generated build output
+node_modules/
+dist/
+*.tsbuildinfo
 
 # Keep sanitized examples tracked.
 !examples/*.csv
-!examples/*.json

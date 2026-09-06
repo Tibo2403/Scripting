@@ -6,10 +6,26 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.python.check_project_maturity import validate_catalog
+from scripts.python.check_project_maturity import discover_project_roots, validate_catalog
 
 
 class ProjectMaturityCatalogTests(unittest.TestCase):
+    def test_independent_clone_is_not_a_parent_project(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            (root / "independent" / ".git").mkdir(parents=True)
+            (root / "tool").mkdir()
+            self.assertEqual(discover_project_roots(root), {"tool"})
+
+    def test_submodule_still_requires_classification(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            (root / "submodule").mkdir()
+            (root / "submodule" / ".git").write_text(
+                "gitdir: ../.git/modules/submodule\n", encoding="utf-8"
+            )
+            self.assertEqual(discover_project_roots(root), {"submodule"})
+
     def test_accepts_classified_usable_project(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)

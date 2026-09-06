@@ -21,6 +21,10 @@ COMPONENTS = (
 MAIN_WORKFLOW = ".github/workflows/script-validation.yml"
 EXPERIMENTAL_WORKFLOW = ".github/workflows/experimental-validation.yml"
 CREWAI_ROOT = "scripts/python/openclaw_crewai_admin/"
+SELECTOR_PATHS = {
+    "scripts/python/ci_changed_components.py",
+    "scripts/python/tests/test_ci_changed_components.py",
+}
 
 
 def _normalise(path: str) -> str:
@@ -39,6 +43,9 @@ def classify_paths(
     for raw_path in paths:
         path = _normalise(raw_path)
 
+        if path in SELECTOR_PATHS:
+            selected = dict.fromkeys(COMPONENTS, True)
+
         if path == MAIN_WORKFLOW:
             for component in ("maturity", "powershell", "bash", "python"):
                 selected[component] = True
@@ -49,7 +56,7 @@ def classify_paths(
         if path in {
             "project-maturity.toml",
             "scripts/python/check_project_maturity.py",
-            "scripts/python/tests/test_check_project_maturity.py",
+            "scripts/python/tests/test_project_maturity.py",
         }:
             selected["maturity"] = True
 
@@ -68,6 +75,10 @@ def classify_paths(
                 or path == "scripts/python/requirements.txt"
             )
         ):
+            selected["python"] = True
+        if path.startswith("litellm_scaleway_dispatching/") and suffix in {
+            ".py", ".yaml", ".yml", ".toml", ".txt"
+        }:
             selected["python"] = True
 
         if path.startswith("tokenized_llm_finance/") and (

@@ -19,11 +19,13 @@ def load_catalog(catalog_path: Path) -> dict[str, Any]:
 
 
 def discover_project_roots(repository_root: Path) -> set[str]:
-    """Return top-level directories that must be classified."""
+    """Return project roots, excluding independent nested Git repositories."""
     return {
         path.name
         for path in repository_root.iterdir()
         if path.is_dir() and path.name not in IGNORED_ROOTS and not path.name.startswith(".")
+        # Submodules use a .git file and still belong to the parent catalog.
+        and not (path / ".git").is_dir()
     }
 
 
