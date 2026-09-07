@@ -62,6 +62,52 @@ ledger.record_outcome(
 print(ledger.model_evidence("powershell-security-review"))
 ```
 
+## Pilot reports: cost per accepted result
+
+Use the read-only report for business comparisons. Unlike the original
+`model_evidence()` summary, it separates each task, provider, model and execution
+mode. Production (`live`) is selected by default; `--execution-mode all` includes
+shadow experiments in separate groups. Requires Python 3.10+ and the standard
+library, on Windows or other Python platforms; no service or credentials needed.
+
+```powershell
+python scripts/python/llm_decision_report.py data/llm_decisions.sqlite3
+python scripts/python/llm_decision_report.py data/llm_decisions.sqlite3 --task-type code-review --quality-threshold 0.85 --format csv > evidence.csv
+```
+
+```python
+from llm_decision_report import business_evidence
+
+rows = business_evidence("data/llm_decisions.sqlite3", quality_threshold=0.85)
+```
+
+An accepted result is successful, has a score at or above the chosen threshold,
+and has a nonblank reviewer other than `automatic` (case-insensitive). This is
+declared review metadata, not authenticated proof of human review. Reviewers
+must use a consistent quality rubric for comparisons to be meaningful.
+
+- `observed_cost_usd`: all recorded outcome costs, including failed, unreviewed
+  and rejected results; this excludes staff time and unrecorded gateway charges.
+- `cost_per_accepted_usd`: observed cost divided by accepted results, or `null`
+  (empty CSV cell) when there are none. It is not a profit estimate.
+- `review_coverage`: reviewed outcomes / completed outcomes.
+- `acceptance_rate`: accepted results / reviewed outcomes, including reviewed
+  failures in the denominator. Undefined rates are `null`, never inferred.
+- `pending` and `cost_is_partial`: missing outcomes mean total costs remain
+  incomplete. Inspect these alongside the sample count and review coverage.
+
+JSON includes filters and threshold; keep the command with CSV exports to retain
+that context. Stdout contains the report; shell redirection creates the requested
+export file. Errors go to stderr with exit status 1. The database must already
+exist with the current ledger schema: the report never creates or migrates it.
+Initialize a legacy database with `DecisionLedger` separately before reporting.
+The report aggregates stored observations; it does not verify their integrity
+or authenticate reviewers. It excludes free-text reasons, notes and reviewer IDs.
+
+Costs and policy ceilings must be finite and non-negative. Outcomes require a
+boolean success flag and non-negative integer latency. Integer estimated costs
+are normalized to SQLite's float representation for stable new decision hashes.
+
 ## SaaS direction
 
 A first sellable product can expose this ledger through an API and dashboard with:

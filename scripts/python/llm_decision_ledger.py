@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -35,6 +36,11 @@ class GovernancePolicy:
     approval_risk_levels: tuple[str, ...] = ("high", "critical")
     local_only_data_classifications: tuple[str, ...] = ("restricted",)
     max_live_estimated_cost_usd: Optional[float] = None
+
+    def __post_init__(self) -> None:
+        ceiling = self.max_live_estimated_cost_usd
+        if ceiling is not None and (not math.isfinite(ceiling) or ceiling < 0):
+            raise ValueError("maximum live cost must be finite and non-negative")
 
 
 @dataclass(frozen=True)
@@ -155,6 +161,8 @@ class DecisionLedger:
     def _canonical_payload(decision: Decision) -> str:
         payload = asdict(decision)
         payload["alternative_models"] = list(decision.alternative_models)
+        # SQLite REAL returns floats, including when the caller supplied an int.
+        payload["estimated_cost_usd"] = float(decision.estimated_cost_usd)
         return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
     @staticmethod
@@ -186,8 +194,8 @@ class DecisionLedger:
         empty_fields = [name for name, value in required_text.items() if not value.strip()]
         if empty_fields:
             raise ValueError(f"required fields cannot be empty: {', '.join(empty_fields)}")
-        if decision.estimated_cost_usd < 0:
-            raise ValueError("estimated_cost_usd cannot be negative")
+        if not math.isfinite(decision.estimated_cost_usd) or decision.estimated_cost_usd < 0:
+            raise ValueError("estimated_cost_usd must be finite and non-negative")
         if decision.risk_level not in RISK_LEVELS:
             raise ValueError(f"unsupported risk_level: {decision.risk_level}")
         if decision.data_classification not in DATA_CLASSIFICATIONS:
@@ -273,8 +281,12 @@ class DecisionLedger:
         return digest
 
     def record_outcome(self, outcome: Outcome) -> None:
-        if outcome.latency_ms < 0 or outcome.actual_cost_usd < 0:
-            raise ValueError("latency and cost must be non-negative")
+        if type(outcome.success) is not bool:
+            raise ValueError("success must be a boolean")
+        if type(outcome.latency_ms) is not int or outcome.latency_ms < 0:
+            raise ValueError("latency_ms must be a non-negative integer")
+        if not math.isfinite(outcome.actual_cost_usd) or outcome.actual_cost_usd < 0:
+            raise ValueError("actual_cost_usd must be finite and non-negative")
         if outcome.quality_score is not None and not 0 <= outcome.quality_score <= 1:
             raise ValueError("quality_score must be between 0 and 1")
 
