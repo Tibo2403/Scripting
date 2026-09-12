@@ -16,9 +16,6 @@ it on code authorized for transmission to the configured service. Provider calls
 may incur charges. Store credentials outside Git. Generated `AI_REPORT.md` is
 ignored by Git.
 
-The older `tools/tools/` variants are separate experiments. Their shell wrapper
-checks `inkling_api` but invokes the root analyzer; the nested Python script uses
-`INKLING_API` and the Anthropic SDK. They are not a supported entry point.
 The refactoring prototype currently tolerates pytest failures, so its exit code
 does not establish that tests passed; inspect the test results separately.
 
@@ -27,7 +24,7 @@ Reproducible offline checks (also run by the maturity-catalog CI job):
 ```bash
 python scripts/python/check_project_maturity.py
 python -m compileall -q tools
-bash -n tools/analyze-ai.sh tools/refactor.sh tools/tools/analyze-ai.sh
+bash -n tools/analyze-ai.sh tools/refactor.sh
 ```
 
 These checks validate classification and syntax only. No live provider calls or

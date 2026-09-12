@@ -30,7 +30,7 @@ jobs:
       - name: Validate experimental tools syntax without provider calls
         run: |
           python -m compileall -q tools
-          bash -n tools/analyze-ai.sh tools/refactor.sh tools/tools/analyze-ai.sh
+          bash -n tools/analyze-ai.sh tools/refactor.sh
 
   powershell:
     name: PowerShell validation
