@@ -110,6 +110,10 @@ jobs:
         shell: pwsh
         run: ./scripts/tests/Test-Optimize-CodexWorkspace.ps1
 
+      - name: Run simulated service management tests
+        shell: pwsh
+        run: ./scripts/tests/Test-ManageServices.ps1
+
       - name: Run Codex LiteLLM switch smoke test
         shell: pwsh
         run: ./scripts/tests/Test-Switch-CodexLiteLLM.ps1

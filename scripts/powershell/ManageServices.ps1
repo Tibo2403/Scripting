@@ -1,149 +1,75 @@
-#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Starts, stops, restarts or checks the status of a Windows service.
+    Starts, stops, restarts or checks Windows services locally or through WinRM.
 .DESCRIPTION
-    Allows simple service management by passing an action and service name.
-    The script wraps standard service cmdlets for quick usage.
-.PARAMETER Action
-    The operation to perform: start, stop, restart or status.
-.PARAMETER ServiceName
-    One or more service names to manage.
+    Returns service objects and stops on the first failure. An uncaught error
+    returns a non-zero exit code with powershell/pwsh -File. Mutations require
+    appropriate service permissions (usually elevation); status does not.
 .PARAMETER ComputerName
-    Optional remote computer. Defaults to the local machine.
+    Target computer. Remote operations require PowerShell remoting (WinRM).
 .PARAMETER Credential
-    Optional credentials for accessing the remote computer.
+    Optional remote credentials. Not supported for local operations.
 .EXAMPLE
-    PS> .\ManageServices.ps1 -Action status -ServiceName spooler
-    Retrieves the status of the Print Spooler service.
+    .\ManageServices.ps1 -Action status -ServiceName spooler
 .EXAMPLE
-    PS> .\ManageServices.ps1 -Action restart -ServiceName wuauserv
-    Restarts the Windows Update service.
+    .\ManageServices.ps1 -Action restart -ServiceName spooler -WhatIf
 .EXAMPLE
-    PS> $cred = Get-Credential; .\ManageServices.ps1 -Action stop -ServiceName spooler,bits -ComputerName SERVER01 -Credential $cred
-    Stops the Print Spooler and BITS services on SERVER01 using the specified credential.
+    .\ManageServices.ps1 -Action stop -ServiceName spooler -ComputerName SERVER01 -Credential (Get-Credential)
 #>
-
-[CmdletBinding(SupportsShouldProcess=$true)]
+[CmdletBinding(SupportsShouldProcess = $true)]
 param(
-    [Parameter(Mandatory=$true)]
-    [ValidateSet('start','stop','restart','status')]
+    [Parameter(Mandatory = $true)]
+    [ValidateSet('start', 'stop', 'restart', 'status')]
     [string]$Action,
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory = $true)]
+    [ValidateNotNullOrEmpty()]
     [string[]]$ServiceName,
+    [ValidateNotNullOrEmpty()]
     [string]$ComputerName = $env:COMPUTERNAME,
     [PSCredential]$Credential
 )
 
-function Invoke-ServiceAction {
-    [CmdletBinding(SupportsShouldProcess=$true)]
-    param(
-        [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
-        [string]$Name,
-        [Parameter(Mandatory=$true)]
-        [ValidateSet('start','stop')]
-        [string]$Action,
-        [string]$ComputerName = $env:COMPUTERNAME,
-        [PSCredential]$Credential
-    )
-    process {
-        try {
-            if ($Credential) {
-                Get-Service -Name $Name -ComputerName $ComputerName -Credential $Credential -ErrorAction Stop | Out-Null
-            } else {
-                Get-Service -Name $Name -ComputerName $ComputerName -ErrorAction Stop | Out-Null
-            }
-        } catch {
-            Write-Error "Service '$Name' was not found on $ComputerName."
-            return
-        }
-
-        if ($PSCmdlet.ShouldProcess("$Name on $ComputerName", $Action)) {
-            try {
-                if ($ComputerName -eq $env:COMPUTERNAME) {
-                    if ($Action -eq 'start') {
-                        Start-Service -Name $Name
-                    } else {
-                        Stop-Service -Name $Name
-                    }
-                } else {
-                    $scriptBlock = {
-                        param($svcName, $svcAction)
-                        if ($svcAction -eq 'start') {
-                            Start-Service -Name $svcName
-                        } else {
-                            Stop-Service -Name $svcName
-                        }
-                    }
-                    if ($Credential) {
-                        Invoke-Command -ComputerName $ComputerName -Credential $Credential -ScriptBlock $scriptBlock -ArgumentList $Name,$Action
-                    } else {
-                        Invoke-Command -ComputerName $ComputerName -ScriptBlock $scriptBlock -ArgumentList $Name,$Action
-                    }
-                }
-                Write-Output "Service '$Name' $($Action + 'ed') successfully on $ComputerName."
-            } catch {
-                Write-Error "Failed to $Action service '$Name' on $ComputerName. $_"
-            }
-        }
+$ErrorActionPreference = 'Stop'
+$isLocal = $ComputerName -in @('.', 'localhost', $env:COMPUTERNAME)
+if ($isLocal -and $Credential) {
+    throw 'Credential is only supported for remote computers.'
+}
+foreach ($name in $ServiceName) {
+    if ([string]::IsNullOrWhiteSpace($name) -or [WildcardPattern]::ContainsWildcardCharacters($name)) {
+        throw 'ServiceName must contain exact, non-empty service names without wildcards.'
     }
 }
 
-switch ($Action.ToLower()) {
-    'start' {
-        $ServiceName | Invoke-ServiceAction -Action 'start' -ComputerName $ComputerName -Credential $Credential
+# Run the same operation locally or inside the authenticated remote session.
+$operation = {
+    param([string]$Name, [string]$RequestedAction)
+    $service = Get-Service -Name $Name -ErrorAction Stop
+    switch ($RequestedAction) {
+        'start' { Start-Service -InputObject $service -ErrorAction Stop }
+        'stop' { Stop-Service -InputObject $service -ErrorAction Stop }
+        'restart' { Restart-Service -InputObject $service -ErrorAction Stop }
     }
-    'stop' {
-        $ServiceName | Invoke-ServiceAction -Action 'stop' -ComputerName $ComputerName -Credential $Credential
-    }
-    'restart' {
-        foreach ($name in $ServiceName) {
-            try {
-                if ($Credential) {
-                    $service = Get-Service -Name $name -ComputerName $ComputerName -Credential $Credential -ErrorAction Stop
-                } else {
-                    $service = Get-Service -Name $name -ComputerName $ComputerName -ErrorAction Stop
-                }
-            } catch {
-                Write-Error "Service '$name' was not found on $ComputerName."
-                continue
-            }
+    Get-Service -Name $Name -ErrorAction Stop
+}
 
-            if ($PSCmdlet.ShouldProcess("$name on $ComputerName", $Action)) {
-                try {
-                    if ($ComputerName -eq $env:COMPUTERNAME) {
-                        Restart-Service -InputObject $service
-                    } else {
-                        if ($Credential) {
-                            Invoke-Command -ComputerName $ComputerName -Credential $Credential -ScriptBlock { Restart-Service -Name $using:name }
-                        } else {
-                            Invoke-Command -ComputerName $ComputerName -ScriptBlock { Restart-Service -Name $using:name }
-                        }
-                    }
-                    Write-Output "Service '$name' restarted successfully on $ComputerName."
-                } catch {
-                    Write-Error "Failed to restart service '$name' on $ComputerName. $_"
-                }
-            }
-        }
+foreach ($name in $ServiceName) {
+    if ($Action -ne 'status' -and -not $PSCmdlet.ShouldProcess("$name on $ComputerName", $Action)) {
+        continue
     }
-    'status' {
-        foreach ($name in $ServiceName) {
-            try {
-                if ($Credential) {
-                    $service = Get-Service -Name $name -ComputerName $ComputerName -Credential $Credential -ErrorAction Stop
-                } else {
-                    $service = Get-Service -Name $name -ComputerName $ComputerName -ErrorAction Stop
-                }
-            } catch {
-                Write-Error "Service '$name' was not found on $ComputerName."
-                continue
+    try {
+        if ($isLocal) {
+            & $operation $name $Action
+        } else {
+            $remoteParameters = @{
+                ComputerName = $ComputerName
+                ScriptBlock = $operation
+                ArgumentList = @($name, $Action)
+                ErrorAction = 'Stop'
             }
-
-            if ($PSCmdlet.ShouldProcess("$name on $ComputerName", $Action)) {
-                $service | Format-List Name, Status
-                Write-Output "Service '$name' status retrieved successfully on $ComputerName."
-            }
+            if ($Credential) { $remoteParameters.Credential = $Credential }
+            Invoke-Command @remoteParameters
         }
+    } catch {
+        throw "Failed to $Action service '$name' on ${ComputerName}: $($_.Exception.Message)"
     }
 }
