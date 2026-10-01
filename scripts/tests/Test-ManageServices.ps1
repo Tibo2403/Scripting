@@ -1,4 +1,6 @@
 # All service and remoting commands are simulated; no elevation or WinRM needed.
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidOverwritingBuiltInCmdlets', '', Scope = 'Function', Target = '^(Get-Service|Start-Service|Stop-Service|Restart-Service|Invoke-Command)$', Justification = 'Offline test doubles deliberately intercept service and remoting cmdlets.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Scope = 'Function', Target = '^(Start-Service|Stop-Service|Restart-Service)$', Justification = 'These test doubles only record calls; the production script owns ShouldProcess.')]
 [CmdletBinding()]
 param()
 $ErrorActionPreference = 'Stop'
@@ -80,8 +82,9 @@ foreach ($invalid in @(' ', '*', 'alpha?')) {
     catch { $caught = $true }
     Assert-Condition ($caught -and $calls.Count -eq 0) 'Validate all names before any mutation.'
 }
-$credential = [pscredential]::new('test-user', (ConvertTo-SecureString 'test-only' -AsPlainText -Force))
-& $serviceScript -Action status -ServiceName alpha -ComputerName remote-example -Credential $credential | Out-Null
+$credential = [pscredential]::new('test-user', [securestring]::new())
+$remoteTarget = 'remote-example'
+& $serviceScript -Action status -ServiceName alpha -ComputerName $remoteTarget -Credential $credential | Out-Null
 Assert-Condition ($simulation.RemoteCredential -eq $credential) 'Remote credentials must be forwarded.'
 $caught = $false
 try { & $serviceScript -Action status -ServiceName alpha -ComputerName localhost -Credential $credential }

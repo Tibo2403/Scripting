@@ -209,7 +209,11 @@ contract InfrastructureTest is Test {
             _signedReceipt(keccak256("usage-breakdown"), 5 * WAD);
         receipt.providerCostEurWad += 1;
 
-        vm.expectRevert(AgentSettlementVault.InvalidProviderCost.selector);
+        vm.expectRevert(abi.encodeWithSelector(
+            AgentSettlementVault.InvalidProviderCost.selector,
+            receipt.providerCostEurWad - 1,
+            receipt.providerCostEurWad
+        ));
         vm.prank(address(timelock));
         vault.settle(receipt, signature);
     }

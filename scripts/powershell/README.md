@@ -24,6 +24,33 @@ This directory contains PowerShell scripts for Windows administration, Microsoft
 
 ## Notes
 
+### Codex Workspace Doctor
+
+`Optimize-CodexWorkspace.ps1` audits a project and can update the managed section
+of `AGENTS.md` with `-Fix`, remove it with `-Disable`, and write JSON with
+`-ReportPath`. Existing reports require `-ForceReportOverwrite`. Use `-WhatIf`
+to preview file changes. Project-defined validation commands require both
+`-Validate` and `-AllowProjectCommands`; enable these only for trusted projects.
+
+```powershell
+.\scripts\powershell\Optimize-CodexWorkspace.ps1 -ProjectPath . -Fix -WhatIf
+.\scripts\tests\Test-Optimize-CodexWorkspace.ps1
+```
+
+Run these commands from the repository root in PowerShell on Windows. The smoke
+test requires Git, Node.js and npm, creates and removes a temporary fixture, and
+includes a 45-second timeout check. The audit itself does not require elevation;
+optional validation requires the tools appropriate to the inspected project.
+
+Keep the `workspace-doctor` directory beside the entry script when copying it.
+Its private helpers are loaded into the entry script's scope to preserve access
+to audit parameters and `ShouldProcess`: `Inventory.ps1` handles discovery and
+secret scanning, `Validation.ps1` runs checks, `Readiness.ps1` calculates audit
+results, and `Agents.ps1` maintains the generated guidance. Invoke the entry
+script rather than these helper files directly.
+
+### Service management
+
 `ManageServices.ps1` supports Windows PowerShell 5.1 and PowerShell 7 on Windows.
 It returns service objects and stops on the first failure (non-zero exit with
 `powershell/pwsh -File`). Local status queries do not require elevation; changes

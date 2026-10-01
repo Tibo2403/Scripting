@@ -1,0 +1,2 @@
+-c constraints-ci.txt
+-r requirements-dev.txt

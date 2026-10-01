@@ -1,0 +1,3 @@
+-r requirements.txt
+-c constraints-ci.txt
+ruff==0.15.16

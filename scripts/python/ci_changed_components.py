@@ -24,6 +24,8 @@ CREWAI_ROOT = "scripts/python/openclaw_crewai_admin/"
 SELECTOR_PATHS = {
     "scripts/python/ci_changed_components.py",
     "scripts/python/tests/test_ci_changed_components.py",
+    "scripts/python/ci_lint_changed.py",
+    "scripts/python/tests/test_ci_lint_changed.py",
 }
 
 
@@ -65,19 +67,28 @@ def classify_paths(
             path.startswith("scripts/") and suffix in {".ps1", ".psd1", ".psm1"}
         ):
             selected["powershell"] = True
-        if path.startswith("scripts/") and suffix == ".sh" and not path.startswith(CREWAI_ROOT):
+        if (
+            path.startswith("scripts/")
+            and suffix == ".sh"
+            and not path.startswith(CREWAI_ROOT)
+        ):
             selected["bash"] = True
         if (
             path.startswith("scripts/python/")
             and not path.startswith(CREWAI_ROOT)
             and (
-                suffix in {".py", ".yaml", ".yml"}
-                or path == "scripts/python/requirements.txt"
+                suffix in {".py", ".yaml", ".yml", ".toml"}
+                or PurePosixPath(path).name.startswith(("requirements", "constraints"))
+                and suffix == ".txt"
             )
         ):
             selected["python"] = True
         if path.startswith("litellm_scaleway_dispatching/") and suffix in {
-            ".py", ".yaml", ".yml", ".toml", ".txt"
+            ".py",
+            ".yaml",
+            ".yml",
+            ".toml",
+            ".txt",
         }:
             selected["python"] = True
 
@@ -85,13 +96,14 @@ def classify_paths(
             suffix in {".py", ".sol", ".toml", ".txt"}
         ):
             selected["tokenized"] = True
-        if path.startswith(
-            ("openclaw-akash-dual-agents/", "openclaw-inkling-akash/")
-        ) and suffix == ".sh":
-            selected["shell_prototypes"] = True
-        if (path.startswith("pra/") and suffix in {".ps1", ".psd1", ".psm1"}) or path == (
-            "scripts/powershell/Test-ScriptSyntax.ps1"
+        if (
+            path.startswith(("openclaw-akash-dual-agents/", "openclaw-inkling-akash/"))
+            and suffix == ".sh"
         ):
+            selected["shell_prototypes"] = True
+        if (
+            path.startswith("pra/") and suffix in {".ps1", ".psd1", ".psm1"}
+        ) or path == ("scripts/powershell/Test-ScriptSyntax.ps1"):
             selected["pra"] = True
 
     if top_level_directories_changed:
@@ -107,11 +119,14 @@ def _run_git(*args: str) -> list[str]:
 
 
 def _revision_exists(revision: str) -> bool:
-    return subprocess.run(
-        ["git", "cat-file", "-e", f"{revision}^{{commit}}"],
-        capture_output=True,
-        check=False,
-    ).returncode == 0
+    return (
+        subprocess.run(
+            ["git", "cat-file", "-e", f"{revision}^{{commit}}"],
+            capture_output=True,
+            check=False,
+        ).returncode
+        == 0
+    )
 
 
 def _initial_commit_paths(head: str) -> list[str]:
@@ -126,7 +141,9 @@ def changed_paths(base: str, head: str) -> list[str]:
         if len(fields) < 2:
             return _initial_commit_paths(head)
         base = fields[1]
-    return _run_git("diff", "--name-only", "--diff-filter=ACDMRTUXB", f"{base}...{head}")
+    return _run_git(
+        "diff", "--name-only", "--diff-filter=ACDMRTUXB", f"{base}...{head}"
+    )
 
 
 def top_level_directories(revision: str) -> set[str]:

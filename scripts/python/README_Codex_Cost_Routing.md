@@ -1,5 +1,47 @@
 # Codex Cost Router
 
+## Maintenance and validation
+
+`codex_cost_router.py` remains the command-line entry point. Its implementation
+is split into focused modules: configuration (`codex_router_config`), prompt
+preparation (`codex_router_prompt`), policy loading (`codex_router_policy`),
+provider availability and fallback (`codex_router_availability`,
+`codex_router_providers`), model selection (`codex_router_selection`), adaptive
+decisions (`codex_router_adaptive`), local execution (`codex_router_ollama`),
+history (`codex_router_storage`), and administration (`codex_router_admin`).
+Keep these files together when installing or copying the wrapper. CLI arguments,
+configuration paths, and history formats are unchanged.
+
+From the repository root, with Python 3.11 or 3.12 and the CI dependencies installed:
+
+```text
+python -m pip install -r scripts/python/requirements-ci.txt
+python -m compileall -q scripts/python
+python -m ruff check --config scripts/python/ruff.toml scripts/python
+python -m unittest discover -s scripts/python/tests -v
+```
+
+CI runs these checks on Windows and Linux. Ruff currently covers the router,
+its tests, and CI change selection; extend `ruff.toml` as other components are
+cleaned up. Ruff is pinned in `requirements-ci.txt`; runtime dependencies retain
+the ranges in `requirements.txt`. Tests use temporary files and mocked provider
+calls; they do not require paid API access or a running proxy.
+
+The optional risk router has dedicated offline regression tests for model
+selection, cooldown expiry, concurrency limits, metrics, state persistence, and
+streaming resource cleanup after client or upstream failures.
+Run them independently with:
+
+```text
+python -m unittest discover -s scripts/python/tests -p "test_risk_adjusted_router*.py" -v
+```
+
+Streaming tests use mocked connections; they do not exercise the HTTP server or
+live provider responses. The router closes streaming upstream responses and
+releases concurrency slots even if headers, metrics writes, or cleanup fail.
+
+## Usage
+
 Optional routing for Codex CLI on Windows. The default path is the normal Codex CLI. LiteLLM is an opt-in proxy used when you want Gemini API dispatch or a shared gateway to local Qwen.
 
 For a short mode chooser covering Standard Codex, LiteLLM, Hugging Face, direct
@@ -640,6 +682,11 @@ Prompts and API keys are not logged.
   context-window fallbacks, cooldowns, and compatibility aliases.
 
 ## Notes
+
+The risk router entry point delegates configuration to `risk_router_config.py`,
+routing and metrics to `risk_router_core.py`, and HTTP/streaming to
+`risk_router_http.py`. The command-line entry point remains unchanged.
+See [CI validation](CI_VALIDATION.md) for pinned dependencies and local checks.
 
 - LiteLLM runs locally and self-hosted.
 - The configuration does not enable LiteLLM Cloud or Enterprise features.

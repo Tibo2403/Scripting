@@ -59,7 +59,7 @@ validation = [
 limitations = [
   "Le test Docker exige les images dual:test et inkling:test; voir scripts/openclaw/VALIDATION.md.",
   "Les modeles distants, Telegram, GitHub et le deploiement Akash ne sont pas testes de bout en bout en CI.",
-  "Promotion preparee localement : construction Docker et CI verte requises avant integration.",
+  "Construction Docker et schema valides par la CI #34033503411 ; voir scripts/openclaw/VALIDATION.md.",
 ]
 
 [[projects]]
@@ -76,7 +76,7 @@ validation = [
 limitations = [
   "Le test Docker exige les images dual:test et inkling:test; voir scripts/openclaw/VALIDATION.md.",
   "L'endpoint Inkling et le deploiement Akash ne sont pas testes de bout en bout en CI.",
-  "Promotion preparee localement : construction Docker et CI verte requises avant integration.",
+  "Construction Docker et schema valides par la CI #34033503411 ; voir scripts/openclaw/VALIDATION.md.",
 ]
 
 [[projects]]
@@ -85,7 +85,7 @@ name = "PRA PME"
 status = "experimental"
 summary = "Orchestrateur et runbook de plan de reprise d'activite pour Windows."
 documentation = "pra/PRA_V2_Operationnel.md"
-validation = ["./scripts/powershell/Test-ScriptSyntax.ps1 -Path ./pra"]
+validation = ["./scripts/powershell/Test-ScriptSyntax.ps1 -Path ./pra", "./pra/tests/Test-PraRecovery.ps1"]
 limitations = [
   "Les commandes de restauration sont des connecteurs a adapter et aucun exercice de reprise reel n'est automatise.",
 ]
@@ -101,7 +101,7 @@ validation = [
   "forge test --root tokenized_llm_finance",
 ]
 limitations = [
-  "Les contrats ne sont pas audites et les tests Foundry ne sont pas encore executes par la CI.",
+  "Les contrats ne sont pas audites ; le workflow experimental inclut les tests Foundry, sans validation de deploiement reel.",
   "Le prototype ne constitue ni un produit financier, ni une certification reglementaire.",
   "La frontiere BOUNDARIES.md exclut reserves obligataires, levier, repo et stabilisation des taux.",
 ]

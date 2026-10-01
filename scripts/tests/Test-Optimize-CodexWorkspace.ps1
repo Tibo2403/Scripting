@@ -29,6 +29,12 @@ try {
     Set-Content -LiteralPath $agentsPath -Value "# Team guidance`n`nKeep this line."
     git -C $testRoot init | Out-Null
 
+    $originalAgents = Get-Content -LiteralPath $agentsPath -Raw
+    & $doctor -ProjectPath $testRoot -Fix -ReportPath $reportPath -WhatIf
+    if ((Get-Content -LiteralPath $agentsPath -Raw) -cne $originalAgents -or (Test-Path -LiteralPath $reportPath)) {
+        throw 'WhatIf changed AGENTS.md or created a report.'
+    }
+
     & $doctor -ProjectPath $testRoot -Fix -ReportPath $reportPath
     $overwriteRefused = $false
     try {
@@ -146,6 +152,11 @@ try {
         throw 'Redacted validation diagnostics were reported as new secrets.'
     }
 
+    $agentsBeforeDisable = Get-Content -LiteralPath $agentsPath -Raw
+    & $doctor -ProjectPath $testRoot -Disable -WhatIf
+    if ((Get-Content -LiteralPath $agentsPath -Raw) -cne $agentsBeforeDisable) {
+        throw 'WhatIf removed the managed AGENTS.md block.'
+    }
     & $doctor -ProjectPath $testRoot -Disable
     $disabledAgents = Get-Content -LiteralPath $agentsPath -Raw
     if ($disabledAgents -match '<!-- BEGIN CODEX WORKSPACE DOCTOR -->') {
@@ -172,7 +183,7 @@ try {
         throw 'Partial secret scan coverage was not reported.'
     }
 
-    Write-Host 'Codex Workspace Doctor smoke test passed.'
+    Write-Information -InformationAction Continue 'Codex Workspace Doctor smoke test passed.'
 }
 catch {
     $message = $_.Exception.Message -replace '\r?\n', ' '

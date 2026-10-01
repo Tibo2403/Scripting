@@ -1,6 +1,6 @@
 # Validation des deux profils OpenClaw
 
-Date : 2026-09-06. Perimetre utilisable : configuration, generation SDL et demarrage documente ; revue de code en lecture seule pour dual, conversation avec un fournisseur compatible pour inkling. La promotion dans le catalogue reste a confirmer par la CI avant integration. Aucun deploiement Akash n'a ete effectue.
+Date : 2026-09-06. Perimetre utilisable : configuration, generation SDL et demarrage documente ; revue de code en lecture seule pour dual, conversation avec un fournisseur compatible pour inkling. Validation Docker et schema confirmee par la CI, verifiee le 2026-09-07. Aucun deploiement Akash n'a ete effectue.
 
 ## What Problem This Solves
 
@@ -22,7 +22,9 @@ Le contexte Docker est maintenant la racine du depot. Il faut renseigner les mod
 - Checks : `openclaw config validate` accepte les deux configurations avec le paquet npm exact `openclaw@2026.5.26`, installe temporairement avec `--ignore-scripts`. Secrets factices, aucun appel aux modeles.
 - Checks : syntaxe Bash des scripts modifies reussie ; `python -m compileall -q .` reussi ; `python scripts/python/check_project_maturity.py` reussi (7 projets) ; `git diff --check` reussi sur le perimetre.
 - Checks : PSScriptAnalyzer indisponible ; aucun fichier PowerShell modifie par ce travail.
-- Checks : CI ajoutee dans `.github/workflows/openclaw-deployments.yml`, resultat a verifier sur GitHub. Apres reparation des sockets locales, le moteur Docker Linux 29.6.1 repond et `docker run --rm hello-world` reussit (2026-09-06). Construction et tests des images de ces projets NON executes localement. La validation npm et hello-world ne remplacent pas la validation des images OpenClaw.
+- Checks : [CI OpenClaw deployment profiles #34033503411](https://github.com/Tibo2403/Scripting/actions/runs/34033503411) : **success**, du 2026-09-06 12:34:24 UTC au 12:35:15 UTC, commit `ee6a379d63847528248625e7d597de6bf777867e`. Le job `validate` confirme les tests Node, le smoke Bash, la construction de `dual:test` et `inkling:test`, puis `docker-schema.sh` dans les deux images avec `--network none`.
+- Correspondance verifiee le 2026-09-07 : `git diff ee6a379d63847528248625e7d597de6bf777867e 13706da98fc69a2855367d7a082b919d42f2bedc -- openclaw-akash-dual-agents openclaw-inkling-akash scripts/openclaw .github/workflows/openclaw-deployments.yml` ne montre aucune difference. La preuve couvre donc les fichiers executables actuels ; cette mise a jour documentaire ne change pas les images.
+- Execution locale du 2026-09-07 : moteur Docker Desktop Linux arrete (pipe absent), aucune nouvelle construction locale revendiquee. La preuve de construction des images vient du runner Linux GitHub, pas de hello-world.
 - Autoreview : revue manuelle du code effectuee ; pas d'autoreview independante. Verifications : pas de `source .env`, substitutions shell conservees comme texte, URL HTTPS validee, jeton de passerelle obligatoire, permissions POSIX restrictives, erreurs non ignorees, aucun reset Git ni publication automatique. Les espaces de travail partages ne sont pas une isolation de securite ; l'outil read peut lire les fichiers accessibles au processus. Ne pas monter d'autres secrets dans ce conteneur.
 
 ## Reproduire la validation complete
@@ -37,4 +39,4 @@ docker build -f openclaw-inkling-akash/Dockerfile -t inkling:test .
 bash scripts/openclaw/tests/docker-schema.sh
 ```
 
-Le dernier test valide le schema dans chaque image sans reseau. Il ne demarre pas les integrations distantes. Avant integration de la promotion, obtenir une CI verte ; avant exploitation, effectuer le premier appel manuel documente avec ses propres identifiants, verifier le pairing Telegram et tester le stockage chez le fournisseur Akash. Ces essais externes ne sont pas presentes comme reussis ici.
+Le dernier test valide le schema dans chaque image sans reseau. Il ne demarre pas les integrations distantes. La CI ci-dessus satisfait la verification Docker/schema de la promotion. Avant exploitation, effectuer le premier appel manuel documente avec ses propres identifiants, verifier le pairing Telegram et tester le stockage chez le fournisseur Akash. Ces essais externes ne sont pas presentes comme reussis ici.

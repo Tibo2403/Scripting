@@ -1,10 +1,11 @@
 """Tests for the optional Codex cost-routing wrapper."""
 
-import importlib.util
+import importlib
+import os
+import socket
 import sys
 import tempfile
 import unittest
-from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -12,64 +13,93 @@ from unittest.mock import patch
 MODULE_PATH = Path(__file__).resolve().parents[1] / "codex_cost_router.py"
 if str(MODULE_PATH.parent) not in sys.path:
     sys.path.insert(0, str(MODULE_PATH.parent))
-SPEC = importlib.util.spec_from_file_location("codex_cost_router", MODULE_PATH)
-if SPEC is None or SPEC.loader is None:
-    raise RuntimeError("Unable to load codex_cost_router.py")
-ROUTER = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(ROUTER)
+router_availability = importlib.import_module("codex_router_availability")
+router_config = importlib.import_module("codex_router_config")
+router_policy = importlib.import_module("codex_router_policy")
+router_prompt = importlib.import_module("codex_router_prompt")
+router_providers = importlib.import_module("codex_router_providers")
+router_selection = importlib.import_module("codex_router_selection")
+router_storage = importlib.import_module("codex_router_storage")
 
 
-class CodexCostRouterTests(unittest.TestCase):
+class CodexRouterRoutingTests(unittest.TestCase):
     def test_clean_text_removes_html_and_duplicate_lines(self) -> None:
         text = "<p>Hello</p>\nHello\nHello\n\nWorld"
-        self.assertEqual(ROUTER.clean_text(text), "Hello\n\nWorld")
+        self.assertEqual(router_prompt.clean_text(text), "Hello\n\nWorld")
 
     def test_compress_logs_removes_low_value_debug_lines(self) -> None:
         text = "DEBUG progress 1\nDEBUG progress 2\nERROR request failed"
-        self.assertEqual(ROUTER.compress_logs(text), "ERROR request failed")
+        self.assertEqual(router_prompt.compress_logs(text), "ERROR request failed")
 
     def test_route_model_uses_expected_aliases(self) -> None:
         with (
-            patch.object(ROUTER, "phi_available", return_value=False),
-            patch.object(ROUTER, "claude_available", return_value=False),
-            patch.object(ROUTER, "proxy_available", return_value=False),
+            patch.object(router_availability, "phi_available", return_value=False),
+            patch.object(router_availability, "claude_available", return_value=False),
+            patch.object(router_availability, "proxy_available", return_value=False),
         ):
-            self.assertEqual(ROUTER.route_model("Corrige une typo dans le README")[0], "codex-light")
-            self.assertEqual(ROUTER.route_model("Refactor this Python API")[0], "codex-default")
-            self.assertEqual(ROUTER.route_model("Audit securite production Supabase RLS")[0], "codex-deep")
+            self.assertEqual(
+                router_selection.route_model("Corrige une typo dans le README")[0],
+                "codex-light",
+            )
+            self.assertEqual(
+                router_selection.route_model("Refactor this Python API")[0],
+                "codex-default",
+            )
+            self.assertEqual(
+                router_selection.route_model("Audit securite production Supabase RLS")[
+                    0
+                ],
+                "codex-deep",
+            )
 
     def test_route_model_can_use_phi_for_small_local_tasks(self) -> None:
-        with patch.object(ROUTER, "phi_available", return_value=True):
-            model, reason = ROUTER.route_model("Corrige une typo dans le README", provider="local-small")
+        with patch.object(router_availability, "phi_available", return_value=True):
+            model, reason = router_selection.route_model(
+                "Corrige une typo dans le README", provider="local-small"
+            )
         self.assertEqual(model, "codex-small-local")
         self.assertIn("64 output tokens", reason)
 
     def test_route_model_can_use_claude_for_complex_proxy_tasks(self) -> None:
         with (
-            patch.object(ROUTER, "claude_available", return_value=True),
-            patch.object(ROUTER, "proxy_available", return_value=True),
+            patch.object(router_availability, "claude_available", return_value=True),
+            patch.object(router_availability, "proxy_available", return_value=True),
         ):
-            model, reason = ROUTER.route_model("Audit securite production Supabase RLS", provider="claude")
+            model, reason = router_selection.route_model(
+                "Audit securite production Supabase RLS", provider="claude"
+            )
         self.assertEqual(model, "codex-claude-complex")
         self.assertIn("active LiteLLM proxy", reason)
 
     def test_default_policy_routes_simple_local_and_complex_claude(self) -> None:
         self.assertEqual(
-            ROUTER.provider_from_policy("Corrige une typo dans le README", None, ROUTER.DEFAULT_POLICY)[0],
+            router_providers.provider_from_policy(
+                "Corrige une typo dans le README", None, router_config.DEFAULT_POLICY
+            )[0],
             "local-small",
         )
         self.assertEqual(
-            ROUTER.provider_from_policy("Audit securite production Supabase RLS", None, ROUTER.DEFAULT_POLICY)[0],
+            router_providers.provider_from_policy(
+                "Audit securite production Supabase RLS",
+                None,
+                router_config.DEFAULT_POLICY,
+            )[0],
             "claude",
         )
 
     def test_route_model_matches_accented_french_keywords(self) -> None:
-        self.assertEqual(ROUTER.route_model("Prepare un resume du README")[0], "codex-light")
-        self.assertEqual(ROUTER.route_model("Question de fiscalite pour Odoo")[0], "codex-deep")
+        self.assertEqual(
+            router_selection.route_model("Prepare un resume du README")[0],
+            "codex-light",
+        )
+        self.assertEqual(
+            router_selection.route_model("Question de fiscalite pour Odoo")[0],
+            "codex-deep",
+        )
 
     def test_hybrid_classifier_detects_semantic_operational_risk(self) -> None:
-        category, reason = ROUTER.classify_complexity(
-            "Une fuite mémoire intermittente apparaît sous forte charge"
+        category, reason = router_prompt.classify_complexity(
+            "Une fuite mÃƒÆ’Ã‚Â©moire intermittente apparaÃƒÆ’Ã‚Â®t sous forte charge"
         )
         self.assertEqual(category, "complex")
         self.assertIn("hybrid category=complex", reason)
@@ -79,94 +109,118 @@ class CodexCostRouterTests(unittest.TestCase):
         history = [
             {
                 "execution_mode": "codex-exec",
-                "model": ROUTER.SMALL_LOCAL_MODEL,
+                "model": router_config.SMALL_LOCAL_MODEL,
                 "success": True,
                 "tokens_per_second": 2.5,
             }
         ]
         with (
-            patch.object(ROUTER, "phi_available", return_value=True),
-            patch.object(ROUTER, "qwen_available", return_value=True),
-            patch.object(ROUTER, "read_history", return_value=history),
+            patch.object(router_availability, "phi_available", return_value=True),
+            patch.object(router_availability, "qwen_available", return_value=True),
+            patch.object(router_storage, "read_history", return_value=history),
         ):
-            model, reason = ROUTER.select_local_small_model("simple task")
-        self.assertEqual(model, ROUTER.QWEN_LOCAL_MODEL)
+            model, reason = router_providers.select_local_small_model("simple task")
+        self.assertEqual(model, router_config.QWEN_LOCAL_MODEL)
         self.assertIn("below 5.00 tok/s", reason)
 
     def test_route_model_sends_long_context_to_gemini_biased_alias(self) -> None:
         self.assertEqual(
-            ROUTER.route_model("Analyse ces logs et fais une synthese long context")[0],
+            router_selection.route_model(
+                "Analyse ces logs et fais une synthese long context"
+            )[0],
             "codex-long",
         )
         self.assertEqual(
-            ROUTER.route_model("Summarize this large file", provider="gemini")[0],
+            router_selection.route_model(
+                "Summarize this large file", provider="gemini"
+            )[0],
             "codex-long",
         )
 
     def test_route_model_can_prefer_hugging_face_when_token_exists(self) -> None:
-        with patch.dict(ROUTER.os.environ, {"HF_TOKEN": "hf_test"}):
+        with patch.dict(os.environ, {"HF_TOKEN": "hf_test"}):
             self.assertEqual(
-                ROUTER.route_model("Benchmark Hugging Face multi-provider routing")[0],
+                router_selection.route_model(
+                    "Benchmark Hugging Face multi-provider routing"
+                )[0],
                 "codex-hf-fast",
             )
             self.assertEqual(
-                ROUTER.route_model("Corrige une typo dans le README", provider="huggingface")[0],
+                router_selection.route_model(
+                    "Corrige une typo dans le README", provider="huggingface"
+                )[0],
                 "codex-hf-cheap",
             )
 
     def test_route_model_falls_back_when_hugging_face_token_is_missing(self) -> None:
-        with patch.dict(ROUTER.os.environ, {}, clear=True):
-            model, reason = ROUTER.route_model("Use Hugging Face providers", provider="huggingface")
+        with patch.dict(os.environ, {}, clear=True):
+            model, reason = router_selection.route_model(
+                "Use Hugging Face providers", provider="huggingface"
+            )
             self.assertEqual(model, "codex-default")
             self.assertIn("HF_TOKEN is missing", reason)
 
     def test_route_model_can_use_local_qwen_when_ollama_is_reachable(self) -> None:
         with (
-            patch.dict(ROUTER.os.environ, {"QWEN_API_BASE": "https://ignored.example/v1"}),
-            patch.object(ROUTER.socket, "create_connection"),
+            patch.dict(os.environ, {"QWEN_API_BASE": "https://ignored.example/v1"}),
+            patch.object(socket, "create_connection"),
         ):
             self.assertEqual(
-                ROUTER.route_model("Use qwen ollama as backup", provider="qwen")[0],
+                router_selection.route_model(
+                    "Use qwen ollama as backup", provider="qwen"
+                )[0],
                 "codex-qwen-local",
             )
             self.assertEqual(
-                ROUTER.route_model("Prefer local llm fallback")[0],
+                router_selection.route_model("Prefer local llm fallback")[0],
                 "codex-qwen-local",
             )
 
     def test_route_model_can_avoid_openai_with_gemini_qwen_alias(self) -> None:
-        with patch.object(ROUTER.socket, "create_connection"):
-            model, reason = ROUTER.route_model("Refactor this Python API", provider="no-openai")
+        with patch.object(socket, "create_connection"):
+            model, reason = router_selection.route_model(
+                "Refactor this Python API", provider="no-openai"
+            )
         self.assertEqual(model, "codex-no-openai")
         self.assertIn("OpenAI avoided", reason)
 
     def test_route_model_falls_back_when_qwen_endpoint_is_missing(self) -> None:
-        with patch.dict(ROUTER.os.environ, {}, clear=True), patch.object(
-            ROUTER.socket, "create_connection", side_effect=OSError
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch.object(socket, "create_connection", side_effect=OSError),
         ):
-            model, reason = ROUTER.route_model("Use Qwen local", provider="qwen")
+            model, reason = router_selection.route_model(
+                "Use Qwen local", provider="qwen"
+            )
             self.assertEqual(model, "codex-default")
             self.assertIn("Ollama is not listening", reason)
 
     def test_codex_provider_helpers_select_expected_profiles(self) -> None:
-        self.assertEqual(ROUTER.codex_profile("standard"), "standard")
-        self.assertEqual(ROUTER.codex_profile("litellm"), "cost-routing")
-        self.assertEqual(ROUTER.codex_profile("huggingface"), "cost-routing-hf")
-        self.assertEqual(ROUTER.codex_model("codex-hf-fast", "litellm"), "codex-hf-fast")
+        self.assertEqual(router_providers.codex_profile("standard"), "standard")
+        self.assertEqual(router_providers.codex_profile("litellm"), "cost-routing")
         self.assertEqual(
-            ROUTER.codex_model("codex-hf-fast", "huggingface"),
-            ROUTER.HF_DIRECT_MODEL,
+            router_providers.codex_profile("huggingface"), "cost-routing-hf"
+        )
+        self.assertEqual(
+            router_providers.codex_model("codex-hf-fast", "litellm"), "codex-hf-fast"
+        )
+        self.assertEqual(
+            router_providers.codex_model("codex-hf-fast", "huggingface"),
+            router_config.HF_DIRECT_MODEL,
         )
 
     def test_default_codex_provider_rejects_unknown_environment_value(self) -> None:
-        with patch.dict(ROUTER.os.environ, {"CODEX_ROUTER_CODEX_PROVIDER": "unknown"}):
-            self.assertEqual(ROUTER.default_codex_provider(), "auto")
+        with patch.dict(os.environ, {"CODEX_ROUTER_CODEX_PROVIDER": "unknown"}):
+            self.assertEqual(router_providers.default_codex_provider(), "auto")
 
     def test_profile_block_includes_optional_hugging_face_profile(self) -> None:
-        self.assertIn("[model_providers.huggingface]", ROUTER.PROFILE_BLOCK)
-        self.assertIn("[profiles.cost-routing-hf]", ROUTER.PROFILE_BLOCK)
-        self.assertIn('model = "codex-default"', ROUTER.COST_ROUTING_PROFILE)
-        self.assertIn('model = "openai/gpt-oss-120b:fastest"', ROUTER.COST_ROUTING_HF_PROFILE)
+        self.assertIn("[model_providers.huggingface]", router_config.PROFILE_BLOCK)
+        self.assertIn("[profiles.cost-routing-hf]", router_config.PROFILE_BLOCK)
+        self.assertIn('model = "codex-default"', router_config.COST_ROUTING_PROFILE)
+        self.assertIn(
+            'model = "openai/gpt-oss-120b:fastest"',
+            router_config.COST_ROUTING_HF_PROFILE,
+        )
 
     def test_policy_file_can_override_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -187,7 +241,7 @@ class CodexCostRouterTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            loaded = ROUTER.load_policy(policy)
+            loaded = router_policy.load_policy(policy)
         self.assertEqual(loaded["default_provider"], "openai")
         self.assertEqual(loaded["default_codex_provider"], "huggingface")
         self.assertEqual(loaded["task_provider_rules"]["medium"], "openai")
@@ -195,454 +249,118 @@ class CodexCostRouterTests(unittest.TestCase):
 
     def test_policy_resolves_provider_and_fallback_order(self) -> None:
         policy = {
-            **ROUTER.DEFAULT_POLICY,
+            **router_config.DEFAULT_POLICY,
             "task_provider_rules": {"simple": "huggingface", "medium": "openai"},
             "fallback_order": ["huggingface", "litellm"],
         }
-        provider, reason = ROUTER.provider_from_policy("Document this README", None, policy)
+        provider, reason = router_providers.provider_from_policy(
+            "Document this README", None, policy
+        )
         self.assertEqual(provider, "huggingface")
         self.assertIn("policy task rule", reason)
-        with patch.object(ROUTER, "proxy_available", return_value=True):
-            codex_provider, codex_reason = ROUTER.codex_provider_from_policy(None, policy)
+        with patch.object(router_availability, "proxy_available", return_value=True):
+            codex_provider, codex_reason = router_providers.codex_provider_from_policy(
+                None, policy
+            )
         self.assertEqual(codex_provider, "litellm")
         self.assertIn("LiteLLM proxy detected", codex_reason)
         self.assertEqual(
-            ROUTER.fallback_order_from_policy(codex_provider, policy),
+            router_providers.fallback_order_from_policy(codex_provider, policy),
             ["litellm", "huggingface", "standard"],
         )
 
     def test_proxy_expansion_keeps_standard_first_for_normal_traffic(self) -> None:
         policy = {
-            **ROUTER.DEFAULT_POLICY,
+            **router_config.DEFAULT_POLICY,
             "fallback_order": ["litellm", "standard", "huggingface"],
         }
-        order = ROUTER.traffic_preserving_fallback_order(
+        order = router_providers.traffic_preserving_fallback_order(
             "litellm",
             "auto",
-            ROUTER.DEFAULT_MODEL,
+            router_config.DEFAULT_MODEL,
             policy,
         )
         self.assertEqual(order, ["standard", "litellm", "huggingface"])
 
     def test_proxy_routes_stay_first_for_claude_and_gemini_requests(self) -> None:
         policy = {
-            **ROUTER.DEFAULT_POLICY,
+            **router_config.DEFAULT_POLICY,
             "fallback_order": ["standard", "litellm", "huggingface"],
         }
         self.assertEqual(
-            ROUTER.traffic_preserving_fallback_order(
+            router_providers.traffic_preserving_fallback_order(
                 "standard",
                 "claude",
-                ROUTER.CLAUDE_COMPLEX_MODEL,
+                router_config.CLAUDE_COMPLEX_MODEL,
                 policy,
             )[0],
             "litellm",
         )
         self.assertEqual(
-            ROUTER.traffic_preserving_fallback_order(
+            router_providers.traffic_preserving_fallback_order(
                 "standard",
                 "gemini",
-                ROUTER.LONG_MODEL,
+                router_config.LONG_MODEL,
                 policy,
             )[0],
             "litellm",
         )
 
-    def test_run_router_dry_run_keeps_direct_codex_when_proxy_is_available(self) -> None:
-        policy = {
-            **ROUTER.DEFAULT_POLICY,
-            "task_provider_rules": {"medium": "auto"},
-            "fallback_order": ["litellm", "standard", "huggingface"],
-        }
-        args = ROUTER.argparse.Namespace(
-            prompt=["Refactor this Python API"],
-            max_input_tokens=ROUTER.DEFAULT_MAX_INPUT_TOKENS,
-            policy=Path("unused-policy.yaml"),
-            codex_provider=None,
-            provider=None,
-            force_model=None,
-            max_output_tokens=ROUTER.DEFAULT_MAX_OUTPUT_TOKENS,
-            dry_run=True,
-            codex_arg=[],
-        )
-        with tempfile.TemporaryDirectory() as directory:
-            home = Path(directory)
-            log_file = home / "logs" / "cost_router.jsonl"
-            state_file = home / "logs" / "cost_router_state.json"
-            with (
-                patch.object(ROUTER, "LOG_DIR", home / "logs"),
-                patch.object(ROUTER, "LOG_FILE", log_file),
-                patch.object(ROUTER, "STATE_FILE", state_file),
-                patch.object(ROUTER, "load_policy", return_value=policy),
-                patch.object(ROUTER, "proxy_available", return_value=True),
-                patch.object(ROUTER, "qwen_available", return_value=False),
-                patch.object(ROUTER, "phi_available", return_value=False),
-            ):
-                self.assertEqual(ROUTER.run_router(args), 0)
-            record = ROUTER.json.loads(log_file.read_text(encoding="utf-8").splitlines()[0])
-        self.assertEqual(record["requested_codex_provider"], "litellm")
-        self.assertEqual(record["codex_provider"], "standard")
-        self.assertEqual(record["fallback_order"][0], "standard")
-
     def test_policy_open_models_only_prefers_hugging_face(self) -> None:
-        policy = {**ROUTER.DEFAULT_POLICY, "open_models_only": True}
-        self.assertEqual(ROUTER.provider_from_policy("Security review", None, policy)[0], "huggingface")
-        self.assertEqual(ROUTER.codex_provider_from_policy(None, policy)[0], "huggingface")
+        policy = {**router_config.DEFAULT_POLICY, "open_models_only": True}
+        self.assertEqual(
+            router_providers.provider_from_policy("Security review", None, policy)[0],
+            "huggingface",
+        )
+        self.assertEqual(
+            router_providers.codex_provider_from_policy(None, policy)[0], "huggingface"
+        )
 
     def test_policy_or_environment_can_avoid_openai(self) -> None:
-        policy = {**ROUTER.DEFAULT_POLICY, "avoid_openai": True}
-        provider, reason = ROUTER.provider_from_policy("Refactor this Python API", None, policy)
+        policy = {**router_config.DEFAULT_POLICY, "avoid_openai": True}
+        provider, reason = router_providers.provider_from_policy(
+            "Refactor this Python API", None, policy
+        )
         self.assertEqual(provider, "no-openai")
         self.assertIn("OpenAI avoidance", reason)
-        with patch.dict(ROUTER.os.environ, {"CODEX_ROUTER_OPENAI_MODE": "avoid"}):
-            provider, reason = ROUTER.provider_from_policy("Refactor this Python API", None, ROUTER.DEFAULT_POLICY)
-        self.assertEqual(provider, "no-openai")
-        self.assertIn("OpenAI avoidance", reason)
-
-    def test_policy_file_can_configure_adaptive_router(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            policy = Path(directory) / "policy.yaml"
-            policy.write_text(
-                "\n".join(
-                    [
-                        "adaptive_router:",
-                        "  enabled: true",
-                        "  shadow_mode: false",
-                        "  min_confidence_delta: 0.25",
-                        "  cost_guard_enabled: false",
-                        "  max_cost_multiplier: 1.5",
-                    ]
-                ),
-                encoding="utf-8",
+        with patch.dict(os.environ, {"CODEX_ROUTER_OPENAI_MODE": "avoid"}):
+            provider, reason = router_providers.provider_from_policy(
+                "Refactor this Python API", None, router_config.DEFAULT_POLICY
             )
-            loaded = ROUTER.load_policy(policy)
-        config = ROUTER.adaptive_router_config(loaded)
-        self.assertTrue(config["enabled"])
-        self.assertFalse(config["shadow_mode"])
-        self.assertEqual(config["min_confidence_delta"], 0.25)
-        self.assertFalse(config["cost_guard_enabled"])
-        self.assertEqual(config["max_cost_multiplier"], 1.5)
-
-    def test_adaptive_router_shadow_mode_keeps_baseline_order(self) -> None:
-        policy = {
-            **ROUTER.DEFAULT_POLICY,
-            "adaptive_router": {"enabled": True, "shadow_mode": True, "min_confidence_delta": 0.05},
-        }
-        history = [
-            {"codex_provider": "litellm", "ttft_ms": 9000, "latency_ms": 60000, "success": False},
-            {"codex_provider": "litellm", "error_rate": 1.0, "returncode": 1},
-            {"codex_provider": "standard", "ttft_ms": 500, "latency_ms": 3000, "success": True},
-        ]
-        decision = ROUTER.adaptive_router_decision(["litellm", "standard"], policy, history)
-        self.assertEqual(decision["effective_order"], ["litellm", "standard"])
-        self.assertEqual(decision["suggested_provider"], "standard")
-        self.assertTrue(decision["would_switch"])
-        self.assertFalse(decision["applied"])
-
-    def test_adaptive_router_can_apply_markov_switch_when_enabled(self) -> None:
-        policy = {
-            **ROUTER.DEFAULT_POLICY,
-            "adaptive_router": {"enabled": True, "shadow_mode": False, "min_confidence_delta": 0.05},
-        }
-        history = [
-            {"codex_provider": "litellm", "ttft_ms": 9000, "latency_ms": 60000, "success": False},
-            {"codex_provider": "litellm", "token_pressure": 1.0, "quality_score": 0.2},
-            {"codex_provider": "standard", "ttft_ms": 500, "latency_ms": 3000, "success": True},
-        ]
-        decision = ROUTER.adaptive_router_decision(["litellm", "standard"], policy, history)
-        self.assertEqual(decision["effective_order"][0], "standard")
-        self.assertTrue(decision["applied"])
-
-    def test_adaptive_router_uses_performance_score_for_gain(self) -> None:
-        policy = {
-            **ROUTER.DEFAULT_POLICY,
-            "adaptive_router": {
-                "enabled": True,
-                "shadow_mode": False,
-                "min_confidence_delta": 0.05,
-                "performance_weight": 0.6,
-                "min_performance_observations": 2,
-            },
-        }
-        history = [
-            {
-                "codex_provider": "litellm",
-                "ttft_ms": 4_500,
-                "latency_ms": 35_000,
-                "estimated_cost_usd": 0.16,
-                "quality_score": 0.82,
-                "success": True,
-            },
-            {
-                "codex_provider": "litellm",
-                "ttft_ms": 4_200,
-                "latency_ms": 32_000,
-                "estimated_cost_usd": 0.15,
-                "quality_score": 0.84,
-                "success": True,
-            },
-            {
-                "codex_provider": "standard",
-                "ttft_ms": 700,
-                "latency_ms": 4_000,
-                "estimated_cost_usd": 0.03,
-                "quality_score": 0.91,
-                "success": True,
-            },
-            {
-                "codex_provider": "standard",
-                "ttft_ms": 800,
-                "latency_ms": 4_300,
-                "estimated_cost_usd": 0.035,
-                "quality_score": 0.9,
-                "success": True,
-            },
-        ]
-        decision = ROUTER.adaptive_router_decision(["litellm", "standard"], policy, history)
-        self.assertEqual(decision["effective_order"][0], "standard")
-        self.assertGreater(decision["health"]["standard"]["performance_score"], 0.9)
-        self.assertTrue(decision["applied"])
-
-    def test_adaptive_router_cost_guard_blocks_expensive_noncritical_switch(self) -> None:
-        policy = {
-            **ROUTER.DEFAULT_POLICY,
-            "adaptive_router": {
-                "enabled": True,
-                "shadow_mode": False,
-                "min_confidence_delta": 0.05,
-                "performance_weight": 0.6,
-                "min_performance_observations": 2,
-                "cost_guard_enabled": True,
-                "max_cost_multiplier": 2.0,
-                "critical_risk_threshold": 0.65,
-            },
-        }
-        history = [
-            {
-                "codex_provider": "litellm",
-                "ttft_ms": 2_800,
-                "latency_ms": 16_000,
-                "estimated_cost_usd": 0.018,
-                "quality_score": 0.89,
-                "error_rate": 0.01,
-                "success": True,
-            },
-            {
-                "codex_provider": "litellm",
-                "ttft_ms": 2_700,
-                "latency_ms": 15_000,
-                "estimated_cost_usd": 0.018,
-                "quality_score": 0.9,
-                "error_rate": 0.0,
-                "success": True,
-            },
-            {
-                "codex_provider": "standard",
-                "ttft_ms": 700,
-                "latency_ms": 5_200,
-                "estimated_cost_usd": 0.095,
-                "quality_score": 0.9,
-                "error_rate": 0.0,
-                "success": True,
-            },
-            {
-                "codex_provider": "standard",
-                "ttft_ms": 750,
-                "latency_ms": 5_000,
-                "estimated_cost_usd": 0.095,
-                "quality_score": 0.91,
-                "error_rate": 0.0,
-                "success": True,
-            },
-        ]
-        decision = ROUTER.adaptive_router_decision(["litellm", "standard"], policy, history)
-        self.assertEqual(decision["suggested_provider"], "standard")
-        self.assertTrue(decision["would_switch"])
-        self.assertTrue(decision["cost_guard_blocked"])
-        self.assertFalse(decision["applied"])
-        self.assertEqual(decision["effective_order"][0], "litellm")
-        self.assertGreater(decision["cost_multiplier"], 5.0)
-
-    def test_run_router_logs_active_provider_after_adaptive_switch(self) -> None:
-        policy = {
-            **ROUTER.DEFAULT_POLICY,
-            "adaptive_router": {"enabled": True, "shadow_mode": False, "min_confidence_delta": 0.05},
-        }
-        history = [
-            {"codex_provider": "litellm", "ttft_ms": 9000, "latency_ms": 60000, "success": False},
-            {"codex_provider": "litellm", "error_rate": 1.0, "returncode": 1},
-            {"codex_provider": "standard", "ttft_ms": 500, "latency_ms": 3000, "success": True},
-        ]
-        args = ROUTER.argparse.Namespace(
-            prompt=["Refactor this Python API"],
-            max_input_tokens=ROUTER.DEFAULT_MAX_INPUT_TOKENS,
-            policy=Path("unused-policy.yaml"),
-            codex_provider="litellm",
-            provider=None,
-            force_model=None,
-            max_output_tokens=ROUTER.DEFAULT_MAX_OUTPUT_TOKENS,
-            dry_run=True,
-            codex_arg=[],
-        )
-        with tempfile.TemporaryDirectory() as directory:
-            home = Path(directory)
-            log_file = home / "logs" / "cost_router.jsonl"
-            state_file = home / "logs" / "cost_router_state.json"
-            with (
-                patch.object(ROUTER, "LOG_DIR", home / "logs"),
-                patch.object(ROUTER, "LOG_FILE", log_file),
-                patch.object(ROUTER, "STATE_FILE", state_file),
-                patch.object(ROUTER, "load_policy", return_value=policy),
-                patch.object(ROUTER, "read_history", return_value=history),
-                patch.object(ROUTER, "proxy_available", return_value=False),
-                patch.object(ROUTER, "qwen_available", return_value=False),
-            ):
-                self.assertEqual(ROUTER.run_router(args), 0)
-            record = ROUTER.json.loads(log_file.read_text(encoding="utf-8").splitlines()[0])
-        self.assertTrue(record["adaptive_router"]["applied"])
-        self.assertEqual(record["requested_codex_provider"], "litellm")
-        self.assertEqual(record["codex_provider"], "standard")
-        self.assertEqual(record["codex_profile"], "standard")
-
-    def test_live_run_is_persisted_only_with_execution_metrics(self) -> None:
-        policy = {
-            **ROUTER.DEFAULT_POLICY,
-            "task_provider_rules": {"medium": "auto"},
-            "fallback_order": ["standard"],
-        }
-        args = ROUTER.argparse.Namespace(
-            prompt=["Refactor this Python API"],
-            max_input_tokens=ROUTER.DEFAULT_MAX_INPUT_TOKENS,
-            policy=Path("unused-policy.yaml"),
-            codex_provider="standard",
-            provider="openai",
-            force_model=None,
-            max_output_tokens=ROUTER.DEFAULT_MAX_OUTPUT_TOKENS,
-            dry_run=False,
-            codex_arg=[],
-        )
-        result = ROUTER.ExecutionResult(0, 1_250, 180, 42, 39.7)
-        with tempfile.TemporaryDirectory() as directory:
-            log_file = Path(directory) / "cost_router.jsonl"
-            state_file = Path(directory) / "cost_router_state.json"
-            with (
-                patch.object(ROUTER, "LOG_DIR", Path(directory)),
-                patch.object(ROUTER, "LOG_FILE", log_file),
-                patch.object(ROUTER, "STATE_FILE", state_file),
-                patch.object(ROUTER, "load_policy", return_value=policy),
-                patch.object(ROUTER, "find_codex", return_value="codex"),
-                patch.object(ROUTER, "proxy_available", return_value=False),
-                patch.object(ROUTER, "phi_available", return_value=False),
-                patch.object(ROUTER, "qwen_available", return_value=False),
-                patch.object(ROUTER, "run_streamed_command", return_value=result),
-            ):
-                self.assertEqual(ROUTER.run_router(args), 0)
-            record = ROUTER.json.loads(log_file.read_text(encoding="utf-8").splitlines()[0])
-        self.assertTrue(record["success"])
-        self.assertEqual(record["returncode"], 0)
-        self.assertEqual(record["latency_ms"], 1_250)
-        self.assertEqual(record["ttft_ms"], 180)
-        self.assertEqual(record["generated_tokens"], 42)
-        self.assertEqual(record["tokens_per_second"], 39.7)
-        self.assertEqual(record["prompt_category"], "medium")
-        self.assertIn("business_reward", record)
-
-    def test_stats_exclude_dry_runs_from_business_kpis(self) -> None:
-        history = [
-            {"execution_mode": "dry-run", "estimated_cost_usd": 99.0},
-            {
-                "execution_mode": "codex-exec",
-                "success": True,
-                "returncode": 0,
-                "estimated_cost_usd": 0.01,
-                "estimated_savings_usd": 0.02,
-            },
-        ]
-        with patch.object(ROUTER, "read_history", return_value=history), patch(
-            "sys.stdout", new_callable=StringIO
-        ) as output:
-            self.assertEqual(ROUTER.print_stats(), 0)
-        rendered = output.getvalue()
-        self.assertIn("Completed executions     : 1", rendered)
-        self.assertIn("Dry-runs excluded        : 1", rendered)
-        self.assertIn("$0.01000000", rendered)
-        self.assertNotIn("99.00000000", rendered)
+        self.assertEqual(provider, "no-openai")
+        self.assertIn("OpenAI avoidance", reason)
 
     def test_build_optimized_prompt_respects_budget(self) -> None:
-        context = "<div>" + ("Architecture production Odoo migration security. " * 1000) + "</div>"
-        optimized = ROUTER.build_optimized_prompt(context, 120)
-        self.assertLessEqual(ROUTER.estimate_tokens(optimized), 120)
+        context = (
+            "<div>"
+            + ("Architecture production Odoo migration security. " * 1000)
+            + "</div>"
+        )
+        optimized = router_prompt.build_optimized_prompt(context, 120)
+        self.assertLessEqual(router_prompt.estimate_tokens(optimized), 120)
         self.assertNotIn("<div>", optimized)
         self.assertIn("context truncated", optimized)
 
-    def test_remove_profile_block_preserves_unrelated_configuration(self) -> None:
-        config = "[features]\njs_repl = false\n\n" + ROUTER.PROFILE_BLOCK
-        self.assertEqual(
-            ROUTER.remove_profile_block(config),
-            "[features]\njs_repl = false\n",
-        )
-
     def test_proxy_available_returns_false_when_connection_fails(self) -> None:
-        with patch.object(ROUTER.socket, "create_connection", side_effect=OSError):
-            self.assertFalse(ROUTER.proxy_available())
+        with patch.object(socket, "create_connection", side_effect=OSError):
+            self.assertFalse(router_availability.proxy_available())
 
     def test_litellm_disable_env_bypasses_proxy(self) -> None:
         with (
-            patch.dict(ROUTER.os.environ, {"CODEX_ROUTER_DISABLE_LITELLM": "1"}, clear=False),
-            patch.object(ROUTER.socket, "create_connection") as create_connection,
+            patch.dict(os.environ, {"CODEX_ROUTER_DISABLE_LITELLM": "1"}, clear=False),
+            patch.object(socket, "create_connection") as create_connection,
         ):
-            self.assertFalse(ROUTER.proxy_available())
-            provider, reason = ROUTER.codex_provider_from_policy("litellm", ROUTER.DEFAULT_POLICY)
-            ready, detail = ROUTER.codex_provider_ready("litellm")
+            self.assertFalse(router_availability.proxy_available())
+            provider, reason = router_providers.codex_provider_from_policy(
+                "litellm", router_config.DEFAULT_POLICY
+            )
+            ready, detail = router_providers.codex_provider_ready("litellm")
 
         create_connection.assert_not_called()
         self.assertEqual(provider, "standard")
         self.assertIn("bypassed", reason)
         self.assertFalse(ready)
         self.assertIn("disabled", detail)
-
-    def test_find_litellm_uses_configured_existing_path(self) -> None:
-        with tempfile.NamedTemporaryFile() as executable:
-            with patch.dict(ROUTER.os.environ, {"LITELLM_CLI_PATH": executable.name}):
-                self.assertEqual(ROUTER.find_litellm(), executable.name)
-
-    def test_find_codex_prefers_configured_existing_path(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            home = Path(directory)
-            executable = home / "codex.exe"
-            executable.write_text("", encoding="utf-8")
-            config = home / "config.toml"
-            config.write_text(
-                "[mcp_servers.node_repl.env]\n"
-                f"CODEX_CLI_PATH = '{executable}'\n",
-                encoding="utf-8",
-            )
-            with (
-                patch.dict(ROUTER.os.environ, {}, clear=True),
-                patch.object(ROUTER, "CODEX_CONFIG", config),
-                patch.object(ROUTER.shutil, "which", return_value="blocked-windowsapps-codex"),
-            ):
-                self.assertEqual(ROUTER.find_codex(), str(executable))
-
-    def test_enable_disable_restores_original_config_bytes(self) -> None:
-        initial = b"[features]\r\njs_repl = false\r\n"
-        with tempfile.TemporaryDirectory() as directory:
-            home = Path(directory)
-            config = home / "config.toml"
-            config.write_bytes(initial)
-            with (
-                patch.object(ROUTER, "CODEX_HOME", home),
-                patch.object(ROUTER, "CODEX_CONFIG", config),
-                patch.object(ROUTER, "LOG_DIR", home / "logs"),
-                patch.object(ROUTER, "LOG_FILE", home / "logs" / "cost_router.jsonl"),
-                patch.object(ROUTER, "STATE_FILE", home / "logs" / "cost_router_state.json"),
-                patch.object(ROUTER, "CONFIG_BACKUP", home / "logs" / "config.toml.cost_router_backup"),
-                patch.object(ROUTER, "COST_ROUTING_CONFIG", home / "cost-routing.config.toml"),
-                patch.object(ROUTER, "COST_ROUTING_HF_CONFIG", home / "cost-routing-hf.config.toml"),
-            ):
-                ROUTER.enable_router()
-                ROUTER.disable_router()
-            self.assertEqual(config.read_bytes(), initial)
 
 
 if __name__ == "__main__":

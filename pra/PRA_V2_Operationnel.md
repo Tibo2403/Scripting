@@ -68,7 +68,7 @@ Le script `Invoke-PRA.ps1` :
 - charge une config JSON,
 - crée un dossier de logs horodaté,
 - exécute des checks préalables,
-- lance les étapes de restauration (placeholders adaptables à l’outil),
+- appelle un connecteur explicite via `-RestoreAction` pour chaque service,
 - exécute des tests de validation,
 - produit un rapport final.
 
@@ -77,11 +77,29 @@ Le script `Invoke-PRA.ps1` :
 # Test à blanc (sans actions destructives)
 .\Invoke-PRA.ps1 -ConfigPath .\backup-config.json -WhatIfMode
 
-# Exécution réelle
-.\Invoke-PRA.ps1 -ConfigPath .\backup-config.json
+# Tests hors ligne
+.\tests\Test-PraRecovery.ps1
 ```
 
 ## 8. Contrôles minimum à imposer
+La simulation ne nécessite ni réseau ni privilèges administrateur. Une restauration
+réelle exige Windows, une session administrateur et un scriptblock `-RestoreAction`
+implémentant le connecteur de sauvegarde. Sans connecteur, le script échoue avant
+toute action. Exemple après implémentation et validation du connecteur :
+
+```powershell
+.\Invoke-PRA.ps1 -ConfigPath .\backup-config.json -RestoreAction {
+    param($Service)
+    & .\Restore-BackupService.ps1 -Service $Service -ErrorAction Stop
+}
+```
+
+`Restore-BackupService.ps1` est à fournir par l'exploitant. Il doit lever une erreur
+en cas d'échec et vérifier le code de sortie de chaque outil natif. Les journaux sont
+créés sous `pra/logs`, modifiable avec `-LogDirectory`. Les sept scénarios hors ligne
+couvrent l'ordre, la simulation et l'arrêt sur erreurs de dépôt, restauration,
+validation et configuration. Les objectifs RTO/RPO restent à mesurer en exercice réel.
+
 - Test de restauration **mensuel** (au moins un service critique).
 - Test PRA complet **trimestriel**.
 - Double validation humaine avant restauration en production.

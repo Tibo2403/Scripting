@@ -1,6 +1,6 @@
 # Finance tokenisée pour agents LLM
 
-> **Maturité : expérimental.** Les contrats ne sont pas audités et les tests Foundry ne sont pas encore exécutés par la CI. Ne pas utiliser avec de la valeur réelle.
+> **Maturité : expérimental.** Les contrats ne sont pas audités. Le workflow expérimental inclut les tests Foundry, sans validation de déploiement réel. Ne pas utiliser avec de la valeur réelle.
 
 > **Périmètre isolé :** ce répertoire est un prototype autonome, sans dépendance d'exécution aux
 > autres projets du dépôt. Il ne gère ni réserve obligataire, ni levier/repo, ni stabilisation des
@@ -47,15 +47,18 @@ Le PID applique la formule classique `Kp·e + Ki·∫e·dt + Kd·de/dt`. Il ajou
 gain et d'observation, intervalle minimum, rejet des données trop anciennes et limite de variation du
 budget par mise à jour. Ces paramètres doivent être simulés puis revus par gouvernance.
 
+Les versions CI sont figees dans `requirements-ci.txt` et `constraints-ci.txt` (voir [procedure de mise a jour](../scripts/python/CI_VALIDATION.md)).
+
 ## Installation et validation
 
-Prérequis : Python 3.11+, Foundry, un RPC EVM et une souscription VRF v2.5 financée.
+Prérequis : Python 3.11+, Foundry 1.8.3, un RPC EVM et une souscription VRF v2.5 financée.
 
 ```powershell
 cd tokenized_llm_finance
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements-dev.txt
-forge install OpenZeppelin/openzeppelin-contracts foundry-rs/forge-std --no-commit
+forge install OpenZeppelin/openzeppelin-contracts@dbb6104ce834628e473d2173bbc9d47f81a9eec3 --no-git
+forge install foundry-rs/forge-std@77041d2ce690e692d6e03cc812b57d1ddaa4d505 --no-git
 $env:PYTHONPATH = (Resolve-Path python)
 .venv\Scripts\python -m unittest discover -s tests -v
 .venv\Scripts\python -m ruff check python tests

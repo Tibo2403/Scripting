@@ -1,0 +1,7 @@
+# Grow this list as existing components are brought under lint validation.
+target-version = "py311"
+include = ["**/codex_cost_router.py", "**/codex_router_*.py", "**/test_codex_cost_router.py", "**/test_codex_router_*.py", "**/risk_adjusted_router.py",
+    "**/risk_router_*.py", "**/test_risk_adjusted_router*.py", "**/ci_*.py", "**/test_ci_*.py"]
+
+[lint]
+select = ["E4", "E7", "E9", "F"]

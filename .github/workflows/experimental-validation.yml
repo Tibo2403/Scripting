@@ -9,6 +9,8 @@ on:
       - "pra/**"
       - "tokenized_llm_finance/**"
       - "scripts/powershell/Test-ScriptSyntax.ps1"
+      - "scripts/python/ci_lint_changed.py"
+      - "scripts/python/tests/test_ci_lint_changed.py"
       - "scripts/python/ci_changed_components.py"
       - "scripts/python/tests/test_ci_changed_components.py"
       - ".github/workflows/experimental-validation.yml"
@@ -20,6 +22,8 @@ on:
       - "pra/**"
       - "tokenized_llm_finance/**"
       - "scripts/powershell/Test-ScriptSyntax.ps1"
+      - "scripts/python/ci_lint_changed.py"
+      - "scripts/python/tests/test_ci_lint_changed.py"
       - "scripts/python/ci_changed_components.py"
       - "scripts/python/tests/test_ci_changed_components.py"
       - ".github/workflows/experimental-validation.yml"
@@ -78,12 +82,32 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install test dependencies
-        run: python -m pip install -r tokenized_llm_finance/requirements-dev.txt
+        run: python -m pip install -r tokenized_llm_finance/requirements-ci.txt
       - name: Run Python tests and lint
         working-directory: tokenized_llm_finance
         run: |
           python -m pytest
           python -m ruff check python tests
+
+  tokenized-solidity:
+    name: Experimental tokenized finance (Solidity)
+    needs: changes
+    if: needs.changes.outputs.tokenized == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1
+        with:
+          version: v1.8.3
+      - name: Install pinned test library and run contracts
+        working-directory: tokenized_llm_finance
+        run: |
+          forge install foundry-rs/forge-std@77041d2ce690e692d6e03cc812b57d1ddaa4d505 --no-git
+          forge install OpenZeppelin/openzeppelin-contracts@dbb6104ce834628e473d2173bbc9d47f81a9eec3 --no-git
+          forge test -vv
 
   shell-prototypes:
     name: OpenClaw shell syntax (supplemental)
@@ -101,7 +125,7 @@ jobs:
             | xargs -0 -r -n1 bash -n
 
   pra-powershell:
-    name: Experimental PRA syntax
+    name: Experimental PRA syntax and recovery scenarios
     needs: changes
     if: needs.changes.outputs.pra == 'true'
     runs-on: windows-latest
@@ -113,3 +137,6 @@ jobs:
       - name: Validate PRA PowerShell syntax
         shell: pwsh
         run: ./scripts/powershell/Test-ScriptSyntax.ps1 -Path ./pra
+      - name: Test recovery and failure scenarios offline
+        shell: pwsh
+        run: ./pra/tests/Test-PraRecovery.ps1

@@ -20,9 +20,9 @@ incomplete and real secrets, critical systems and real financial value must not 
 | `openclaw-akash-dual-agents/` | **Usable** | Read-only code review; configuration and failure tests, dedicated Docker CI |
 | `openclaw-inkling-akash/` | **Usable** | Configurable private gateway; configuration and failure tests, dedicated Docker CI |
 | `pra/` | **Experimental** | Recovery connectors are placeholders and require a real exercise |
-| `tokenized_llm_finance/` | **Experimental** | Contracts are unaudited and Foundry is not yet run in CI |
+| `tokenized_llm_finance/` | **Experimental** | Contracts are unaudited; Foundry tests are configured in experimental CI |
 
-The two OpenClaw profile promotions require a green [dedicated CI run](https://github.com/Tibo2403/Scripting/actions/workflows/openclaw-deployments.yml) before merge. Local configuration tests and the pinned OpenClaw schema passed. Docker Linux 29.6.1 and `docker run --rm hello-world` were verified on 2026-09-06; builds of the project images and external integrations remain unverified. See [validation evidence](scripts/openclaw/VALIDATION.md).
+The two OpenClaw profiles passed their [dedicated CI run](https://github.com/Tibo2403/Scripting/actions/runs/34033503411) on 2026-09-06: both pinned Docker images built successfully and both configurations passed the actual OpenClaw schema inside network-isolated containers. Verified on 2026-09-07 against unchanged profile files. External integrations and Akash deployment remain unverified. See [validation evidence](scripts/openclaw/VALIDATION.md).
 
 ### Isolated boundary for tokenized finance
 
@@ -82,7 +82,7 @@ python scripts/python/mcp_server.py
 |-- deploy/                   # Usable, tested Akash OpenClaw deployment configuration
 |-- examples/                 # Safe placeholders and demonstration inputs
 |-- litellm_scaleway_dispatching/ # Usable, unit-tested provider integration
-|-- openclaw-*/               # OpenClaw deployment profiles; promotion pending CI
+|-- openclaw-*/               # OpenClaw deployment profiles; Docker/schema CI passed
 |-- pra/                      # Experimental recovery-plan orchestrator
 |-- scripts/
 |   |-- bash/                 # AI infrastructure installers

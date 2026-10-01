@@ -14,12 +14,16 @@ class ClassifyPathsTests(unittest.TestCase):
                 self.assertEqual(
                     {name for name, enabled in selected.items() if enabled}, {"python"}
                 )
-        self.assertFalse(any(classify_paths(["litellm_scaleway_dispatching/README.md"]).values()))
+        self.assertFalse(
+            any(classify_paths(["litellm_scaleway_dispatching/README.md"]).values())
+        )
 
     def test_selector_changes_exercise_all_consumers(self) -> None:
         for path in (
             "scripts/python/ci_changed_components.py",
             "scripts/python/tests/test_ci_changed_components.py",
+            "scripts/python/ci_lint_changed.py",
+            "scripts/python/tests/test_ci_lint_changed.py",
         ):
             with self.subTest(path=path):
                 self.assertTrue(all(classify_paths([path]).values()))
@@ -50,6 +54,15 @@ class ClassifyPathsTests(unittest.TestCase):
     def test_python_runtime_configuration_selects_python(self) -> None:
         result = classify_paths(["scripts/python/codex-routing-policy.yaml"])
         self.assertTrue(result["python"])
+
+    def test_python_ci_configuration_selects_python(self) -> None:
+        for path in (
+            "scripts/python/ruff.toml",
+            "scripts/python/requirements-ci.txt",
+            "scripts/python/constraints-ci.txt",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(classify_paths([path])["python"])
 
     def test_dedicated_crewai_files_skip_generic_language_checks(self) -> None:
         result = classify_paths(["scripts/python/openclaw_crewai_admin/setup.sh"])
@@ -90,10 +103,10 @@ class ClassifyPathsTests(unittest.TestCase):
 
     def test_each_workflow_change_selects_its_jobs(self) -> None:
         main = classify_paths([".github/workflows/script-validation.yml"])
-        experimental = classify_paths(
-            [".github/workflows/experimental-validation.yml"]
+        experimental = classify_paths([".github/workflows/experimental-validation.yml"])
+        self.assertTrue(
+            all(main[name] for name in ("maturity", "powershell", "bash", "python"))
         )
-        self.assertTrue(all(main[name] for name in ("maturity", "powershell", "bash", "python")))
         self.assertTrue(
             all(experimental[name] for name in ("tokenized", "shell_prototypes", "pra"))
         )
