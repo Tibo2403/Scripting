@@ -379,8 +379,7 @@ class MultiAgentPromptManager:
         for finding in sorted(findings, key=lambda item: item.severity, reverse=True):
             if finding.recommendation not in recommendations:
                 recommendations.append(finding.recommendation)
-        for recommendation in recommendations[:5]:
-            notes.append(recommendation)
+        notes.extend(recommendations[:5])
         if findings:
             notes.append("Validate remaining claims with task-specific data, subgroup metrics, and human review.")
         return notes

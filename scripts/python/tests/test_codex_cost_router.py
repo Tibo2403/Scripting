@@ -510,9 +510,11 @@ class CodexCostRouterTests(unittest.TestCase):
         self.assertIn("disabled", detail)
 
     def test_find_litellm_uses_configured_existing_path(self) -> None:
-        with tempfile.NamedTemporaryFile() as executable:
-            with patch.dict(ROUTER.os.environ, {"LITELLM_CLI_PATH": executable.name}):
-                self.assertEqual(ROUTER.find_litellm(), executable.name)
+        with (
+            tempfile.NamedTemporaryFile() as executable,
+            patch.dict(ROUTER.os.environ, {"LITELLM_CLI_PATH": executable.name}),
+        ):
+            self.assertEqual(ROUTER.find_litellm(), executable.name)
 
     def test_find_codex_prefers_configured_existing_path(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

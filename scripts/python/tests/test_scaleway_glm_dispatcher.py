@@ -71,9 +71,11 @@ class TestScalewayGLMConfig(unittest.TestCase):
             config.completion_kwargs()
 
     def test_from_env_rejects_invalid_timeout(self):
-        with patch.dict(os.environ, {"SCALEWAY_TIMEOUT_SECONDS": "abc"}):
-            with self.assertRaisesRegex(ScalewayGLMConfigurationError, "positive integer"):
-                ScalewayGLMConfig.from_env()
+        with (
+            patch.dict(os.environ, {"SCALEWAY_TIMEOUT_SECONDS": "abc"}),
+            self.assertRaisesRegex(ScalewayGLMConfigurationError, "positive integer"),
+        ):
+            ScalewayGLMConfig.from_env()
 
 
 class TestScalewayGLMCompletion(unittest.TestCase):
