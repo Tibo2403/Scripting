@@ -10,7 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from litellm_scaleway_dispatching.scaleway_glm_dispatcher import (  # noqa: E402
+from litellm_scaleway_dispatching.scaleway_glm_dispatcher import (
     DEFAULT_MODEL,
     DispatchError,
     ErrorKind,

@@ -11,7 +11,6 @@ from typing import Any
 
 from mcp.server import MCPServer
 
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS_ROOT = REPOSITORY_ROOT / "scripts"
 ALLOWED_EXTENSIONS = {".ps1", ".py", ".sh"}

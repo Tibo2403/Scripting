@@ -5,7 +5,7 @@ VENV_SITE_PACKAGES = Path(__file__).resolve().parent / "venv" / "Lib" / "site-pa
 if VENV_SITE_PACKAGES.exists():
     sys.path.insert(0, str(VENV_SITE_PACKAGES))
 
-from litellm import run_server  # noqa: E402
+from litellm import run_server
 
 if __name__ == "__main__":
     sys.argv = ["litellm", *sys.argv[1:]]

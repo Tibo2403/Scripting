@@ -3,7 +3,6 @@ import sys
 import unittest
 from pathlib import Path
 
-
 MODULE_PATH = Path(__file__).resolve().parents[1] / "llm_bias_multi_agent.py"
 spec = importlib.util.spec_from_file_location("llm_bias_multi_agent", MODULE_PATH)
 llm_bias_multi_agent = importlib.util.module_from_spec(spec)

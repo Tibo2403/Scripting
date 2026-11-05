@@ -13,11 +13,12 @@ Environment variables:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from enum import Enum
 import os
 import time
-from typing import Any, Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any
 from urllib.parse import urlparse
 
 try:  # LiteLLM is optional during unit tests because calls are injected.
@@ -102,7 +103,7 @@ class ScalewayGLMConfig:
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS
 
     @classmethod
-    def from_env(cls) -> "ScalewayGLMConfig":
+    def from_env(cls) -> ScalewayGLMConfig:
         """Build configuration from environment variables."""
 
         timeout_raw = os.getenv("SCALEWAY_TIMEOUT_SECONDS", str(DEFAULT_TIMEOUT_SECONDS))

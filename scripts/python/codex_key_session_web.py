@@ -15,7 +15,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import ClassVar
 
-
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_UI_PORT = 8787
 DEFAULT_PROXY_PORT = 4000
@@ -284,13 +283,13 @@ class KeySessionHandler(BaseHTTPRequestHandler):
         """Suppress default request logs so keys never appear in terminal logs."""
         return
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         if self.path not in {"/", "/status"}:
             self.send_error(404)
             return
         self._send_page()
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         if self.path == "/start":
             self._start_proxy()
             return

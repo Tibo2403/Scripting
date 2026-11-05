@@ -1,5 +1,6 @@
 import os
 import pathlib
+
 import requests
 
 API_KEY = os.environ["INKLING_API_KEY"]

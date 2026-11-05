@@ -10,12 +10,11 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, Optional
 
 
 @dataclass(frozen=True)
@@ -35,7 +34,7 @@ class Outcome:
     success: bool
     latency_ms: int
     actual_cost_usd: float
-    quality_score: Optional[float] = None
+    quality_score: float | None = None
     reviewer: str = "automatic"
     notes: str = ""
 
@@ -150,7 +149,7 @@ class DecisionLedger:
                 ),
             )
 
-    def model_evidence(self, task_type: Optional[str] = None) -> list[dict[str, object]]:
+    def model_evidence(self, task_type: str | None = None) -> list[dict[str, object]]:
         filters = "WHERE d.task_type = ?" if task_type else ""
         params: Iterable[object] = (task_type,) if task_type else ()
         query = f"""

@@ -20,7 +20,6 @@ from typing import Any
 
 from codex_cost_profiles import render_profiles
 
-
 SCRIPT_DIR = Path(__file__).resolve().parent
 CODEX_HOME = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
 CODEX_CONFIG = CODEX_HOME / "config.toml"

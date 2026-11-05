@@ -65,7 +65,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         if self.path not in ("/healthz", "/readyz"):
             self.send_plain(404, "not found")
             return
@@ -84,7 +84,7 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             connection.close()
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         if self.path not in ("/googlechat", "/googlechat/"):
             self.send_plain(404, "not found")
             return

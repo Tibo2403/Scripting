@@ -11,7 +11,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "risk-router-state.json"
 UPSTREAM_BASE = "http://127.0.0.1:4000/v1"

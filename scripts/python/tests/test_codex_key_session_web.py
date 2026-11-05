@@ -6,7 +6,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-
 MODULE_PATH = Path(__file__).resolve().parents[1] / "codex_key_session_web.py"
 SPEC = importlib.util.spec_from_file_location("codex_key_session_web", MODULE_PATH)
 if SPEC is None or SPEC.loader is None:
