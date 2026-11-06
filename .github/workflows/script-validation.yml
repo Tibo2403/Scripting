@@ -27,6 +27,9 @@ jobs:
       - name: Validate project classification
         run: python scripts/python/check_project_maturity.py
 
+      - name: Check script index is up to date
+        run: python scripts/python/generate_index.py --check
+
       - name: Validate experimental tools syntax without provider calls
         run: |
           python -m compileall -q tools

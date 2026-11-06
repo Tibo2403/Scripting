@@ -67,6 +67,8 @@ python scripts/python/mcp_server.py
 
 ## Repository map
 
+Full catalog of every script by category: [docs/INDEX.md](docs/INDEX.md) (regenerate with `python scripts/python/generate_index.py`).
+
 ```text
 .
 |-- .github/workflows/        # Script validation and manual AI-assisted refactoring
